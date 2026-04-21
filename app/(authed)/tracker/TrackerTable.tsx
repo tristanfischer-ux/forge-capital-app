@@ -3,18 +3,24 @@
 import { Fragment, useMemo, useState } from "react";
 import type { TrackerRow } from "@/lib/queries/tracker";
 import { StatusBadge } from "./StatusBadge";
-import { TierBadge } from "./TierBadge";
 import { TrackerRowDrawer } from "./TrackerRowDrawer";
 
 /**
- * Tracker grid — mockup-faithful port of Phase2-Mockup-V4 §"Tracker —
- * master sheet preview" (lines 1799–1869) enhanced per V4-FEEDBACK-
- * ROUND-2.md: two-sentence company + investor context, why-them
- * synthesis, days-since column, tier badge (not Hunter 0–100 score),
- * red badge + replacement-hunt CTA for generic_blocked / bounced.
+ * Tracker grid — V4 §2 "Tracker — master sheet preview" re-port
+ * (Phase2-Mockup-V4.html lines 1798–1869). Uses V4's `.approval-col`
+ * wrapper + `.sheet-head-strip` + `.sheet` table classes directly so
+ * parity is by construction. The expand-row drawer (status edit,
+ * commentary log, draft preview link) from `TrackerRowDrawer.tsx` is
+ * preserved — clicking a row toggles the drawer below it.
+ *
+ * V4 columns (1:1): Firm · Contact | Status | Days since | Commentary.
+ * Commentary renders as a chronological string with `[YYYY-MM-DD]`
+ * date chips (V4 `.comment-af .dt`). When we only have the coarse
+ * company_summary + why-them we render those instead of a date-chipped
+ * chronology, since the V1 data layer doesn't persist per-event entries.
  *
  * Client component because sort + expand are local-state interactions.
- * V1 is read-only — no status edits here (Phase 5).
+ * V1 is read-only for status edits (those live in the drawer).
  */
 
 type SortKey = "status" | "days" | "firm";
@@ -80,7 +86,30 @@ function formatDays(days: number | null): string {
   return `${days}d`;
 }
 
-export function TrackerTable({ rows }: { rows: TrackerRow[] }) {
+/**
+ * Simple relative timestamp for the sheet-head-strip "last synced X"
+ * meta line. V4 hard-codes "2 min ago"; in production we render the
+ * real time since the last tracker row was last_contact_at. When all
+ * rows lack a last-contact timestamp, fall back to "—".
+ */
+function formatRelativeSync(rows: TrackerRow[]): string {
+  const mostRecent = rows
+    .map((r) => r.days_since_last_contact)
+    .filter((d): d is number => d !== null)
+    .sort((a, b) => a - b)[0];
+  if (mostRecent === undefined) return "never";
+  if (mostRecent === 0) return "today";
+  if (mostRecent === 1) return "yesterday";
+  return `${mostRecent}d ago`;
+}
+
+export function TrackerTable({
+  rows,
+  campaignName,
+}: {
+  rows: TrackerRow[];
+  campaignName?: string;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -89,6 +118,8 @@ export function TrackerTable({ rows }: { rows: TrackerRow[] }) {
     () => sortRows(rows, sortKey, sortDir),
     [rows, sortKey, sortDir],
   );
+
+  const syncedLabel = useMemo(() => formatRelativeSync(rows), [rows]);
 
   function onSort(nextKey: SortKey) {
     if (nextKey === sortKey) {
@@ -102,72 +133,59 @@ export function TrackerTable({ rows }: { rows: TrackerRow[] }) {
   function sortIndicator(key: SortKey) {
     if (sortKey !== key) return null;
     return (
-      <span className="ml-1 text-[10px] text-text-faint">
+      <span style={{ marginLeft: 4, fontSize: 9, color: "var(--text-faint)" }}>
         {sortDir === "asc" ? "▲" : "▼"}
       </span>
     );
   }
 
+  const rowLabel = rows.length === 1 ? "row" : "rows";
+
   return (
-    <div className="overflow-hidden rounded-[10px] border border-border bg-surface shadow-[var(--shadow)]">
-      {/* Sheet head strip — port of V4 .sheet-head-strip */}
-      <div className="flex items-center justify-between border-b border-[#e4e1ff] bg-accent-softer px-4 py-3 text-xs">
-        <div className="flex items-center gap-2.5">
-          <span className="font-semibold text-accent-dark">
-            Master tracker
+    <div className="approval-col" style={{ overflow: "hidden" }}>
+      {/* Sheet head strip — V4 `.sheet-head-strip` (line 1809) */}
+      <div className="sheet-head-strip">
+        <div className="sh-left">
+          <span className="sh-title">
+            {campaignName
+              ? `${campaignName} · master tracker (Stephan view)`
+              : "Master tracker (Stephan view)"}
           </span>
-          <span className="text-text-dim">
-            · {rows.length} {rows.length === 1 ? "row" : "rows"}
+          <span className="sh-meta">
+            · {rows.length} {rowLabel} · last synced {syncedLabel}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#bbf7d0] bg-green-light px-2.5 py-1 text-[11px] font-medium text-green">
-            <span className="h-1.5 w-1.5 rounded-full bg-green" />
-            Status vocabulary locked to the 16-code legend
+        <div className="sh-right">
+          <span className="evidence-chip">
+            <span className="dot"></span>
+            Status vocabulary locked to the 16-code Legend sheet
           </span>
         </div>
       </div>
 
-      <table className="w-full border-collapse text-xs">
+      {/* Results table — V4 `table.sheet` (line 1818) */}
+      <table className="sheet">
         <thead>
-          <tr className="border-b border-border bg-surface-alt">
+          <tr>
             <th
-              scope="col"
-              className="cursor-pointer px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-dim"
-              style={{ width: "14%" }}
-              onClick={() => onSort("status")}
-            >
-              Status{sortIndicator("status")}
-            </th>
-            <th
-              scope="col"
-              className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-dim"
-              style={{ width: "14%" }}
-            >
-              Tier
-            </th>
-            <th
-              scope="col"
-              className="cursor-pointer px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-dim"
-              style={{ width: "8%" }}
-              onClick={() => onSort("days")}
-            >
-              Days since{sortIndicator("days")}
-            </th>
-            <th
-              scope="col"
-              className="cursor-pointer px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-dim"
-              style={{ width: "26%" }}
+              style={{ width: "26%", cursor: "pointer" }}
               onClick={() => onSort("firm")}
             >
               Firm · Contact{sortIndicator("firm")}
             </th>
             <th
-              scope="col"
-              className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-dim"
+              style={{ width: "18%", cursor: "pointer" }}
+              onClick={() => onSort("status")}
             >
-              Company + partner context · Why them
+              Status{sortIndicator("status")}
             </th>
+            <th
+              style={{ width: "8%", cursor: "pointer" }}
+              onClick={() => onSort("days")}
+            >
+              Days since{sortIndicator("days")}
+            </th>
+            <th>Commentary (chronological, ` | ` separated)</th>
           </tr>
         </thead>
         <tbody>
@@ -175,83 +193,87 @@ export function TrackerTable({ rows }: { rows: TrackerRow[] }) {
             const expanded = expandedId === row.id;
             return (
               <Fragment key={row.id}>
-              <tr
-                className="cursor-pointer border-b border-border-soft align-top last:border-b-0 hover:bg-surface-alt"
-                onClick={() =>
-                  setExpandedId((current) => (current === row.id ? null : row.id))
-                }
-              >
-                <td className="px-3 py-2.5">
-                  <StatusBadge
-                    statusCode={row.status_code}
-                    statusLabel={row.status_label}
-                  />
-                </td>
-                <td className="px-3 py-2.5">
-                  <TierBadge tier={row.email_tier} />
-                </td>
-                <td className="px-3 py-2.5 text-[11px] tabular-nums text-text">
-                  {formatDays(row.days_since_last_contact)}
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="text-[12px] font-semibold text-text">
-                    {row.firm_name ?? "—"}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-text-dim">
-                    {row.partner_name ?? "—"}
-                    {row.partner_title ? (
-                      <span className="text-text-faint">
-                        {" · "}
-                        {row.partner_title}
-                      </span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="max-w-[460px] px-3 py-2.5 text-[11px] leading-relaxed text-text">
-                  {/* Company + partner two-sentence context */}
-                  <div>
-                    {row.company_summary ?? (
-                      <span className="italic text-text-faint">
-                        No company context on file yet.
-                      </span>
-                    )}
-                  </div>
-                  {/* Why-them synthesis — collapsed by default, revealed on row click */}
-                  {row.partner_why_them ? (
-                    <div
-                      className={`mt-1.5 rounded-[6px] border border-border-soft bg-surface-alt px-2.5 py-1.5 ${
-                        expanded ? "" : "line-clamp-2"
-                      }`}
-                    >
-                      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                        Why them
-                      </div>
-                      <div className="text-[11px] text-text">
-                        {row.partner_why_them}
-                      </div>
-                    </div>
-                  ) : null}
-                </td>
-              </tr>
-              {expanded ? (
                 <tr
-                  className="border-b border-border-soft last:border-b-0"
-                  onClick={(e) => e.stopPropagation()}
+                  style={{ cursor: "pointer" }}
+                  onClick={() =>
+                    setExpandedId((current) =>
+                      current === row.id ? null : row.id,
+                    )
+                  }
                 >
-                  <td colSpan={5} className="p-0">
-                    <TrackerRowDrawer
-                      campaignPartnerId={row.id}
-                      currentStatusCode={row.status_code}
-                      firmName={row.firm_name}
+                  <td>
+                    <div className="firm-c">{row.firm_name ?? "—"}</div>
+                    <div className="contact-c">
+                      {row.partner_name ?? "—"}
+                      {row.partner_title ? (
+                        <>
+                          {" · "}
+                          {row.partner_title}
+                        </>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td>
+                    <StatusBadge
+                      statusCode={row.status_code}
+                      statusLabel={row.status_label}
                     />
                   </td>
+                  <td style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 11 }}>
+                    {formatDays(row.days_since_last_contact)}
+                  </td>
+                  <td className="comment-af">
+                    <CommentaryCell row={row} />
+                  </td>
                 </tr>
-              ) : null}
+                {expanded ? (
+                  <tr onClick={(e) => e.stopPropagation()}>
+                    <td colSpan={4} style={{ padding: 0 }}>
+                      <TrackerRowDrawer
+                        campaignPartnerId={row.id}
+                        currentStatusCode={row.status_code}
+                        firmName={row.firm_name}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
               </Fragment>
             );
           })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Commentary cell renderer. V1's data layer stores two derived fields
+ * on the row — `company_summary` (two-sentence thesis gist) and
+ * `partner_why_them` (synthesis paragraph). V4's mockup shows a
+ * chronological ` | `-separated string with `[YYYY-MM-DD]` chips; we
+ * don't have per-event entries in V1 yet, so we render the two-paragraph
+ * derived context honestly and flag the absence rather than fabricating
+ * a date-chipped chronology. Once the Phase 5 commentary log lands,
+ * this component swaps to rendering the real chronology with V4's
+ * `.dt` date chips.
+ */
+function CommentaryCell({ row }: { row: TrackerRow }) {
+  const hasAny = row.company_summary || row.partner_why_them;
+  if (!hasAny) {
+    return (
+      <span style={{ color: "var(--text-faint)", fontStyle: "italic" }}>
+        No commentary on file yet.
+      </span>
+    );
+  }
+  return (
+    <>
+      {row.company_summary ? <div>{row.company_summary}</div> : null}
+      {row.partner_why_them ? (
+        <div style={{ marginTop: 6 }}>
+          <span className="dt">[Why them]</span> {row.partner_why_them}
+        </div>
+      ) : null}
+    </>
   );
 }

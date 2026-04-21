@@ -6,22 +6,22 @@ import {
 import { getTrackerRows } from "@/lib/queries/tracker";
 import { TrackerTable } from "./TrackerTable";
 import { StatusSummary } from "./StatusSummary";
-import { SectionHead } from "../SectionHead";
 import { TrackerStatTilesStrip } from "./StatTilesStrip";
+import { TrackerHealthCallout } from "./TrackerHealthCallout";
 
 /**
- * Tracker page — V1 read-only grid over `campaign_partners` joined with
- * `partners_mirror` + `investors_mirror`. Server component: fetches
- * campaigns + rows on the server, passes rows to the client TrackerTable
- * for sort/expand interactions.
+ * Tracker page — V4 §2 "Tracker — master sheet preview" re-port.
+ * Uses V4's `.section` + `.section-head` + `.section-title` +
+ * `.section-sub` + `.section-link` classes directly so the outer
+ * chrome matches the mockup by construction.
  *
- * The authed layout renders the campaign switcher chip row above us and
- * picks which campaign is active via `?c=<uuid>`. When no param is set
- * we default to the first active campaign so the page isn't blank.
+ * The layout below the head mirrors V4 lines 1798–1869:
+ *   - `.approval-col` wrapping the `.sheet-head-strip` + table (inside TrackerTable)
+ *   - `.walk-callout` yellow dashed footer strip (in TrackerHealthCallout)
  *
- * The mirrors are populated by the nightly sync from Forge Capital's
- * local SQLite. Until that has run, `getTrackerRows` will return an
- * empty array — rendered as an honest empty-state card (not fake rows).
+ * Auxiliary components that sit between the section head and the grid —
+ * `TrackerStatTilesStrip` + `StatusSummary` — are left in place; they
+ * are ours (not in V4) but don't conflict with the V4 chrome.
  *
  * Force dynamic: search params must not be cached across navigations.
  */
@@ -65,34 +65,52 @@ export default async function TrackerPage({
   const rows = await getTrackerRows(campaignId);
 
   return (
-    <div className="space-y-5">
-      <SectionHead
-        title={
-          <>
-            Tracker
+    <section id="tracker" className="section" style={{ marginTop: 0 }}>
+      {/* V4 `.section-head` (line 1800) — title on the left, "Open master
+          sheet" link on the right. */}
+      <div className="section-head">
+        <div>
+          <div className="section-title">
+            Tracker — master sheet preview
             {activeCampaign ? (
-              <>
-                {" "}
-                <span className="text-text-dim"> — {activeCampaign.name}</span>
-              </>
+              <span style={{ color: "var(--text-dim)" }}>
+                {" · "}
+                {activeCampaign.name}
+              </span>
             ) : null}
-          </>
-        }
-        subtitle={
-          <>
+          </div>
+          <div className="section-sub">
             The 16-code status vocabulary is live.{" "}
-            <code className="rounded-sm bg-surface-alt px-1.5 py-0.5 font-mono text-[11px]">
+            <code
+              style={{
+                fontFamily: "'SF Mono', monospace",
+                fontSize: 11,
+                background: "var(--surface-alt)",
+                padding: "1px 5px",
+                borderRadius: 3,
+              }}
+            >
               Days since
             </code>{" "}
-            is derived on read from the latest contact event. Two sentences
-            of company + partner context under each row; why-them synthesis
-            expands on row click.
-          </>
-        }
-      />
+            derived on read. Commentary uses{" "}
+            <code
+              style={{
+                fontFamily: "'SF Mono', monospace",
+                fontSize: 11,
+                background: "var(--surface-alt)",
+                padding: "1px 5px",
+                borderRadius: 3,
+              }}
+            >
+              [YYYY-MM-DD]
+            </code>{" "}
+            prefix with ` | ` separator; newest appended.
+          </div>
+        </div>
+        <span className="section-link">Open master sheet ↗</span>
+      </div>
 
-      {/* Stat-tiles strip — 4 aggregate counts computed live from rows.
-          See StatTilesStrip for the sourcing + tone rules. */}
+      {/* Stat-tiles strip — 4 aggregate counts computed live from rows. */}
       <TrackerStatTilesStrip rows={rows} />
 
       {rows.length === 0 ? (
@@ -100,10 +118,14 @@ export default async function TrackerPage({
       ) : (
         <>
           <StatusSummary rows={rows} />
-          <TrackerTable rows={rows} />
+          <TrackerTable
+            rows={rows}
+            campaignName={activeCampaign?.name}
+          />
+          <TrackerHealthCallout />
         </>
       )}
-    </div>
+    </section>
   );
 }
 
