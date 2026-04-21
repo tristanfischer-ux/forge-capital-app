@@ -18,7 +18,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
  *  The / landing page + /auth/callback route stay public so sign-in works.
  */
 
-const GATED_PREFIXES = ["/tracker"];
+const GATED_PREFIXES = ["/tracker", "/match"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

@@ -59,8 +59,8 @@ export default function HomePage() {
       const supabase = createBrowserClient();
       const next =
         typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("next") ?? "/tracker"
-          : "/tracker";
+          ? new URLSearchParams(window.location.search).get("next") ?? "/match"
+          : "/match";
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
