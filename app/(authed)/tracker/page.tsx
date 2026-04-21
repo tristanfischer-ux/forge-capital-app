@@ -6,6 +6,8 @@ import {
 import { getTrackerRows } from "@/lib/queries/tracker";
 import { TrackerTable } from "./TrackerTable";
 import { StatusSummary } from "./StatusSummary";
+import { SectionHead } from "../SectionHead";
+import { TrackerStatTilesStrip } from "./StatTilesStrip";
 
 /**
  * Tracker page — V1 read-only grid over `campaign_partners` joined with
@@ -64,10 +66,9 @@ export default async function TrackerPage({
 
   return (
     <div className="space-y-5">
-      {/* Section head — port of V4 `.section-head` for the tracker block */}
-      <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <h1 className="text-[15px] font-semibold tracking-tight text-text">
+      <SectionHead
+        title={
+          <>
             Tracker
             {activeCampaign ? (
               <>
@@ -75,8 +76,10 @@ export default async function TrackerPage({
                 <span className="text-text-dim"> — {activeCampaign.name}</span>
               </>
             ) : null}
-          </h1>
-          <p className="mt-0.5 text-[12px] text-text-dim">
+          </>
+        }
+        subtitle={
+          <>
             The 16-code status vocabulary is live.{" "}
             <code className="rounded-sm bg-surface-alt px-1.5 py-0.5 font-mono text-[11px]">
               Days since
@@ -84,9 +87,13 @@ export default async function TrackerPage({
             is derived on read from the latest contact event. Two sentences
             of company + partner context under each row; why-them synthesis
             expands on row click.
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      />
+
+      {/* Stat-tiles strip — 4 aggregate counts computed live from rows.
+          See StatTilesStrip for the sourcing + tone rules. */}
+      <TrackerStatTilesStrip rows={rows} />
 
       {rows.length === 0 ? (
         <EmptyState campaignName={activeCampaign?.name ?? ""} />
