@@ -101,6 +101,9 @@ function CampaignSwitcherStrip({
           className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-text hover:border-accent hover:text-accent"
         >
           <span>{campaign.name}</span>
+          <span className="rounded-full bg-surface-alt px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-text-dim">
+            {campaign.partner_count}
+          </span>
           <IntentBadge intent={campaign.campaign_intent} />
         </Link>
       ))}

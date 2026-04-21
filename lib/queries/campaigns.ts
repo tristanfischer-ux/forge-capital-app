@@ -10,6 +10,8 @@ export interface CampaignSummary {
   name: string;
   campaign_intent: "investor" | "customer" | "supplier";
   status: string;
+  /** How many campaign_partners rows belong to this campaign (0 if empty). */
+  partner_count: number;
 }
 
 /**
@@ -21,26 +23,40 @@ export interface CampaignSummary {
  */
 export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("campaigns")
-    .select("id, name, campaign_intent, status")
-    .neq("status", "archived")
-    .order("name", { ascending: true });
 
-  if (error) {
-    // Fail soft — rendering the page with an empty switcher is better than
-    // a 500. The switcher itself explains the empty state in copy.
-    console.error("listActiveCampaigns failed:", error.message);
+  // Campaigns + a pull of campaign_partners rows. We count in JS to avoid
+  // adding a Supabase view migration just for this; with 5 campaigns and
+  // ~500 partner rows the payload is trivially small.
+  const [campaignsResult, partnersResult] = await Promise.all([
+    supabase
+      .from("campaigns")
+      .select("id, name, campaign_intent, status")
+      .neq("status", "archived")
+      .order("name", { ascending: true }),
+    supabase.from("campaign_partners").select("campaign_id"),
+  ]);
+
+  if (campaignsResult.error) {
+    console.error("listActiveCampaigns failed:", campaignsResult.error.message);
     return [];
   }
+  if (partnersResult.error) {
+    console.error("listActiveCampaigns partner count failed:", partnersResult.error.message);
+    // Continue with zero counts — the page still renders usefully.
+  }
 
-  // Coerce to the narrow union — Supabase returns `campaign_intent` as
-  // text and the DB check constraint guarantees one of the three values.
-  return (data ?? []).map((row) => ({
+  const counts = new Map<string, number>();
+  for (const row of partnersResult.data ?? []) {
+    const id = (row as { campaign_id: string }).campaign_id;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  return (campaignsResult.data ?? []).map((row) => ({
     id: row.id,
     name: row.name,
     campaign_intent: row.campaign_intent as CampaignSummary["campaign_intent"],
     status: row.status,
+    partner_count: counts.get(row.id) ?? 0,
   }));
 }
 
