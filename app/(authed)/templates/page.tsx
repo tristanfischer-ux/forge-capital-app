@@ -1,0 +1,624 @@
+import Link from "next/link";
+import {
+  listActiveCampaigns,
+  resolveCurrentCampaignId,
+} from "@/lib/queries/campaigns";
+import {
+  getCampaignTemplates,
+  type CampaignTemplate,
+} from "@/lib/queries/templates";
+
+/**
+ * Templates page — V4 §6 "Email draft writer — two shapes, one archetype picks"
+ * (Phase2-Mockup-V4.html lines 1448–1523).
+ *
+ * V4 classes used verbatim (from app/v4-mockup.css):
+ *   - `.section` / `.section-head` / `.section-title` / `.section-sub`
+ *     / `.section-link`
+ *   - `.templates-grid` (2-col on desktop, collapses to 1-col at ≤1100px)
+ *   - `.template-card` / `.template-head` (`.inv` | `.sup`)
+ *     / `.th-ico` / `.th-title` / `.th-shape`
+ *   - `.template-body` / `.tb-from` / `.tb-subj` / `.tb-para` / `.tb-var`
+ *     (`.amber` variant on the supplier side)
+ *   - `.template-foot`
+ *   - `.template-anno` / `.ta-n`
+ *   - `.batch-drafted-strip` / `.bds-ico` / `.btn.primary`
+ *
+ * The two columns map to Tristan's archetype families:
+ *   - Left:  Asking-for-money   (investor + customer campaigns)
+ *   - Right: Offering-money     (supplier campaigns)
+ *
+ * The active campaign populates whichever column matches its
+ * `campaign_intent`. The opposing column renders an honest greyed
+ * placeholder — no invented copy (Outreach-Writing-Rules-TF.md Rule 5).
+ *
+ * `Edit` is V2 — V1 renders a disabled button with a tooltip.
+ */
+export const dynamic = "force-dynamic";
+
+type SearchParams = Promise<{ c?: string }>;
+
+export default async function TemplatesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { c } = await searchParams;
+
+  const campaigns = await listActiveCampaigns();
+  const campaignId = resolveCurrentCampaignId(campaigns, c);
+
+  if (!campaignId) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-[10px] border border-border bg-surface p-8 text-center shadow-[var(--shadow)]">
+        <h1 className="mb-2 text-lg font-semibold text-text">
+          No campaigns available
+        </h1>
+        <p className="text-[13px] text-text-dim">
+          Sign in to load templates. Row-level security gates every
+          table until an authenticated session is present.
+        </p>
+        <Link
+          href="/"
+          className="mt-5 inline-flex items-center rounded-[8px] bg-accent px-4 py-2 text-[13px] font-medium text-white hover:bg-accent-dark"
+        >
+          Go to sign-in
+        </Link>
+      </div>
+    );
+  }
+
+  const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
+  const { askingForMoney, offeringMoney } = await getCampaignTemplates(campaignId);
+
+  // The archetype of the active campaign determines which column is
+  // populated and which shows the greyed placeholder. Tristan's
+  // campaign_intent: investor/customer → asking; supplier → offering.
+  const activeArchetype: "asking-for-money" | "offering-money" | null =
+    activeCampaign
+      ? activeCampaign.campaign_intent === "supplier"
+        ? "offering-money"
+        : "asking-for-money"
+      : null;
+
+  return (
+    <section id="templates" className="section" style={{ marginTop: 0 }}>
+      {/* V4 lines 1449–1455 — section head, subtitle, right-side link. */}
+      <div className="section-head">
+        <div>
+          <div className="section-title">
+            Email draft writer &mdash; two shapes, one archetype picks
+            {activeCampaign ? (
+              <span style={{ color: "var(--text-dim)" }}>
+                {" · "}
+                {activeCampaign.name}
+              </span>
+            ) : null}
+          </div>
+          <div className="section-sub">
+            Asking-for-money emails (Investor + Customer) open with a relevance
+            hook and close with an ask. Offering-money emails (Supplier) open
+            with the requirement and close with a quick-qualify. The archetype
+            you picked on the campaign row decides which.
+          </div>
+        </div>
+        <span className="section-link">See all 6 template slots &rarr;</span>
+      </div>
+
+      {/* V4 line 1457 — two-column grid, collapses to one at ≤1100px via
+          v4-mockup.css line 666. */}
+      <div className="templates-grid">
+        <TemplateColumn
+          side="asking"
+          template={askingForMoney}
+          isActiveArchetype={activeArchetype === "asking-for-money"}
+          activeCampaignName={activeCampaign?.name ?? null}
+        />
+        <TemplateColumn
+          side="offering"
+          template={offeringMoney}
+          isActiveArchetype={activeArchetype === "offering-money"}
+          activeCampaignName={activeCampaign?.name ?? null}
+        />
+      </div>
+
+      {/* V4 lines 1517–1522 — batch-drafted-strip footer. V1 keeps it as
+          copy only (no live batch yet); the link anchor to #review lands
+          when the Review section ports. */}
+      <div className="batch-drafted-strip">
+        <span className="bds-ico">&#10003;</span>
+        <div>
+          Drafts are composed per partner from this template plus the
+          investor modal data. Variables like firm name and thesis are
+          resolved at draft time &mdash; see a rendered example on any
+          approved tracker row.
+        </div>
+        <span className="spacer" />
+        <Link
+          href="/tracker"
+          className="btn primary"
+          style={{ textDecoration: "none" }}
+        >
+          Go to tracker &rarr;
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * One column of the templates grid. Renders the V4 `.template-card`
+ * chrome verbatim, with the 4 parts (credibility / company / intelligent
+ * synthesis / CTA) labelled inside `.template-body`.
+ *
+ * `side` controls the `.template-head` colour variant and iconography:
+ *   - `asking`   → `.inv` (indigo gradient, 'I' icon)
+ *   - `offering` → `.sup` (amber gradient, 'S' icon)
+ *
+ * When `template` is null AND this side doesn't match the active
+ * campaign's archetype, we render a greyed placeholder explaining
+ * which archetype lives here — we don't invent copy.
+ */
+function TemplateColumn({
+  side,
+  template,
+  isActiveArchetype,
+  activeCampaignName,
+}: {
+  side: "asking" | "offering";
+  template: CampaignTemplate | null;
+  isActiveArchetype: boolean;
+  activeCampaignName: string | null;
+}) {
+  const isAsking = side === "asking";
+  const headClass = isAsking ? "template-head inv" : "template-head sup";
+  const icoLetter = isAsking ? "I" : "S";
+  const title = isAsking
+    ? "Asking-for-money — Investor / Customer"
+    : "Offering-money — Supplier";
+  const shape = isAsking
+    ? "Hook → Evidence → Ask"
+    : "Requirement → Capability check → Quick-qualify";
+
+  return (
+    <div className="template-card">
+      <div className={headClass}>
+        <span className="th-ico">{icoLetter}</span>
+        <span className="th-title">{title}</span>
+        <span className="th-shape">{shape}</span>
+      </div>
+
+      {template ? (
+        <PopulatedBody template={template} side={side} />
+      ) : (
+        <GreyedPlaceholderBody
+          side={side}
+          isActiveArchetype={isActiveArchetype}
+          activeCampaignName={activeCampaignName}
+        />
+      )}
+
+      <TemplateFoot template={template} side={side} />
+    </div>
+  );
+}
+
+/** Render the 4 labelled parts from a real `email_templates` row. */
+function PopulatedBody({
+  template,
+  side,
+}: {
+  template: CampaignTemplate;
+  side: "asking" | "offering";
+}) {
+  const varClass = side === "asking" ? "tb-var" : "tb-var amber";
+
+  // Credibility: prefer the full variant (Rule 3 says first-contact uses
+  // full bio). Fall back to short if only short is present.
+  const credibility =
+    template.credibility_paragraph_full ??
+    template.credibility_paragraph_short ??
+    null;
+
+  const cta = ctaCopyFor(template.cta_variant);
+
+  return (
+    <div className="template-body">
+      <div className="tb-from">
+        <b>Campaign</b> {template.campaign_name} &middot;{" "}
+        <b>Template</b>{" "}
+        <span className={varClass}>
+          {template.template_name ?? "(unnamed)"}
+        </span>
+        {template.captured_at ? (
+          <>
+            {" "}
+            &middot; <b>Captured</b>{" "}
+            {new Date(template.captured_at).toISOString().slice(0, 10)}
+          </>
+        ) : null}
+      </div>
+
+      <Part label="1. Credibility paragraph" body={credibility} kind="prose" />
+      <Part
+        label="2. Company paragraph"
+        body={template.company_paragraph}
+        kind="prose"
+      />
+      <Part
+        label="3. Intelligent synthesis"
+        body={template.intelligent_synthesis_template}
+        kind="synthesis"
+        varClass={varClass}
+      />
+      <Part label="4. Call to action" body={cta.body} kind="cta" ctaMeta={cta.meta} />
+    </div>
+  );
+}
+
+/** Render one of the 4 labelled parts of the body. */
+function Part({
+  label,
+  body,
+  kind,
+  varClass,
+  ctaMeta,
+}: {
+  label: string;
+  body: string | null;
+  kind: "prose" | "synthesis" | "cta";
+  varClass?: string;
+  ctaMeta?: string;
+}) {
+  const isTodo =
+    typeof body === "string" && body.trim().toLowerCase().startsWith("todo");
+
+  return (
+    <div
+      className="tb-para"
+      style={{
+        borderLeft: "2px solid var(--border-soft)",
+        paddingLeft: 10,
+        marginBottom: 12,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
+          color: "var(--text-dim)",
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      {body === null || body.trim() === "" ? (
+        <EmptyPart
+          note={
+            kind === "cta"
+              ? "CTA variant not set on this template."
+              : "Not captured yet."
+          }
+        />
+      ) : isTodo ? (
+        <TodoPart body={body} />
+      ) : kind === "synthesis" ? (
+        <SynthesisBody body={body} varClass={varClass ?? "tb-var"} />
+      ) : (
+        <ProseBody body={body} />
+      )}
+      {kind === "cta" && ctaMeta ? (
+        <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+          {ctaMeta}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Render a prose paragraph with hard newlines preserved. DB paragraphs
+ * sometimes contain `\n\n` for multi-paragraph company blocks (see the
+ * FishFrom seed row) — split on blank lines so they render correctly.
+ */
+function ProseBody({ body }: { body: string }) {
+  const blocks = body.split(/\n{2,}/g);
+  return (
+    <div>
+      {blocks.map((b, i) => (
+        <div
+          key={i}
+          style={{ marginBottom: i < blocks.length - 1 ? 8 : 0, whiteSpace: "pre-wrap" }}
+        >
+          {b}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Render the intelligent-synthesis paragraph with `{{FIRM_NAME}}` and
+ * `{{FIRM_THESIS}}` highlighted via the V4 `.tb-var` pill. Unknown
+ * placeholders (`{{FOO}}`) are shown as-is so we see what still needs
+ * wiring.
+ */
+function SynthesisBody({ body, varClass }: { body: string; varClass: string }) {
+  const parts = body.split(/(\{\{[A-Z_]+\}\})/g);
+  return (
+    <div style={{ whiteSpace: "pre-wrap" }}>
+      {parts.map((p, i) => {
+        if (/^\{\{[A-Z_]+\}\}$/.test(p)) {
+          return (
+            <span key={i} className={varClass}>
+              {p}
+            </span>
+          );
+        }
+        return <span key={i}>{p}</span>;
+      })}
+    </div>
+  );
+}
+
+/**
+ * Render a TODO placeholder honestly. Tristan's seed file uses
+ * "TODO: needs capture from Gmail" for Panatere / ForgeOS / Fischer Farms
+ * Customer. We render it as-is (Rule 5) with a warning chip so the
+ * reader sees the debt.
+ */
+function TodoPart({ body }: { body: string }) {
+  return (
+    <div>
+      <span
+        style={{
+          display: "inline-block",
+          padding: "1px 7px",
+          borderRadius: 999,
+          fontSize: 10,
+          fontWeight: 600,
+          background: "var(--amber-light)",
+          color: "var(--amber)",
+          border: "1px solid #fde68a",
+          marginRight: 8,
+        }}
+      >
+        TODO
+      </span>
+      <span style={{ color: "var(--text-dim)", whiteSpace: "pre-wrap" }}>
+        {body}
+      </span>
+    </div>
+  );
+}
+
+function EmptyPart({ note }: { note: string }) {
+  return (
+    <span style={{ color: "var(--text-faint)", fontStyle: "italic" }}>
+      {note}
+    </span>
+  );
+}
+
+/**
+ * Greyed placeholder shown for the opposing archetype column. We never
+ * invent copy for a column that has no captured template — we explain
+ * which archetype lives there and why this column is empty.
+ */
+function GreyedPlaceholderBody({
+  side,
+  isActiveArchetype,
+  activeCampaignName,
+}: {
+  side: "asking" | "offering";
+  isActiveArchetype: boolean;
+  activeCampaignName: string | null;
+}) {
+  const sideLabel =
+    side === "asking"
+      ? "asking-for-money (investor or customer)"
+      : "offering-money (supplier)";
+
+  const reason = isActiveArchetype
+    ? activeCampaignName
+      ? `No template captured yet for ${activeCampaignName}. Needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5.`
+      : `No ${sideLabel} template captured yet.`
+    : activeCampaignName
+      ? `The active campaign (${activeCampaignName}) is a ${
+          side === "asking" ? "supplier" : "investor / customer"
+        } campaign, so this ${sideLabel} column is inactive. Switch the campaign switcher to a ${
+          side === "asking" ? "fundraising" : "supplier"
+        } campaign to populate this side.`
+      : `Inactive for this campaign.`;
+
+  return (
+    <div
+      className="template-body"
+      style={{
+        background: "var(--surface-alt)",
+        color: "var(--text-dim)",
+        opacity: 0.9,
+      }}
+    >
+      <div className="tb-from" style={{ borderBottom: "none", marginBottom: 8 }}>
+        <b>Archetype</b> {sideLabel}
+      </div>
+      <EmptyPart4
+        label="1. Credibility paragraph"
+        hint="Standard Tristan bio — captured per-campaign."
+      />
+      <EmptyPart4
+        label="2. Company paragraph"
+        hint={
+          side === "asking"
+            ? "Company + raise (investor/customer)."
+            : "Requirement up front — spec, volume, timing."
+        }
+      />
+      <EmptyPart4
+        label="3. Intelligent synthesis"
+        hint={
+          side === "asking"
+            ? "Hedged thesis match (Rule 1: “My understanding is that…”)."
+            : "Capability check against supplier’s known portfolio."
+        }
+      />
+      <EmptyPart4
+        label="4. Call to action"
+        hint={
+          side === "asking"
+            ? "20‑min call or presentation-first."
+            : "Two binary qualifying questions."
+        }
+      />
+      <div
+        style={{
+          marginTop: 10,
+          padding: "8px 10px",
+          borderRadius: 6,
+          border: "1px dashed var(--border)",
+          fontSize: 11,
+          lineHeight: 1.5,
+        }}
+      >
+        {reason}
+      </div>
+    </div>
+  );
+}
+
+function EmptyPart4({ label, hint }: { label: string; hint: string }) {
+  return (
+    <div
+      className="tb-para"
+      style={{
+        borderLeft: "2px solid var(--border-soft)",
+        paddingLeft: 10,
+        marginBottom: 10,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
+          color: "var(--text-faint)",
+          marginBottom: 2,
+        }}
+      >
+        {label}
+      </div>
+      <span
+        style={{
+          color: "var(--text-faint)",
+          fontStyle: "italic",
+          fontSize: 12,
+        }}
+      >
+        {hint}
+      </span>
+    </div>
+  );
+}
+
+/** Footer strip with Tone / Length / Variables / rules-passed + Edit (V2). */
+function TemplateFoot({
+  template,
+  side,
+}: {
+  template: CampaignTemplate | null;
+  side: "asking" | "offering";
+}) {
+  const tone =
+    side === "asking" ? "confident, hedged" : "directive buyer";
+
+  const wordCount = template
+    ? countWordsAcross(
+        template.credibility_paragraph_full ??
+          template.credibility_paragraph_short,
+        template.company_paragraph,
+        template.intelligent_synthesis_template,
+      )
+    : null;
+
+  const placeholderCount = template
+    ? countPlaceholders(template.intelligent_synthesis_template)
+    : null;
+
+  return (
+    <div className="template-foot">
+      <b>Tone</b>: {tone}
+      {wordCount !== null ? (
+        <>
+          {" "}&middot; <b>Length</b> {wordCount} words
+        </>
+      ) : null}
+      {placeholderCount !== null ? (
+        <>
+          {" "}&middot; <b>Variables</b> {placeholderCount} (resolved from
+          partner modal)
+        </>
+      ) : null}
+      <span style={{ flex: 1 }} />
+      {/* Edit is V2 — V1 is read-only. Tooltip explains why. */}
+      <button
+        type="button"
+        disabled
+        title="Editing templates in the app lands in V2. For V1, capture new templates via the seed file + Supabase."
+        aria-label="Edit template (not yet enabled in V1)"
+        style={{
+          padding: "4px 10px",
+          borderRadius: 6,
+          border: "1px solid var(--border)",
+          background: "var(--surface)",
+          color: "var(--text-dim)",
+          fontSize: 11,
+          fontWeight: 500,
+          cursor: "not-allowed",
+          opacity: 0.7,
+        }}
+      >
+        Edit
+      </button>
+    </div>
+  );
+}
+
+/** Human-readable CTA copy for the foot meta. */
+function ctaCopyFor(
+  variant: "20min_call" | "presentation_first" | null,
+): { body: string | null; meta: string } {
+  if (variant === "presentation_first") {
+    return {
+      body: "I would be happy to send the investor presentation or arrange a call with the team.",
+      meta: "Variant: presentation_first",
+    };
+  }
+  if (variant === "20min_call") {
+    return {
+      body: "Would you have 20 minutes for a brief call? I am available early next week.",
+      meta: "Variant: 20min_call",
+    };
+  }
+  return { body: null, meta: "Variant: (not set on this template)" };
+}
+
+/** Count words across up to 3 body sections. Null-safe. */
+function countWordsAcross(...blocks: Array<string | null | undefined>): number {
+  let total = 0;
+  for (const b of blocks) {
+    if (!b) continue;
+    total += b.trim().split(/\s+/).filter(Boolean).length;
+  }
+  return total;
+}
+
+/** Count {{PLACEHOLDER}} tokens in the synthesis template (0 if null). */
+function countPlaceholders(tpl: string | null | undefined): number {
+  if (!tpl) return 0;
+  const matches = tpl.match(/\{\{[A-Z_]+\}\}/g);
+  return matches ? matches.length : 0;
+}
