@@ -1,0 +1,295 @@
+import { createServerClient } from "@/lib/supabase/server";
+import { deriveWhyThem } from "@/lib/queries/tracker";
+
+/**
+ * Queries backing the V4 §9 "Founder approval gate" surface
+ * (Phase2-Mockup-V4.html lines 1149-1296).
+ *
+ * Two sides of the artefact:
+ *
+ *  - OUTGOING  — campaign_partners rows at status_code `+0 Pending approval`.
+ *                These are the firms Stephan / Andrew / Olivier hasn't yet
+ *                ruled on. Sorted by `created_at` ascending (oldest pending
+ *                first, so the queue drains in arrival order).
+ *
+ *  - INCOMING  — campaign_partners rows that already carry an approval
+ *                decision. "Approved" = approved_by IS NOT NULL AND
+ *                status_code IN ('+1','+2','+3','+4','+5','+6','+7','+8',
+ *                '+9','+10','+11','+12') (i.e. moved past +0). "Rejected"
+ *                = status_code = '-3'. "Flag" = approver_note present AND
+ *                status_code still = '+0' (the founder sent a note but
+ *                didn't greenlight it — needs Tristan to read before send).
+ *
+ * V1 is read-only. The Phase-6 Gmail reply parser writes `approver_note` /
+ * `approved_by` / `approved_at`; the ingest button stubs out until that
+ * landing.
+ */
+
+/* --------------------------------- types --------------------------------- */
+
+export interface OutgoingApprovalRow {
+  campaign_partner_id: string;
+  firm_name: string | null;
+  hq_location: string | null;
+  partner_name: string | null;
+  partner_title: string | null;
+  /** Synthesis string for the "Why them" column. Null when the mirror hasn't
+   *  populated `synthesis_data` yet — page renders an em-dash. Never invented. */
+  why_them: string | null;
+  created_at: string | null;
+}
+
+export interface IncomingApprovalRow {
+  campaign_partner_id: string;
+  firm_name: string | null;
+  partner_name: string | null;
+  /** Verbatim reply text parsed from the approver's email reply. */
+  approver_note: string | null;
+  approved_at: string | null;
+  /** Derived decision bucket — approved / flag / rejected. */
+  decision: "approved" | "flag" | "rejected";
+}
+
+export interface IncomingApprovalStats {
+  approved: number;
+  flag: number;
+  rejected: number;
+}
+
+export interface ApprovalCampaignMeta {
+  campaign_id: string;
+  campaign_name: string | null;
+  /** Count of +0 rows waiting in the outgoing sheet. */
+  pending_count: number;
+}
+
+/* ---------------------- shape of Supabase join rows ---------------------- */
+
+interface PendingJoinRow {
+  id: string;
+  created_at: string | null;
+  partners_mirror: {
+    name: string | null;
+    title: string | null;
+    investors_mirror: {
+      firm_name: string | null;
+      hq_location: string | null;
+      synthesis_data: unknown;
+    } | null;
+  } | null;
+}
+
+interface DecidedJoinRow {
+  id: string;
+  status_code: string | null;
+  approver_note: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  partners_mirror: {
+    name: string | null;
+    investors_mirror: {
+      firm_name: string | null;
+    } | null;
+  } | null;
+}
+
+/* --------------------------- status classification ----------------------- */
+
+/**
+ * The 12 positive codes that represent "past +0 Pending approval" — i.e. the
+ * approver greenlit the row and Tristan has moved it into the send pipeline.
+ * Kept explicit (not a predicate) so the list is auditable against
+ * `lib/status-codes.ts`.
+ */
+const APPROVED_PAST_PENDING_CODES = new Set([
+  "+1", "+2", "+3", "+4", "+5", "+6", "+7", "+8", "+9", "+10", "+11", "+12",
+]);
+
+function classifyDecision(
+  statusCode: string | null,
+  approvedBy: string | null,
+  approverNote: string | null,
+): "approved" | "flag" | "rejected" | null {
+  if (statusCode === "-3") return "rejected";
+  if (statusCode && APPROVED_PAST_PENDING_CODES.has(statusCode) && approvedBy) {
+    return "approved";
+  }
+  if (statusCode === "+0" && approverNote && approverNote.trim().length > 0) {
+    return "flag";
+  }
+  return null;
+}
+
+/* ------------------------------- queries -------------------------------- */
+
+/**
+ * Fetch outgoing-sheet rows — campaign_partners at `+0` for the campaign,
+ * joined to firm + primary contact + synthesis. Sorted oldest-first so the
+ * queue drains in arrival order (matches V4's "Sorted by match score
+ * descending" only when the pipeline pre-ranks +0 inserts; for V1 we use
+ * created_at as the deterministic fallback).
+ */
+export async function getPendingApproval(
+  campaignId: string,
+): Promise<OutgoingApprovalRow[]> {
+  if (!campaignId) return [];
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("campaign_partners")
+    .select(
+      `
+      id,
+      created_at,
+      partners_mirror:partner_id (
+        name,
+        title,
+        investors_mirror:investor_id (
+          firm_name,
+          hq_location,
+          synthesis_data
+        )
+      )
+      `,
+    )
+    .eq("campaign_id", campaignId)
+    .eq("status_code", "+0")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("getPendingApproval failed:", error.message);
+    return [];
+  }
+
+  const rows = (data ?? []) as unknown as PendingJoinRow[];
+  return rows.map((row) => {
+    const partner = row.partners_mirror;
+    const investor = partner?.investors_mirror ?? null;
+    return {
+      campaign_partner_id: row.id,
+      firm_name: investor?.firm_name ?? null,
+      hq_location: investor?.hq_location ?? null,
+      partner_name: partner?.name ?? null,
+      partner_title: partner?.title ?? null,
+      why_them: deriveWhyThem(investor?.synthesis_data ?? null),
+      created_at: row.created_at,
+    };
+  });
+}
+
+/**
+ * Fetch incoming-replies rows — campaign_partners with an approver decision
+ * landed. Returns the rows + the three stat counts that populate the
+ * "13 Approved · 2 Flag · 5 Rejected" strip in V4.
+ *
+ * V1 scope: rows are returned all-at-once (no batching). The "Batch 1"
+ * label in V4 lines 1229-1234 is a Phase-6 construct once we ingest by
+ * reply-thread id.
+ */
+export async function getApprovalReplies(campaignId: string): Promise<{
+  rows: IncomingApprovalRow[];
+  stats: IncomingApprovalStats;
+}> {
+  const empty = {
+    rows: [] as IncomingApprovalRow[],
+    stats: { approved: 0, flag: 0, rejected: 0 },
+  };
+  if (!campaignId) return empty;
+  const supabase = await createServerClient();
+
+  // Fetch all rows that could carry a decision — we classify in JS so
+  // the "flag vs approved vs rejected" rules stay in one readable place.
+  // Filter is deliberately broad (any row with approver_note OR past-pending
+  // status OR -3) to avoid missing edge cases at the PostgREST layer.
+  const { data, error } = await supabase
+    .from("campaign_partners")
+    .select(
+      `
+      id,
+      status_code,
+      approver_note,
+      approved_by,
+      approved_at,
+      partners_mirror:partner_id (
+        name,
+        investors_mirror:investor_id (
+          firm_name
+        )
+      )
+      `,
+    )
+    .eq("campaign_id", campaignId)
+    .or(
+      "approved_by.not.is.null,approver_note.not.is.null,status_code.eq.-3",
+    )
+    .order("approved_at", { ascending: false });
+
+  if (error) {
+    console.error("getApprovalReplies failed:", error.message);
+    return empty;
+  }
+
+  const raw = (data ?? []) as unknown as DecidedJoinRow[];
+  const rows: IncomingApprovalRow[] = [];
+  const stats: IncomingApprovalStats = { approved: 0, flag: 0, rejected: 0 };
+
+  for (const row of raw) {
+    const decision = classifyDecision(
+      row.status_code,
+      row.approved_by,
+      row.approver_note,
+    );
+    if (!decision) continue;
+
+    const partner = row.partners_mirror;
+    const investor = partner?.investors_mirror ?? null;
+
+    rows.push({
+      campaign_partner_id: row.id,
+      firm_name: investor?.firm_name ?? null,
+      partner_name: partner?.name ?? null,
+      approver_note: row.approver_note,
+      approved_at: row.approved_at,
+      decision,
+    });
+    stats[decision] += 1;
+  }
+
+  return { rows, stats };
+}
+
+/**
+ * Meta helper: campaign name + pending-count tile for headers. Kept alongside
+ * the two main fetchers so pages don't have to juggle three query modules.
+ */
+export async function getApprovalCampaignMeta(
+  campaignId: string,
+): Promise<ApprovalCampaignMeta | null> {
+  if (!campaignId) return null;
+  const supabase = await createServerClient();
+
+  const [campaignResult, countResult] = await Promise.all([
+    supabase
+      .from("campaigns")
+      .select("id, name")
+      .eq("id", campaignId)
+      .maybeSingle(),
+    supabase
+      .from("campaign_partners")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId)
+      .eq("status_code", "+0"),
+  ]);
+
+  if (campaignResult.error) {
+    console.error("getApprovalCampaignMeta failed:", campaignResult.error.message);
+    return null;
+  }
+  if (!campaignResult.data) return null;
+
+  return {
+    campaign_id: campaignResult.data.id as string,
+    campaign_name: (campaignResult.data.name ?? null) as string | null,
+    pending_count: countResult.count ?? 0,
+  };
+}
