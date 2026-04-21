@@ -38,15 +38,45 @@ export default function HomePage() {
   >({ kind: "idle" });
   const [priorError, setPriorError] = useState<string | null>(null);
 
-  // On mount, check for a prior auth error (query or URL fragment). If we
-  // find one, strip it from the URL so a refresh doesn't re-show it.
+  // On mount: (1) if the URL fragment carries #access_token= (Supabase
+  // implicit flow — admin-generated links during testing, or projects
+  // with legacy config), convert it to a session cookie via setSession()
+  // then redirect. (2) Otherwise surface any prior auth error.
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash) {
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      if (accessToken && refreshToken) {
+        (async () => {
+          const supabase = createBrowserClient();
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) {
+            setPriorError(error.message);
+            window.history.replaceState({}, "", "/");
+            return;
+          }
+          const next =
+            new URLSearchParams(window.location.search).get("next") ?? "/home";
+          window.location.replace(next);
+        })();
+        return;
+      }
+    }
+
     const q = readQueryError();
     const frag = readFragmentError();
     const msg = q ?? frag;
     if (msg) {
       setPriorError(msg);
-      const cleanUrl = window.location.pathname + (window.location.search ? `` : ``);
+      const cleanUrl =
+        window.location.pathname + (window.location.search ? `` : ``);
       window.history.replaceState({}, "", cleanUrl || "/");
     }
   }, []);
