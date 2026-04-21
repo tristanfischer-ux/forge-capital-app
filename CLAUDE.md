@@ -17,6 +17,38 @@ already paid the cost of ignoring them.
   when the Python HTTP server is running in `audit-20260421/`. Start it with
   `cd audit-20260421 && python3 -m http.server 8765` if it isn't up.
 
+## Use V4's CSS directly — it's already imported
+
+**`app/v4-mockup.css`** contains V4's entire `<style>` block, lifted verbatim.
+It's imported at the top of `app/globals.css`. This means every class
+name V4 uses — `.topbar`, `.brand`, `.topnav .pill`, `.campaign-switcher`,
+`.hero`, `.hero-input`, `.arch-card`, `.arch-ico`, `.arch-row`,
+`.auto-suggest`, `.conflict-banner`, `.batch-bar`, `.results-head`,
+`.result-card`, `.match-score`, `.dim-bars`, `.approval-grid`,
+`.approval-col`, `.bpm-row`, `.bpm-body`, `.template-card`,
+`.review-stack`, `.review-card`, `.ver-card`, `.gmail-draft-item`,
+`.wk-stat`, `.chart-card`, `.walk-tour-strip` — **is live in production.**
+
+**The port workflow is therefore:**
+
+1. Read the V4 HTML section (e.g. lines 913-1147 for Find a Match)
+2. **Copy the DOM structure verbatim** into a React component — same
+   tag types, same class names, same child order.
+3. Replace V4's hard-coded dummy data (names, counts, paragraphs) with
+   real Supabase queries.
+4. Copy V4's visible copy strings verbatim — never paraphrase.
+5. Verify with a screenshot. Visual match is by construction; the
+   screenshot is a bug-check, not a re-specification.
+
+**You do not write new Tailwind classes to approximate V4 styles.** The
+styles are already here. If a V4 element looks wrong in production,
+the fix is "did I use the right class name?", not "let me re-derive a
+Tailwind equivalent".
+
+**When V4 is revised**, re-extract with:
+`sed -n '49,714p' audit-20260421/Phase2-Mockup-V4.html > forge-capital-app/app/v4-mockup.css`
+(adjust line range if V4's `<style>` block boundaries move).
+
 ## Never read the mockup via grep alone
 
 - **Before touching code, RENDER V4 in agent-browser.** Not a line-range

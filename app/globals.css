@@ -1,6 +1,23 @@
+/* CSS @import must precede all other rules. V4's class names + tokens load
+   first, then Tailwind's base layer, then utility classes. */
+@import "./v4-mockup.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* -----------------------------------------------------------------------------
+   V4 mockup CSS is imported above. That brings every V4 class name live
+   (.topbar, .hero, .arch-card, .result-card, .batch-bar, .approval-grid,
+   .bpm-row, .wk-stat, etc.) so React components can use className="topbar"
+   verbatim and the visual rendering matches by construction.
+
+   The mockup IS the code reference (see global CLAUDE.md "Mockup-faithful
+   build" + forge-capital-app/CLAUDE.md). Do not re-derive visuals from
+   screenshots when V4's own CSS is already authoritative.
+
+   When V4 gets revised, re-extract: sed -n '49,714p' V4.html > app/v4-mockup.css
+   ----------------------------------------------------------------------------- */
 
 /* -----------------------------------------------------------------------------
    Design tokens — lifted verbatim from Phase2-Mockup-V4.html :root block.
