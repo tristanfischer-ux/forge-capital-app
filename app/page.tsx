@@ -20,11 +20,17 @@ export default function HomePage() {
     setStatus({ kind: "sending" });
     try {
       const supabase = createBrowserClient();
+      const next =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next") ?? "/tracker"
+          : "/tracker";
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo:
-            typeof window !== "undefined" ? `${window.location.origin}/` : undefined,
+            typeof window !== "undefined"
+              ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+              : undefined,
         },
       });
       if (error) {
