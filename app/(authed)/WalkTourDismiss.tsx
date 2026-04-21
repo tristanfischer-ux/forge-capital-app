@@ -6,11 +6,10 @@ import { useRouter } from "next/navigation";
  * Tiny client-component for the "Hide tour" button inside the V4
  * walkthrough strip. Writes a `fc_tour_v4=hidden` cookie (1-year max
  * age, path=/) and triggers a router refresh so the strip's server
- * component re-evaluates its render on the next RSC payload.
+ * component re-evaluates on the next RSC payload.
  *
- * Kept as a sibling of WalkTourStrip (not inside it) so the parent
- * stays fully server-rendered — only this 200-byte button ships to
- * the client.
+ * Styling: uses V4's `.wts-link` class verbatim (v4-mockup.css line
+ * 660) — amber fg, bold, cursor pointer.
  */
 export function WalkTourDismiss() {
   const router = useRouter();
@@ -24,14 +23,20 @@ export function WalkTourDismiss() {
   }
 
   return (
-    <button
-      type="button"
+    <span
+      className="wts-link"
+      role="button"
+      tabIndex={0}
       onClick={dismiss}
-      className="shrink-0 text-[12px] font-semibold"
-      style={{ color: "#854d0e" }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          dismiss();
+        }
+      }}
       aria-label="Hide the V4 walkthrough tour"
     >
       Hide tour
-    </button>
+    </span>
   );
 }

@@ -4,16 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /**
- * Active-state aware nav pill — port of V4 `.topnav .pill.active` (V4
- * line 95: solid indigo bg, white text). Reads the current pathname on
- * the client so the active highlight survives navigation. Non-active
- * pills match V4's default + hover styles (`.topnav .pill:hover` —
- * indigo-light bg, plain text).
+ * Active-state aware nav pill — port of V4 `.topnav .pill` / `.pill.active`
+ * (v4-mockup.css lines 45-50). All styling lives in V4's CSS; this
+ * component's only job is to decide whether to emit the `active` modifier
+ * class based on the current pathname.
+ *
+ * V4 class vocabulary used here:
+ *   - `.pill`            — base
+ *   - `.pill.active`     — indigo fill + white text
+ *   - `.pill.auto`       — pink "NEW" ribbon (automation pill)
  *
  * Split out into a client component so the layout itself stays a server
  * component (it awaits `listActiveCampaigns`).
  */
-export function NavPill({ href, label }: { href: string; label: string }) {
+export function NavPill({
+  href,
+  label,
+  auto,
+}: {
+  href: string;
+  label: string;
+  /** Emit V4's `.pill.auto` modifier — adds the "NEW" ribbon. */
+  auto?: boolean;
+}) {
   const pathname = usePathname() ?? "";
   // A pill matches when the URL starts with its href (so /tracker/<id>
   // still lights up the Tracker pill). Root "/" is handled specially.
@@ -22,15 +35,15 @@ export function NavPill({ href, label }: { href: string; label: string }) {
       ? pathname === "/"
       : pathname === href || pathname.startsWith(`${href}/`);
 
+  const classes = ["pill"];
+  if (active) classes.push("active");
+  if (auto) classes.push("auto");
+
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={
-        active
-          ? "inline-flex items-center rounded-[8px] bg-accent px-3.5 py-1.5 text-[13px] font-medium text-white"
-          : "inline-flex items-center rounded-[8px] px-3.5 py-1.5 text-[13px] font-medium text-text-dim hover:bg-accent-light hover:text-text"
-      }
+      className={classes.join(" ")}
     >
       {label}
     </Link>

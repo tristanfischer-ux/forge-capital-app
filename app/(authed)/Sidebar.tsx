@@ -1,33 +1,52 @@
 import type { ReactNode } from "react";
-import { getSidebarDrafts, getPipelineHealth, getTrackerHealth } from "@/lib/queries/sidebar";
+import {
+  getSidebarDrafts,
+  getPipelineHealth,
+  getTrackerHealth,
+} from "@/lib/queries/sidebar";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
+import type {
+  SidebarDraftRow,
+  PipelineHealth,
+  TrackerHealth,
+} from "@/lib/queries/sidebar";
 
 /**
- * Right-rail sidebar — §1b of the V4 cutover. Stacks four side-cards
- * per Phase2-Mockup-V4.html lines 2178–2270:
+ * Right-rail sidebar — 1:1 port of V4 `<aside class="side">` stack
+ * (Phase2-Mockup-V4.html lines 2178-2270).
  *
- *   1. Drafts ready for review   — real +2 Drafted campaign_partners rows
- *                                   rendered against the campaign template
- *   2. Pipeline health           — live counts from campaign_partners
- *   3. This week's rhythm        — V4-faithful hard-coded placeholder.
- *                                   Real orchestration events land in
- *                                   Phase 7+.
- *   4. Tracker health            — the StatusSummary data as a vertical
- *                                   list (V4 card style) rather than
- *                                   the horizontal chip strip.
+ * V4 class vocabulary (v4-mockup.css lines 225-245):
+ *   Outer:  `.side` (wrapper, 340px, applied to <aside>)
+ *   Each card:
+ *     - `.side-card`        — white surface, 12px radius, shadow, 16px
+ *                             bottom gap
+ *     - `.side-card h3`     — card title (auto-styled)
+ *     - `.side-sub`         — muted caption under the title
+ *   Drafts card:
+ *     - `.draft` / `.draft-to` / `.draft-subj` / `.draft-preview`
+ *     - `.draft-row`        — bottom row of meta + Gmail button
+ *     - `.btn-gmail`        — "Open in Gmail ↗"
+ *     - `.side-note`        — dashed indigo callout at the foot
+ *   Pipeline / Tracker cards:
+ *     - `.ms-kv` / `.k` / `.v` — two-column key/value rows
+ *   Rhythm card:
+ *     - `.ms-stepper` / `.ms-step` / `.ms-step.done` / `.ms-step.active`
+ *     - `.bullet` / `.label` / `.meta`
  *
- * The sidebar is 340px wide (matches V4 `.side`) and stacks under the
- * main content below the `xl` breakpoint (~1180px, matching V4's
- * `@media (max-width: 1180px) { .side { display: none; } }` — we keep
- * it stacked rather than hidden so the data remains reachable).
+ * Cards (top to bottom, per V4):
+ *   1. Drafts ready for review   — live +2 Drafted campaign_partners
+ *   2. Pipeline health at a glance — live counts
+ *   3. This week's rhythm        — V4-faithful placeholder until the
+ *                                   orchestration runner lands
+ *   4. Tracker health            — vertical KV of every populated
+ *                                   status code
  *
- * Async server component: fetches all four card data sets in parallel.
+ * Responsiveness: V4 hides `.side` below 1180px via
+ * `@media (max-width: 1180px) { .side { display: none; } }` (CSS line
+ * 664). We keep that behaviour — the sidebar data remains reachable
+ * via direct navigation on small screens.
  */
-export async function Sidebar({
-  campaign,
-}: {
-  campaign: CampaignSummary;
-}) {
+export async function Sidebar({ campaign }: { campaign: CampaignSummary }) {
   const [drafts, health, trackerHealth] = await Promise.all([
     getSidebarDrafts(campaign.id, 3),
     getPipelineHealth(campaign.id, campaign.name, campaign.created_at),
@@ -35,10 +54,7 @@ export async function Sidebar({
   ]);
 
   return (
-    <aside
-      className="w-full shrink-0 space-y-4 xl:w-[340px] xl:pl-0"
-      aria-label="Campaign health rail"
-    >
+    <aside className="side" aria-label="Campaign health rail">
       <SideCardDrafts drafts={drafts} />
       <SideCardPipelineHealth health={health} />
       <SideCardRhythm />
@@ -48,9 +64,9 @@ export async function Sidebar({
 }
 
 /* ------------------------------------------------------------------
-   SideCard — shared chrome for the four cards.
-   Maps to V4 `.side-card` (lines 273–277): white surface, border,
-   radius 12, padding 18/20, standard shadow, 16px bottom gap.
+   Shared SideCard chrome — emits V4's `.side-card` markup. Title
+   renders as plain `<h3>` (V4 styles `.side-card h3` automatically);
+   subtitle renders as `.side-sub`.
    ------------------------------------------------------------------ */
 
 function SideCard({
@@ -63,45 +79,39 @@ function SideCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[12px] border border-border bg-surface px-5 py-[18px] shadow-[var(--shadow)]">
-      <h3 className="text-[13px] font-semibold tracking-tight text-text">{title}</h3>
-      {subtitle ? (
-        <div className="mt-0.5 mb-3.5 text-[11px] text-text-dim">{subtitle}</div>
-      ) : (
-        <div className="mb-3.5" />
-      )}
+    <div className="side-card">
+      <h3>{title}</h3>
+      {subtitle ? <div className="side-sub">{subtitle}</div> : null}
       {children}
-    </section>
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------
-   Card 1 — Drafts ready for review
-   V4 lines 2180–2224. Gmail-authoritative framing + up to 3 draft
-   previews + an accent note at the foot. When no +2 Drafted rows
-   exist (V1 default), show an honest empty state.
+   Card 1 — Drafts ready for review (V4 lines 2180-2224)
    ------------------------------------------------------------------ */
-
-import type { SidebarDraftRow } from "@/lib/queries/sidebar";
 
 function SideCardDrafts({ drafts }: { drafts: SidebarDraftRow[] }) {
   return (
     <SideCard
       title="Drafts ready for review"
       subtitle={
-        <>Gmail is the source of truth. We never send &mdash; you review and send from Gmail.</>
+        <>
+          Gmail is the source of truth. We never send &mdash; you review and
+          send from Gmail.
+        </>
       }
     >
       {drafts.length === 0 ? (
         <DraftsEmpty />
       ) : (
         <>
-          {drafts.map((d, i) => (
-            <DraftPreview key={d.campaign_partner_id} draft={d} first={i === 0} />
+          {drafts.map((d) => (
+            <DraftItem key={d.campaign_partner_id} draft={d} />
           ))}
-          <div className="mt-2.5 rounded-[6px] border border-dashed border-[#c7d2fe] bg-accent-softer px-2.5 py-2 text-[11px] leading-snug text-accent-dark">
-            Gmail is authoritative. Drafts sync back every 60s &mdash; reply/edit/send
-            there.
+          <div className="side-note">
+            Gmail is authoritative. Drafts sync back every 60s &mdash;
+            reply/edit/send there.
           </div>
         </>
       )}
@@ -111,58 +121,78 @@ function SideCardDrafts({ drafts }: { drafts: SidebarDraftRow[] }) {
 
 function DraftsEmpty() {
   return (
-    <div className="rounded-[6px] border border-dashed border-border bg-surface-alt px-3 py-4 text-[11px] leading-snug text-text-dim">
+    <div
+      style={{
+        padding: "12px 14px",
+        border: "1px dashed var(--border)",
+        background: "var(--surface-alt)",
+        borderRadius: 6,
+        fontSize: 11,
+        color: "var(--text-dim)",
+        lineHeight: 1.5,
+      }}
+    >
       No drafts ready. Drafts land here when partners move to{" "}
-      <span className="font-mono text-[10px] text-text">+2 Drafted</span>.
+      <span
+        style={{
+          fontFamily: "'SF Mono', ui-monospace, Menlo, monospace",
+          fontSize: 10,
+          color: "var(--text)",
+        }}
+      >
+        +2 Drafted
+      </span>
+      .
     </div>
   );
 }
 
-function DraftPreview({ draft, first }: { draft: SidebarDraftRow; first: boolean }) {
-  // Mirror V4 `.draft` + `.draft-to` / `.draft-subj` / `.draft-preview` /
-  // `.draft-row`. First child has no top border (V4 line 283).
-  const topBorder = first
-    ? "border-t-0 pt-1"
-    : "border-t border-border-soft pt-3";
-
+function DraftItem({ draft }: { draft: SidebarDraftRow }) {
   const firmSegment = draft.firm_name ?? "—";
   const partnerSegment = draft.partner_name ?? "—";
-
-  const savedCopy = draft.saved_minutes_ago === null
-    ? "Saved just now"
-    : formatSavedMinutesAgo(draft.saved_minutes_ago);
+  const savedCopy =
+    draft.saved_minutes_ago === null
+      ? "Saved just now"
+      : formatSavedMinutesAgo(draft.saved_minutes_ago);
 
   return (
-    <article className={`pb-3 ${topBorder}`}>
-      <div className="mb-0.5 flex items-center gap-1.5 text-[11px] text-text-dim">
-        <span>To</span>
-        <span className="font-semibold text-text">
+    <div className="draft">
+      <div className="draft-to">
+        <span>To</span>{" "}
+        <span className="firm">
           {partnerSegment} &middot; {firmSegment}
         </span>
       </div>
-      <div className="mb-1 text-[13px] font-medium leading-snug text-text">
-        {draft.subject ?? <span className="italic text-text-faint">— subject pending template wiring —</span>}
+      <div className="draft-subj">
+        {draft.subject ?? (
+          <span style={{ fontStyle: "italic", color: "var(--text-faint)" }}>
+            &mdash; subject pending template wiring &mdash;
+          </span>
+        )}
       </div>
-      <div className="mb-2 line-clamp-2 overflow-hidden text-[12px] leading-normal text-text-dim">
+      <div className="draft-preview">
         {draft.preview || (
-          <span className="italic text-text-faint">
+          <span style={{ fontStyle: "italic", color: "var(--text-faint)" }}>
             Body preview appears here once the template renders.
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 text-[11px] text-text-faint">
+      <div className="draft-row">
         <span>{savedCopy}</span>
-        <span className="text-text-faint">·</span>
+        <span style={{ color: "var(--text-faint)" }}>&middot;</span>
         <span>{draft.word_count} words</span>
-        <span className="flex-1" />
-        <span
-          className="inline-flex cursor-not-allowed items-center gap-1 rounded-[6px] border border-border bg-surface-alt px-2.5 py-1 font-medium text-text opacity-70"
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          className="btn-gmail"
+          disabled
           title="Gmail deep-links land in Phase 6"
+          style={{ opacity: 0.7, cursor: "not-allowed" }}
         >
-          Open in Gmail <span aria-hidden="true">↗</span>
-        </span>
+          Open in Gmail &#8599;
+        </button>
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -176,13 +206,8 @@ function formatSavedMinutesAgo(minutes: number): string {
 }
 
 /* ------------------------------------------------------------------
-   Card 2 — Pipeline health at a glance
-   V4 lines 2226–2238. Five labelled KV rows + a "Next auto-batch run"
-   footer. Week-of-16 resolves from campaign.created_at; if unavailable
-   we say "· active" rather than fake a week number.
+   Card 2 — Pipeline health at a glance (V4 lines 2226-2238)
    ------------------------------------------------------------------ */
-
-import type { PipelineHealth } from "@/lib/queries/sidebar";
 
 function SideCardPipelineHealth({ health }: { health: PipelineHealth }) {
   const weekSubcopy = health.week_of_sixteen
@@ -198,39 +223,49 @@ function SideCardPipelineHealth({ health }: { health: PipelineHealth }) {
         </>
       }
     >
-      <KVRow k="In approval queue" v={health.in_approval_queue} tone="accent" />
-      <KVRow k="In Gmail drafts" v={health.in_gmail_drafts} />
-      <KVRow k="Sent, awaiting" v={health.sent_awaiting} />
-      <KVRow
+      <MsKv k="In approval queue" v={health.in_approval_queue} tone="accent" />
+      <MsKv k="In Gmail drafts" v={health.in_gmail_drafts} />
+      <MsKv k="Sent, awaiting" v={health.sent_awaiting} />
+      <MsKv
         k="Replies pending log"
         v={health.replies_pending_log}
         tone={health.replies_pending_log > 0 ? "green" : undefined}
       />
-      <KVRow
+      <MsKv
         k="Gate-blocked"
         v={health.gate_blocked}
         tone={health.gate_blocked > 0 ? "amber" : undefined}
       />
-      <div className="mt-1.5 border-t border-border-soft pt-2">
-        <KVRow
-          k="Next auto-batch run"
-          v={
-            <span title="Hard-coded in V1 — wires to cron scheduler in Phase 8">
-              Tue 09:00
-            </span>
-          }
-          tone="accent"
-        />
+      {/* V4 line 2235: inline-style border-top + tight padding for the
+          footer row. */}
+      <div
+        className="ms-kv"
+        style={{
+          borderTop: "1px solid var(--border-soft)",
+          marginTop: 6,
+          paddingTop: 8,
+        }}
+      >
+        <span className="k">Next auto-batch run</span>
+        <span
+          className="v"
+          style={{ color: "var(--accent)" }}
+          title="Hard-coded in V1 — wires to cron scheduler in Phase 8"
+        >
+          Tue 09:00
+        </span>
       </div>
     </SideCard>
   );
 }
 
 /**
- * Two-column key/value row that matches V4 `.ms-kv`. The value side is
- * right-aligned, bold, with optional tone colouring.
+ * Two-column key/value row — V4 `.ms-kv` (v4-mockup.css line 552).
+ * The value side carries the tone class via an inline CSS var colour
+ * because V4's `.ms-kv .v` has no tone modifiers; V4 itself applies
+ * colour via inline style on the value span. We do the same.
  */
-function KVRow({
+function MsKv({
   k,
   v,
   tone,
@@ -239,32 +274,32 @@ function KVRow({
   v: number | ReactNode;
   tone?: "accent" | "green" | "amber" | "red";
 }) {
-  const toneClass =
+  const colour =
     tone === "accent"
-      ? "text-accent"
+      ? "var(--accent)"
       : tone === "green"
-        ? "text-green"
+        ? "var(--green)"
         : tone === "amber"
-          ? "text-amber"
+          ? "var(--amber)"
           : tone === "red"
-            ? "text-red"
-            : "text-text";
+            ? "var(--red)"
+            : undefined;
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1 text-[12px]">
-      <span className="shrink-0 text-text-dim">{k}</span>
-      <span className={`text-right font-medium ${toneClass}`}>{v}</span>
+    <div className="ms-kv">
+      <span className="k">{k}</span>
+      <span className="v" style={colour ? { color: colour } : undefined}>
+        {v}
+      </span>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------
-   Card 3 — This week's rhythm
-   V4 lines 2240–2250. Five status-dot rows: done / active / pending.
-   V1 note: these are V4-faithful hard-coded placeholder copy. Real
-   orchestration events (pool re-scored, batch approval sent, etc.)
-   land with the runner in Phase 7+. Flagged in the comment so future
-   sessions don't mistake these for live data.
+   Card 3 — This week's rhythm (V4 lines 2240-2250)
+   V4 ships these as hard-coded copy. V1 keeps them that way until
+   the orchestration runner lands (Phase 7+) — flagged in-code so
+   future sessions don't mistake placeholder copy for live data.
    ------------------------------------------------------------------ */
 
 type RhythmState = "done" | "active" | "pending";
@@ -275,18 +310,21 @@ interface RhythmItem {
   meta: string;
 }
 
-/**
- * Hard-coded for V1 — copy lifted verbatim from V4 mockup lines 2244–2248
- * so the sidecard reads like the target screenshot. Becomes a real
- * query once the orchestration runner lands; until then honesty is
- * preserved via the hover title on the status dots.
- */
+/** Copy lifted verbatim from V4 lines 2244-2248. */
 const RHYTHM_ITEMS_V4: RhythmItem[] = [
   { state: "done", label: "Pool re-scored · 1,524", meta: "Mon 21 Apr 08:00" },
   { state: "done", label: "Batch 2 approval sent", meta: "Mon 09:12 · 34 rows" },
-  { state: "active", label: "Awaiting Stephan reply", meta: "avg reply time 2d 4h" },
+  {
+    state: "active",
+    label: "Awaiting Stephan reply",
+    meta: "avg reply time 2d 4h",
+  },
   { state: "pending", label: "Drafts auto-generated", meta: "on ingest" },
-  { state: "pending", label: "Friday weekly update", meta: "Fri 25 Apr 17:00 BST" },
+  {
+    state: "pending",
+    label: "Friday weekly update",
+    meta: "Fri 25 Apr 17:00 BST",
+  },
 ];
 
 function SideCardRhythm() {
@@ -295,70 +333,49 @@ function SideCardRhythm() {
       title="This week's rhythm"
       subtitle="Autonomous runs happen; flags come to you"
     >
-      <ul className="mt-1 list-none space-y-0 p-0">
+      <ul className="ms-stepper">
         {RHYTHM_ITEMS_V4.map((item) => (
           <RhythmRow key={item.label} item={item} />
         ))}
       </ul>
-      <div className="mt-2.5 text-[10px] italic text-text-faint">
-        Placeholder events &mdash; wire to orchestration runner in Phase 7+.
-      </div>
     </SideCard>
   );
 }
 
 function RhythmRow({ item }: { item: RhythmItem }) {
-  // V4 `.ms-step .bullet` — 14×14 circle with ✓ (done), ● (active), ○ (pending).
-  const labelClass =
+  const stateClass =
     item.state === "done"
-      ? "text-text-dim line-through decoration-text-faint"
-      : "text-text font-medium";
-
+      ? "ms-step done"
+      : item.state === "active"
+        ? "ms-step active"
+        : "ms-step";
   const bullet =
-    item.state === "done" ? (
-      <span
-        className="mt-0.5 inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-green text-[9px] text-white"
-        aria-label="Complete"
-      >
-        ✓
-      </span>
-    ) : item.state === "active" ? (
-      <span
-        className="mt-0.5 inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-accent text-[9px] text-white shadow-[0_0_0_3px_var(--accent-light)]"
-        aria-label="In progress"
-      >
-        ●
-      </span>
-    ) : (
-      <span
-        className="mt-0.5 inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-border text-[9px] text-white"
-        aria-label="Not yet"
-      >
-        ○
-      </span>
-    );
+    item.state === "done" ? "✓" : item.state === "active" ? "●" : "○";
 
   return (
-    <li className="flex items-start gap-2.5 py-[5px] text-[11px]">
-      {bullet}
-      <div className="min-w-0">
-        <div className={labelClass}>{item.label}</div>
-        <div className="mt-0.5 text-[10px] text-text-faint">{item.meta}</div>
+    <li className={stateClass}>
+      <span className="bullet" aria-hidden="true">
+        {bullet}
+      </span>
+      <div>
+        <div className="label">{item.label}</div>
+        <div className="meta">{item.meta}</div>
       </div>
     </li>
   );
 }
 
 /* ------------------------------------------------------------------
-   Card 4 — Tracker health
-   V4 lines 2252–2268. Vertical KV list of every populated status code.
-   "+6 / +8 / +10" get the green tone; "-2 Bounced" gets red. Footer
-   shows "Total touched · X / Y" where Y is total rows.
+   Card 4 — Tracker health (V4 lines 2252-2268)
+   Vertical KV of every populated status code. +6/+8/+10 get green;
+   -2 gets red. Footer shows total touched / total rows.
    ------------------------------------------------------------------ */
 
-import type { TrackerHealth } from "@/lib/queries/sidebar";
-
-function SideCardTrackerHealth({ trackerHealth }: { trackerHealth: TrackerHealth }) {
+function SideCardTrackerHealth({
+  trackerHealth,
+}: {
+  trackerHealth: TrackerHealth;
+}) {
   const { rows, total, touched } = trackerHealth;
 
   if (rows.length === 0) {
@@ -367,7 +384,17 @@ function SideCardTrackerHealth({ trackerHealth }: { trackerHealth: TrackerHealth
         title="Tracker health"
         subtitle="Live vocabulary from the master sheet"
       >
-        <div className="rounded-[6px] border border-dashed border-border bg-surface-alt px-3 py-4 text-[11px] leading-snug text-text-dim">
+        <div
+          style={{
+            padding: "12px 14px",
+            border: "1px dashed var(--border)",
+            background: "var(--surface-alt)",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "var(--text-dim)",
+            lineHeight: 1.5,
+          }}
+        >
           No partner rows yet. Counts populate per status as the nightly sync
           lands rows on the tracker.
         </div>
@@ -381,14 +408,17 @@ function SideCardTrackerHealth({ trackerHealth }: { trackerHealth: TrackerHealth
       subtitle="Live vocabulary from the master sheet"
     >
       {rows.map((row) => {
-        // Colour tone follows the family (positive codes green, dead red).
         let tone: "green" | "red" | "amber" | undefined;
         if (row.family === "committed") tone = "green";
-        else if (row.family === "progressing" && (row.code === "+6" || row.code === "+7")) tone = "green";
+        else if (
+          row.family === "progressing" &&
+          (row.code === "+6" || row.code === "+7")
+        )
+          tone = "green";
         else if (row.code === "-2") tone = "red";
 
         return (
-          <KVRow
+          <MsKv
             key={row.code}
             k={`${row.code} ${row.label}`}
             v={row.count}
@@ -396,8 +426,18 @@ function SideCardTrackerHealth({ trackerHealth }: { trackerHealth: TrackerHealth
           />
         );
       })}
-      <div className="mt-1.5 border-t border-border-soft pt-2">
-        <KVRow k="Total touched" v={`${touched} / ${total}`} tone="accent" />
+      <div
+        className="ms-kv"
+        style={{
+          borderTop: "1px solid var(--border-soft)",
+          marginTop: 6,
+          paddingTop: 8,
+        }}
+      >
+        <span className="k">Total touched</span>
+        <span className="v" style={{ color: "var(--accent)" }}>
+          {touched} / {total}
+        </span>
       </div>
     </SideCard>
   );

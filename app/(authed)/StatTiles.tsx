@@ -1,13 +1,16 @@
 /**
  * StatTiles — reusable horizontal strip of stat tiles.
  *
- * Port of Phase2-Mockup-V4.html `.weekly-grid-stats` / `.wk-stat` pattern
- * (V4 lines 522–531). Each tile: big number + UPPERCASE label + optional
- * delta indicator ("▲ 4 vs last week" / "▼ 1" / "flat"). Used above the
- * tracker grid to surface aggregate campaign counts at a glance.
+ * 1:1 port of V4 `.weekly-grid-stats` / `.wk-stat` (v4-mockup.css lines
+ * 475-484). Each tile renders: big number (`.n`, optional tone
+ * modifier `.accent|green|red`), uppercase label (`.l`), and an
+ * optional delta line (`.delta`, optional `.up|down` modifier).
  *
- * Tile tones: accent (indigo, default), green (positive), red (bad),
- * neutral (plain). Mirrors V4's `.n.accent|green|red` modifier classes.
+ * Wrapper: V4 uses `.weekly-grid-stats` which is a 5-col grid sitting
+ * inside a `.weekly-wrap` card. Since callers pass variable-length
+ * tile arrays, we dynamically override the grid-template-columns to
+ * match the tile count while still emitting the `.weekly-grid-stats`
+ * class for V4's padding / borders / background.
  *
  * Server-renderable — no state, no event handlers, no client bundle.
  */
@@ -15,7 +18,7 @@
 export type StatTone = "accent" | "green" | "red" | "neutral";
 
 export interface StatTileDelta {
-  /** Arrow direction — "up" renders "▲" in green, "down" renders "▼" in red. */
+  /** Arrow direction — maps to V4's `.delta.up` / `.delta.down`. */
   direction: "up" | "down" | "flat";
   /** Trailing copy, e.g. "4 vs last week" or "1 (good)" or "flat". */
   label: string;
@@ -26,25 +29,25 @@ export interface StatTile {
   value: string;
   /** Short uppercase label under the number. V4 keeps this to 1–3 words. */
   label: string;
-  /** Colour modifier for the number, per V4. */
+  /** Tone modifier — maps to `.n.accent|green|red`. Default = plain text. */
   tone?: StatTone;
   /** Optional trend delta shown below the label. */
   delta?: StatTileDelta | null;
-  /** Stable key (V4 uses label implicitly — we're explicit for safety). */
+  /** Stable key for React. */
   id: string;
 }
 
-const TONE_CLASS: Record<StatTone, string> = {
-  accent: "text-accent",
-  green: "text-green",
-  red: "text-red",
-  neutral: "text-text",
-};
+function toneClass(tone: StatTone | undefined): string {
+  if (tone === "accent") return "n accent";
+  if (tone === "green") return "n green";
+  if (tone === "red") return "n red";
+  return "n";
+}
 
 function deltaClass(dir: StatTileDelta["direction"]): string {
-  if (dir === "up") return "text-green";
-  if (dir === "down") return "text-red";
-  return "text-text-dim";
+  if (dir === "up") return "delta up";
+  if (dir === "down") return "delta down";
+  return "delta";
 }
 
 function deltaGlyph(dir: StatTileDelta["direction"]): string {
@@ -53,38 +56,25 @@ function deltaGlyph(dir: StatTileDelta["direction"]): string {
   return "";
 }
 
-/**
- * Horizontal strip of tiles. Uses CSS grid with `grid-template-columns:
- * repeat(N, 1fr)` so the row scales evenly across the container width.
- * Matches V4's inline grid on `.weekly-grid-stats`.
- */
 export function StatTiles({ tiles }: { tiles: StatTile[] }) {
   if (tiles.length === 0) return null;
 
   return (
     <div
-      className="grid gap-2.5 rounded-[10px] border border-border bg-surface-alt p-4"
+      className="weekly-grid-stats"
       style={{
+        // V4 hard-codes 5 columns. Variable-length callers get an even
+        // grid with the same gap/padding/background.
         gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))`,
       }}
     >
       {tiles.map((t) => (
-        <div
-          key={t.id}
-          className="rounded-[10px] border border-border bg-surface px-3.5 py-3"
-        >
-          <div
-            className={`text-[22px] font-bold leading-none tracking-tight ${TONE_CLASS[t.tone ?? "neutral"]}`}
-          >
-            {t.value}
-          </div>
-          <div className="mt-1.5 text-[11px] font-medium uppercase tracking-wide text-text-dim">
-            {t.label}
-          </div>
+        <div key={t.id} className="wk-stat">
+          <div className={toneClass(t.tone)}>{t.value}</div>
+          <div className="l">{t.label}</div>
           {t.delta ? (
-            <div className={`mt-1 text-[11px] ${deltaClass(t.delta.direction)}`}>
-              {deltaGlyph(t.delta.direction)}{" "}
-              <span>{t.delta.label}</span>
+            <div className={deltaClass(t.delta.direction)}>
+              {deltaGlyph(t.delta.direction)} <span>{t.delta.label}</span>
             </div>
           ) : null}
         </div>

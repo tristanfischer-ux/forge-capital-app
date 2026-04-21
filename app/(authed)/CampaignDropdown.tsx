@@ -5,28 +5,41 @@ import { useEffect, useRef, useState } from "react";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
 
 /**
- * Campaign switcher — port of Phase2-Mockup-V4.html `.campaign-switcher` +
- * `.camp-dropdown` (V4 lines ~735–836). Replaces the previous chip-row.
+ * Campaign switcher — 1:1 port of V4 `.campaign-switcher` +
+ * `.camp-dropdown` (Phase2-Mockup-V4.html lines 735-836).
+ *
+ * V4 class vocabulary:
+ *   - `.campaign-switcher`            — the pill trigger
+ *   - `.campaign-switcher .label`     — "Campaign" muted caption
+ *   - `.campaign-switcher .name`      — bold indigo campaign name
+ *   - `.type-badge` + `.type-badge-inv|cus|sup` — intent badge
+ *   - `.campaign-switcher .caret`     — ▾ glyph
+ *   - `.camp-dropdown`                — floating menu (we add `.open`
+ *                                       when the trigger is clicked)
+ *   - `.camp-dropdown .group-label`   — "Your campaigns · N active"
+ *   - `.camp-opt` + `.camp-opt.active`— one row per campaign
+ *   - `.camp-opt .dot` + `.d-ss|ff|fg|ca|me|uk|pt|sp` — intent colour
+ *   - `.camp-opt .txt` / `.n` / `.s` / `.ct` / `.mini-type`
+ *   - `.camp-dropdown .divider`       — between intent groups
+ *   - `.camp-dropdown .new-link`      — "+ New campaign" footer row
  *
  * Behaviour:
  *  - Shows the active campaign name + intent badge in the pill.
- *  - Clicking the pill opens the dropdown.
- *  - Each option is a `<Link>` — selecting one swaps `?c=<uuid>` on the
- *    current path so the server component refetches for the new campaign.
- *  - Groups campaigns by intent (investor, customer, supplier) with a
- *    divider between groups, matching the V4 spec exactly.
- *  - Options are rendered in investor → customer → supplier order so the
- *    divider semantics match V4 regardless of DB sort order.
- *
- * Client component: needs local open/close state + outside-click close.
- * We keep it thin — all campaign data arrives as a prop from the server.
+ *  - Clicking the pill opens the dropdown (toggles `.open` class).
+ *  - Each option is a Next `<Link>` — selecting one swaps `?c=<uuid>`
+ *    on the tracker so the server component refetches for the new
+ *    campaign, and writes the `fc_active_campaign` cookie so the
+ *    sidebar rail follows.
+ *  - Groups by intent (investor → customer → supplier) with dividers.
  */
 export function CampaignDropdown({
   campaigns,
   activeCampaignId,
+  totalActive,
 }: {
   campaigns: CampaignSummary[];
   activeCampaignId: string | null;
+  totalActive: number;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -50,86 +63,106 @@ export function CampaignDropdown({
     };
   }, [open]);
 
-  const active = campaigns.find((c) => c.id === activeCampaignId) ?? campaigns[0] ?? null;
+  const active =
+    campaigns.find((c) => c.id === activeCampaignId) ?? campaigns[0] ?? null;
 
-  // Group by intent so we can render section dividers exactly like V4.
-  // The V4 dropdown groups investor first, then customer, then supplier.
+  // Empty state — no campaigns visible (RLS denied). Layout surfaces the
+  // sign-in hint separately; returning null here keeps the topbar clean.
+  if (!active) return null;
+
+  // Group by intent so we can render the V4 dividers exactly.
   const investors = campaigns.filter((c) => c.campaign_intent === "investor");
   const customers = campaigns.filter((c) => c.campaign_intent === "customer");
   const suppliers = campaigns.filter((c) => c.campaign_intent === "supplier");
-  const totalActive = campaigns.length;
-
-  // V4 pill: indigo softer bg, rounded-full, with label + active name +
-  // type badge + caret. Keep inline styles minimal and rely on tokens.
-  if (!active) {
-    // Empty state — no campaigns visible at all (RLS denied). The layout
-    // surfaces the sign-in hint separately; here we render nothing so the
-    // topbar still lays out cleanly.
-    return null;
-  }
 
   return (
-    <div ref={wrapRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2.5 rounded-full border border-[#e4e1ff] bg-accent-softer px-3.5 py-1.5 pr-3 text-[12px] font-medium text-accent"
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      {/* V4 line 735-741: .campaign-switcher with dot, label, name,
+          type-badge, caret. Inline style on the dot matches V4 line 736
+          (8px indigo circle). */}
+      <div
+        className="campaign-switcher"
+        role="button"
+        tabIndex={0}
         aria-haspopup="listbox"
         aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((o) => !o);
+          }
+        }}
       >
         <span
-          className="block h-2 w-2 rounded-full bg-accent"
+          className="dot"
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: "var(--accent)",
+          }}
           aria-hidden="true"
         />
-        <span className="text-text-dim">Campaign</span>
-        <span className="font-semibold text-accent">{active.name}</span>
-        <IntentBadge intent={active.campaign_intent} size="sm" />
-        <span className="text-[10px]">&#9662;</span>
-      </button>
+        <span className="label">Campaign</span>
+        <span className="name">{active.name}</span>
+        <span className={`type-badge ${intentBadgeClass(active.campaign_intent)}`}>
+          {intentLabel(active.campaign_intent)}
+        </span>
+        <span className="caret">&#9662;</span>
+      </div>
 
+      {/* V4 line 747-836: .camp-dropdown (floating panel). V4 uses
+          `.open` class; we mount conditionally instead — same visual
+          outcome. */}
       {open ? (
         <div
-          className="absolute right-0 top-[calc(100%+6px)] z-[80] w-[360px] rounded-[12px] border border-border bg-surface p-2 shadow-lg"
+          className="camp-dropdown open"
           role="listbox"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+          }}
         >
-          <GroupLabel label="Your campaigns" count={`${totalActive} active`} />
-          {investors.map((c) => (
-            <CampaignOption
-              key={c.id}
-              campaign={c}
-              active={c.id === active.id}
-            />
-          ))}
-
-          {investors.length > 0 && customers.length > 0 ? <Divider /> : null}
-          {customers.map((c) => (
-            <CampaignOption
-              key={c.id}
-              campaign={c}
-              active={c.id === active.id}
-            />
-          ))}
-
-          {customers.length > 0 && suppliers.length > 0 ? <Divider /> : null}
-          {(investors.length > 0 && suppliers.length > 0 && customers.length === 0) ? <Divider /> : null}
-          {suppliers.map((c) => (
-            <CampaignOption
-              key={c.id}
-              campaign={c}
-              active={c.id === active.id}
-            />
-          ))}
-
-          <Divider />
-          <div
-            className="flex cursor-default items-center gap-2 rounded-[6px] px-2.5 py-2 text-[12px] font-semibold text-text-faint"
-            title="Campaign creation lands in a later section"
-          >
-            <span className="text-[16px] leading-none">+</span>
-            New campaign
-            <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-text-faint">
-              Later
+          <div className="group-label">
+            <span>Your campaigns</span>
+            <span style={{ color: "var(--text-faint)" }}>
+              {totalActive} active
             </span>
+          </div>
+
+          {investors.map((c) => (
+            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} />
+          ))}
+
+          {investors.length > 0 && (customers.length > 0 || suppliers.length > 0) ? (
+            <div className="divider" />
+          ) : null}
+
+          {customers.map((c) => (
+            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} />
+          ))}
+
+          {customers.length > 0 && suppliers.length > 0 ? (
+            <div className="divider" />
+          ) : null}
+
+          {suppliers.map((c) => (
+            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} />
+          ))}
+
+          <div className="divider" />
+          {/* "+ New campaign" — V4 line 835. Disabled in V1 until
+              campaign creation ships. */}
+          <div
+            className="new-link"
+            title="Campaign creation lands in a later section"
+            style={{ opacity: 0.7, cursor: "not-allowed" }}
+            aria-disabled="true"
+          >
+            <span style={{ fontSize: 16, lineHeight: 0.8 }}>+</span> New
+            campaign
           </div>
         </div>
       ) : null}
@@ -137,23 +170,12 @@ export function CampaignDropdown({
   );
 }
 
-function GroupLabel({ label, count }: { label: string; count: string }) {
-  return (
-    <div className="flex items-center justify-between px-2.5 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wide text-text-faint">
-      <span>{label}</span>
-      <span>{count}</span>
-    </div>
-  );
-}
-
-function Divider() {
-  return <div className="my-1.5 h-px bg-border-soft" aria-hidden="true" />;
-}
-
 /**
- * One campaign row in the dropdown. V4: small dot + name + intent badge +
- * subtitle (empty in V1 — we have no founder/counterpart column yet) +
- * partner count. Active row gets indigo-softer bg.
+ * One campaign row in the dropdown — V4 `.camp-opt` markup verbatim
+ * (lines 750-758). Dot uses V4's `d-ss|ff|fg|ca|me|uk|pt|sp` palette;
+ * we pick one deterministically from the campaign id's first char so
+ * the colours stay stable across renders without a migration adding a
+ * dedicated colour column.
  */
 function CampaignOption({
   campaign,
@@ -162,83 +184,86 @@ function CampaignOption({
   campaign: CampaignSummary;
   active: boolean;
 }) {
-  // Cookie the selection so the authed layout's Sidebar (server component)
-  // can resolve which campaign is active for its health cards without
-  // needing to read search params (layouts don't receive searchParams in
-  // Next 16). The cookie is a 1-year convenience — the URL's `?c=` still
-  // wins for any page-level query.
+  // Cookie the selection so the authed layout's Sidebar (server
+  // component) can resolve which campaign is active without reading
+  // search params (layouts don't receive searchParams in Next 16). The
+  // URL's `?c=` still wins for any page-level query.
   function onClick() {
     const maxAge = 60 * 60 * 24 * 365;
     document.cookie = `fc_active_campaign=${campaign.id}; path=/; max-age=${maxAge}; samesite=lax`;
   }
 
+  const dotClass = pickDotClass(campaign.id);
+  const miniType = intentBadgeClass(campaign.campaign_intent);
+
   return (
     <Link
       href={`/tracker?c=${campaign.id}`}
       onClick={onClick}
-      className={`flex cursor-pointer items-center gap-2.5 rounded-[6px] px-2.5 py-2 hover:bg-accent-light ${
-        active ? "bg-accent-softer" : ""
-      }`}
+      className={active ? "camp-opt active" : "camp-opt"}
       role="option"
       aria-selected={active}
     >
-      <span
-        className={`block h-2 w-2 shrink-0 rounded-full ${
-          campaign.campaign_intent === "investor"
-            ? "bg-accent"
-            : campaign.campaign_intent === "customer"
-              ? "bg-green"
-              : "bg-amber"
-        }`}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[13px] font-medium text-text">
-          <span className="truncate">{campaign.name}</span>
-          <IntentBadge intent={campaign.campaign_intent} size="xs" />
+      <span className={`dot ${dotClass}`} aria-hidden="true" />
+      <div className="txt">
+        <div className="n">
+          {campaign.name}{" "}
+          <span className={`mini-type ${miniType}`}>
+            {intentLabel(campaign.campaign_intent)}
+          </span>
         </div>
+        {/* V4 .s subtitle carries "Archetype · founder · week N of 16".
+            V1 has no founder column wired to campaigns yet — render a
+            minimal archetype hint so the row isn't blank. Once a
+            counterpart column lands, plug it in here.
+            TODO: wires to campaigns.counterpart_name once the column
+            migration lands. */}
+        <div className="s">{archetypeCopy(campaign.campaign_intent)}</div>
       </div>
-      <div className="shrink-0 font-mono text-[11px] tabular-nums text-text-faint">
-        {campaign.partner_count}
-      </div>
+      <div className="ct">{campaign.partner_count.toLocaleString("en-GB")}</div>
     </Link>
   );
 }
 
+function intentLabel(intent: CampaignSummary["campaign_intent"]): string {
+  if (intent === "investor") return "Investor";
+  if (intent === "customer") return "Customer";
+  return "Supplier";
+}
+
+function intentBadgeClass(intent: CampaignSummary["campaign_intent"]): string {
+  if (intent === "investor") return "type-badge-inv";
+  if (intent === "customer") return "type-badge-cus";
+  return "type-badge-sup";
+}
+
+function archetypeCopy(intent: CampaignSummary["campaign_intent"]): string {
+  if (intent === "investor") return "Money in · sell equity";
+  if (intent === "customer") return "Money in · sell product";
+  return "Money out · buyer posture";
+}
+
 /**
- * Shared intent badge used in the topbar pill + dropdown rows. `sm` is
- * the one in the pill; `xs` is the mini variant inside the dropdown row.
- * Tokens mirror V4 `.type-badge-inv|cus|sup`.
+ * V4's dropdown gives each campaign its own coloured dot — `.d-ss`,
+ * `.d-ff`, `.d-pt`, `.d-fg`, `.d-ca`, `.d-me`, `.d-uk`, `.d-sp` are
+ * hard-coded per-campaign in the mockup (v4-mockup.css lines 599-606).
+ * V1 has no persisted colour per campaign, so we pick from the palette
+ * deterministically by hashing the id — stable across renders, stable
+ * across refreshes.
  */
-function IntentBadge({
-  intent,
-  size,
-}: {
-  intent: "investor" | "customer" | "supplier";
-  size: "sm" | "xs";
-}) {
-  const byIntent = {
-    investor:
-      "bg-intent-investor-bg text-intent-investor-fg border-intent-investor-border",
-    customer:
-      "bg-intent-customer-bg text-intent-customer-fg border-intent-customer-border",
-    supplier:
-      "bg-intent-supplier-bg text-intent-supplier-fg border-intent-supplier-border",
-  } as const;
-  const label = {
-    investor: "Investor",
-    customer: "Customer",
-    supplier: "Supplier",
-  } as const;
-  const sizing =
-    size === "sm"
-      ? "text-[10px] px-1.5 py-0.5"
-      : "text-[9px] px-1.5 py-[1px]";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border font-semibold uppercase tracking-wide ${byIntent[intent]} ${sizing}`}
-    >
-      {label[intent]}
-    </span>
-  );
+const DOT_PALETTE = [
+  "d-ss",
+  "d-ff",
+  "d-fg",
+  "d-ca",
+  "d-me",
+  "d-uk",
+  "d-pt",
+  "d-sp",
+] as const;
+
+function pickDotClass(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return DOT_PALETTE[Math.abs(h) % DOT_PALETTE.length];
 }
