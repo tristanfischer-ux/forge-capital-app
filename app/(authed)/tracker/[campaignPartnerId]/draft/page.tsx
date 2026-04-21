@@ -6,6 +6,7 @@ import { TierBadge } from "../../TierBadge";
 import { StatusBadge } from "../../StatusBadge";
 import { composeDraft, isTierBlocked } from "./compose";
 import { CopyToClipboardButton } from "./CopyToClipboardButton";
+import { CreateGmailDraftButton } from "./CreateGmailDraftButton";
 
 /**
  * Full-page preview of the draft email that WOULD be sent to this partner.
@@ -149,10 +150,19 @@ export default async function DraftPage(props: any) {
       {/* Primary action — only when not blocked */}
       {!blocked ? (
         <section className="rounded-[10px] border border-border bg-surface-alt p-5">
-          <CopyToClipboardButton fullText={draft.fullClipboardText} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <CreateGmailDraftButton
+              to={data.primary_partner?.email ?? ""}
+              subject={draft.subject}
+              body={draft.bodyParagraphs.join("\n\n")}
+            />
+            <CopyToClipboardButton fullText={draft.fullClipboardText} />
+          </div>
           <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
-            Gmail is authoritative — we never send from this tool. Copy,
-            paste, review once more, then send from Gmail.
+            Gmail is authoritative — we never send from this tool. The
+            &ldquo;Create Gmail draft&rdquo; button uses your connected Gmail
+            account; the copy-to-clipboard option is there as a fallback.
+            Either way, review once more and hit send in Gmail yourself.
           </p>
         </section>
       ) : null}
