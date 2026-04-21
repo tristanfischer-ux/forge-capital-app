@@ -1,18 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 /**
- * Phase 0 placeholder landing. Magic-link login scaffold only.
- * Real auth allowlisting, redirect handling, and session-aware tracker grid
- * arrive in Phase 1+.
+ * Landing page. Magic-link login.
+ *
+ * Surfaces auth errors from three channels: user-initiated send failures
+ * (caught inline), query param `?auth_error=` forwarded from our callback
+ * route handler, and URL-fragment errors from Supabase when the magic link
+ * expired or was tampered with (fragments aren't server-visible, so we
+ * read them client-side on mount).
  */
+
+function readFragmentError(): string | null {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash.replace(/^#/, "");
+  if (!hash) return null;
+  const params = new URLSearchParams(hash);
+  const desc = params.get("error_description");
+  const code = params.get("error_code");
+  if (desc) return desc.replace(/\+/g, " ");
+  if (code) return code;
+  return null;
+}
+
+function readQueryError(): string | null {
+  if (typeof window === "undefined") return null;
+  const q = new URLSearchParams(window.location.search);
+  return q.get("auth_error");
+}
+
 export default function HomePage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "sent" } | { kind: "error"; message: string }
   >({ kind: "idle" });
+  const [priorError, setPriorError] = useState<string | null>(null);
+
+  // On mount, check for a prior auth error (query or URL fragment). If we
+  // find one, strip it from the URL so a refresh doesn't re-show it.
+  useEffect(() => {
+    const q = readQueryError();
+    const frag = readFragmentError();
+    const msg = q ?? frag;
+    if (msg) {
+      setPriorError(msg);
+      const cleanUrl = window.location.pathname + (window.location.search ? `` : ``);
+      window.history.replaceState({}, "", cleanUrl || "/");
+    }
+  }, []);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +100,18 @@ export default function HomePage() {
             </p>
           </div>
 
+          {priorError ? (
+            <div className="mb-4 rounded-sm border border-[#fecaca] bg-red-light px-3 py-2.5 text-[11px] leading-relaxed text-red">
+              <div className="mb-0.5 font-semibold">Previous sign-in didn&rsquo;t complete</div>
+              <div className="text-[11px] normal-case text-red/90">
+                {humaniseError(priorError)}
+              </div>
+              <div className="mt-1 text-[10px] text-red/70">
+                Request a fresh magic link below — old links expire quickly.
+              </div>
+            </div>
+          ) : null}
+
           <form onSubmit={onSubmit} className="space-y-4">
             <label className="block">
               <span className="block text-xs font-medium text-text-dim mb-1.5">
@@ -102,9 +151,23 @@ export default function HomePage() {
           ) : null}
         </div>
         <p className="mt-4 text-center text-xs text-text-faint">
-          Phase 0 scaffold &middot; tracker grid arrives in Phase 2
+          Magic links expire after ~60 minutes &middot; use the most recent one
         </p>
       </div>
     </main>
   );
+}
+
+function humaniseError(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("otp_expired") || lower.includes("expired")) {
+    return "Your magic link expired. Request a fresh one.";
+  }
+  if (lower.includes("link_missing_code")) {
+    return "The sign-in link wasn't complete — it may have already been used, or expired. Request a fresh one.";
+  }
+  if (lower.includes("access_denied")) {
+    return "Sign-in was denied — the link was invalid, expired, or already used.";
+  }
+  return raw;
 }

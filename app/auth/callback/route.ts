@@ -15,9 +15,26 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") ?? "/tracker";
 
-  if (!code) {
+  // Supabase can hand us an error directly as a query param (PKCE error path)
+  // OR deliver it as a URL fragment (implicit/legacy error path). The fragment
+  // case is handled client-side on the landing page; here we forward any
+  // query-param error verbatim so the landing page shows something useful.
+  const supabaseError = url.searchParams.get("error_description")
+    ?? url.searchParams.get("error")
+    ?? null;
+  if (supabaseError) {
     return NextResponse.redirect(
-      new URL("/?error=missing_code", request.url),
+      new URL(`/?auth_error=${encodeURIComponent(supabaseError)}`, request.url),
+    );
+  }
+
+  if (!code) {
+    // The most common reason we land here with no code AND no query error is
+    // an expired magic link (Supabase redirects with the error in the URL
+    // fragment, which the server can't see). The landing page reads the
+    // fragment client-side; we nudge with a hint anyway.
+    return NextResponse.redirect(
+      new URL("/?auth_error=link_missing_code", request.url),
     );
   }
 
@@ -26,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent(error.message)}`, request.url),
+      new URL(`/?auth_error=${encodeURIComponent(error.message)}`, request.url),
     );
   }
 
