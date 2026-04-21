@@ -38,8 +38,11 @@ export async function fetchContactEvents(
  * a free-text `commentary` line. We derive status_label server-side from
  * the 16-code legend so the two columns never drift.
  *
- * RLS enforces the actor — only the authenticated session's JWT email
- * matching `tristan.fischer@gmail.com` (V1 policy in migration 007).
+ * RLS enforces the actor via migration 011_multi_user_rls.sql —
+ * founders (rows in `platform_founders`) have full access; approvers
+ * have SELECT only on their campaigns. Writes from approvers flow
+ * through the script-based approval parser (service role), so this
+ * action is effectively founder-only when called from the web UI.
  * No service-role bypass here; that's the point of using the ssr
  * server client instead of the admin client.
  */
