@@ -25,27 +25,27 @@
   },
   {
     "campaign_name": "Panatere",
-    "template_name": "Panatere — cold first-contact (TODO)",
+    "template_name": "Panatere — cold first-contact (2026-04)",
     "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
     "credibility_paragraph_short": "Since stepping down at the beginning of this year as CEO of Fischer Farms, one of the largest vertical farming businesses in the world, I have been working with a small number of companies on their fundraising. One of them is Panatere.",
-    "company_paragraph": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. Pull the most recent Panatere first-contact send and transcribe verbatim.",
-    "intelligent_synthesis_template": "TODO: needs capture from Gmail — use the 'My understanding is that {{FIRM_NAME}}...' or 'I am reaching out because {{FIRM_NAME}}'s thesis...' hedge pattern from Rule 1.",
-    "cta_variant": null,
+    "company_paragraph": "One of those is Panatere — a Swiss business led by CEO Andreas Carmichael that uses concentrated solar energy to heat metal crucibles to 2000°C and recycle high-grade alloys (titanium, nickel superalloys, and the full list of 17 EU CRMA strategic metals) with near-zero emissions. The model is effectively a tolling arrangement: they take scrap from Swiss watchmakers, aerospace, defence and medtech customers, melt it down with sunlight, and return certified premium metal to the originator. Customer demand is already running at 30x initial capacity, more than 200 NDAs are signed, EBITDA margins sit above 50%, two patents protect the core crucible and alloy-preserving recycling process, and around CHF 50m of Swiss and EU public support is already in place. They are raising CHF 20–25m for a Series A to build the first industrial solar metallurgy centre in Switzerland.",
+    "intelligent_synthesis_template": "My understanding is that {{FIRM_NAME}} {{FIRM_THESIS}}. If that is right, Panatere — a patent-protected Swiss industrial platform with strong commercial traction and 50%+ EBITDA margins — may fit your thesis. If you are not the right person internally, I would be very grateful for a pointer to the partner who is closest to this space.",
+    "cta_variant": "20min_call",
     "full_template_rendered": null,
-    "source_thread_id": null,
-    "captured_from": "TODO: needs capture from Gmail"
+    "source_thread_id": "19db11b6fdfd57f3",
+    "captured_from": "Gmail — Tristan Fischer → Niall Wass (Atomico), 2026-04-21. Subject: 'Panatere — European industrial deep-tech (Swiss Series A)'."
   },
   {
     "campaign_name": "ForgeOS",
-    "template_name": "ForgeOS — cold first-contact (TODO)",
-    "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
-    "credibility_paragraph_short": "Since stepping down at the beginning of this year as CEO of Fischer Farms, one of the largest vertical farming businesses in the world, I have been working with a small number of companies on their fundraising. Alongside that, I am building ForgeOS.",
-    "company_paragraph": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. ForgeOS is Tristan's own; pull his most recent ForgeOS first-contact send and transcribe verbatim. Tristan flagged in REAL-TEMPLATES-FROM-GMAIL.md that ForgeOS voice is 'shorter, more conversational' than the SkySails/FishFrom cold-send template — do not reuse FishFrom paragraph structure.",
-    "intelligent_synthesis_template": "TODO: needs capture from Gmail — use the 'My understanding is that {{FIRM_NAME}}...' or 'I am reaching out because {{FIRM_NAME}}'s thesis...' hedge pattern from Rule 1.",
-    "cta_variant": null,
+    "template_name": "ForgeOS — cold first-contact, accelerator-partnership (2026-04)",
+    "credibility_paragraph_full": "I have spent twenty-six years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade.",
+    "credibility_paragraph_short": null,
+    "company_paragraph": "Since stepping down as CEO earlier this year, I have launched Fractional Forge — an operating platform for hardware startups. It is, in essence, the wish list of everything I could have had across those twenty-six years. The core problem is simple: a software founder builds one thing; a hardware founder builds two. The company itself, and all the infrastructure around it — manufacturers, engineers, investors, a finance function — all assembled pre-revenue, all without budget.\n\nFractional Forge is my attempt at the AWS equivalent for hardware. The platform connects founders directly to over 13,700 UK and European manufacturers and 7,800 investors with AI matching. Alongside that there are 13 specialist AI agents across strategy, engineering, finance, legal, manufacturing and the rest, and a marketplace of experienced fractional executives who set their own day rates and can be booked directly. Strategy, objectives, tasks and cash burn projections sit in the same place — because hardware teams always end up distributed across designers, fractional engineers, manufacturers in another country, and a finance advisor in a third.",
+    "intelligent_synthesis_template": "Given your role {{ROLE_CONTEXT}}, I would like to offer ventures across {{ORGANISATION}}'s {{PIPELINE_DESCRIPTION}} our Starter tier on us — £49/month retail value per venture, free for member companies. The breadth of the partnership is exactly where this kind of horizontal tooling adds the most value: {{CONCRETE_EXAMPLES}} all benefit from the same specialist agents, manufacturer index and fractional executive marketplace, with no per-site setup needed.",
+    "cta_variant": "presentation_first",
     "full_template_rendered": null,
-    "source_thread_id": null,
-    "captured_from": "TODO: needs capture from Gmail"
+    "source_thread_id": "19d9aa1790b83ed2",
+    "captured_from": "Gmail — Tristan Fischer → Rosie Bennett (SETsquared), 2026-04-17. Subject: 'ForgeOS partnership for SETsquared — from a hardware founder'. Note: ForgeOS synthesis is more customised per recipient than the investor templates — {{ROLE_CONTEXT}}/{{ORGANISATION}}/{{PIPELINE_DESCRIPTION}}/{{CONCRETE_EXAMPLES}} reflect that."
   },
   {
     "campaign_name": "Fischer Farms Customer",

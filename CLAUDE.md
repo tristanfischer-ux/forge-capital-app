@@ -176,6 +176,33 @@ The failure chain, in order:
 Every rule above maps to one of those failures. If you skip a rule,
 you're re-introducing the bug.
 
+## Autonomous work when Tristan is away
+
+If the terminal has been silent for a while and you have remaining tasks
+that don't require Tristan's input, **keep working.** Don't stop because
+the user isn't here. Don't stop because "the current chunk is done". The
+standing instruction is: there is always something you can do on the
+list — a pending task, a known follow-up, a polish item, a test, a doc
+update, an investigation.
+
+**When you hit a genuine blocker** (credential you don't have, subjective
+decision, external login): accumulate it in the handover doc
+(`audit-20260421/V4-PORT-COMPLETE-20260421.md` currently, or a
+`BLOCKERS.md` at repo root if that grows) then pick a different task
+and continue.
+
+**Stop only when:**
+1. The task list is genuinely empty, OR
+2. Every remaining task depends on Tristan's input (you've queued them
+   cleanly with a "blocked on X" note), OR
+3. You'd be doing speculative/destructive work without his sign-off.
+
+**When Tristan returns:** lead with what got done and what's blocked. Never
+hide behind "I wasn't sure what to do next." There was always something.
+
+See global `~/.claude/CLAUDE.md` §"Autonomous work when Tristan is away"
+for the canonical version of this rule.
+
 ## Related docs to read on session start
 
 - `~/Developer/Forge-Capital/audit-20260421/V4-PORT-PLAN.md` — section order + parity gate
