@@ -19,6 +19,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
  */
 
 const GATED_PREFIXES = [
+  "/home",
   "/tracker",
   "/match",
   "/pipeline",

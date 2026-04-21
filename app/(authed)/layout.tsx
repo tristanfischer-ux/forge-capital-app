@@ -67,15 +67,14 @@ export default async function AuthedLayout({
 
 /**
  * Top bar — renders V4's `.topbar` markup verbatim. The 8 pills use
- * `<NavPill>` (client, pathname-aware) for the two built destinations
- * (/match, /tracker) and plain `.pill` anchors for the six whose ports
- * haven't landed — those get `title="Lands in a later section"` for an
- * honest affordance without changing the visual.
+ * `<NavPill>` (client, pathname-aware) — on /home they resolve to plain
+ * `#anchor` scroll links, on any deep-link route they resolve to
+ * `<Link href="/home#anchor">` so clicking the pill brings the user to
+ * the single-page home scrolled to the section.
  *
- * Anchor-scroll targets (`#approval`, `#templates`, etc.) aren't wired
- * yet because V1 doesn't mount the single-page composer. The anchors
- * stay in the DOM so the inline-link targets from WalkTourStrip resolve
- * sensibly once sections land.
+ * See ./NavPill.tsx for the routing logic. Anchor ids match the V4
+ * mockup: #find-a-match, #approval, #automation, #templates, #review,
+ * #verification, #drafts, #tracker, #weekly.
  */
 function TopBar({
   campaigns,
@@ -89,26 +88,54 @@ function TopBar({
   return (
     <header className="topbar">
       {/* Brand mark — V4 line 723 */}
-      <Link href="/tracker" className="brand">
+      <Link href="/home" className="brand">
         <span className="dot" aria-hidden="true" />
         Fractional Forge
         <span className="sub">Outreach</span>
       </Link>
 
-      {/* Nav pills — V4 lines 724-733, full 8-pill set. */}
+      {/* Nav pills — V4 lines 724-733, full 8-pill set. V4 is one
+          scrolling page (`/home`), so each pill is a scroll anchor on
+          /home and a `Link` back to `/home#anchor` on any deep-link
+          route. See ./NavPill.tsx for the routing logic. */}
       <nav className="topnav">
-        <NavPillDisabled label="Find a match" reason="Lands in a later section" />
-        <NavPillDisabled label="Approval" reason="Lands in a later section" />
-        <NavPillDisabled
+        <NavPill
+          anchor="find-a-match"
+          label="Find a match"
+          deepLinkPath="/match"
+        />
+        <NavPill
+          anchor="approval"
+          label="Approval"
+          deepLinkPath="/approval"
+        />
+        <NavPill
+          anchor="automation"
           label="Automation"
-          reason="Lands in a later section"
+          deepLinkPath="/pipeline"
           auto
         />
-        <NavPillDisabled label="Templates" reason="Lands in a later section" />
-        <NavPillDisabled label="Review" reason="Lands in a later section" />
-        <NavPillDisabled label="Drafts" reason="Lands in a later section" />
-        <NavPill href="/tracker" label="Tracker" />
-        <NavPillDisabled label="Weekly" reason="Lands in a later section" />
+        <NavPill
+          anchor="templates"
+          label="Templates"
+          deepLinkPath="/templates"
+        />
+        <NavPill anchor="review" label="Review" deepLinkPath="/review" />
+        <NavPill
+          anchor="drafts"
+          label="Drafts"
+          deepLinkPath="/drafts"
+        />
+        <NavPill
+          anchor="tracker"
+          label="Tracker"
+          deepLinkPath="/tracker"
+        />
+        <NavPill
+          anchor="weekly"
+          label="Weekly"
+          deepLinkPath="/weekly"
+        />
       </nav>
 
       {/* Spacer — V4 line 734 pushes right controls to the edge */}
@@ -151,29 +178,3 @@ function TopBar({
   );
 }
 
-/**
- * Disabled nav pill — rendered as a plain `.pill` anchor for sections
- * whose port hasn't landed. The `title` attribute explains why it's
- * inert; the `cursor: not-allowed` inline style signals the disabled
- * affordance without diverging from V4's default pill style.
- */
-function NavPillDisabled({
-  label,
-  reason,
-  auto,
-}: {
-  label: string;
-  reason: string;
-  auto?: boolean;
-}) {
-  return (
-    <a
-      className={auto ? "pill auto" : "pill"}
-      title={reason}
-      style={{ cursor: "not-allowed", opacity: 0.7 }}
-      aria-disabled="true"
-    >
-      {label}
-    </a>
-  );
-}
