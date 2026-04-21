@@ -162,9 +162,20 @@ function CampaignOption({
   campaign: CampaignSummary;
   active: boolean;
 }) {
+  // Cookie the selection so the authed layout's Sidebar (server component)
+  // can resolve which campaign is active for its health cards without
+  // needing to read search params (layouts don't receive searchParams in
+  // Next 16). The cookie is a 1-year convenience — the URL's `?c=` still
+  // wins for any page-level query.
+  function onClick() {
+    const maxAge = 60 * 60 * 24 * 365;
+    document.cookie = `fc_active_campaign=${campaign.id}; path=/; max-age=${maxAge}; samesite=lax`;
+  }
+
   return (
     <Link
       href={`/tracker?c=${campaign.id}`}
+      onClick={onClick}
       className={`flex cursor-pointer items-center gap-2.5 rounded-[6px] px-2.5 py-2 hover:bg-accent-light ${
         active ? "bg-accent-softer" : ""
       }`}

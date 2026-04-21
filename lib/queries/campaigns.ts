@@ -12,6 +12,8 @@ export interface CampaignSummary {
   status: string;
   /** How many campaign_partners rows belong to this campaign (0 if empty). */
   partner_count: number;
+  /** Timestamp the campaign row was created. Drives "week N of 16" clock. */
+  created_at: string | null;
 }
 
 /**
@@ -30,7 +32,7 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
   const [campaignsResult, partnersResult] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, name, campaign_intent, status")
+      .select("id, name, campaign_intent, status, created_at")
       .neq("status", "archived")
       .order("name", { ascending: true }),
     supabase.from("campaign_partners").select("campaign_id"),
@@ -51,12 +53,21 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
 
-  return (campaignsResult.data ?? []).map((row) => ({
+  interface CampaignJoinRow {
+    id: string;
+    name: string;
+    campaign_intent: string;
+    status: string;
+    created_at: string | null;
+  }
+  const campaignRows = (campaignsResult.data ?? []) as unknown as CampaignJoinRow[];
+  return campaignRows.map((row) => ({
     id: row.id,
     name: row.name,
     campaign_intent: row.campaign_intent as CampaignSummary["campaign_intent"],
     status: row.status,
     partner_count: counts.get(row.id) ?? 0,
+    created_at: row.created_at ?? null,
   }));
 }
 

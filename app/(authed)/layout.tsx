@@ -1,7 +1,13 @@
 import Link from "next/link";
-import { listActiveCampaigns } from "@/lib/queries/campaigns";
+import { cookies } from "next/headers";
+import {
+  listActiveCampaigns,
+  resolveCurrentCampaignId,
+} from "@/lib/queries/campaigns";
 import { CampaignDropdown } from "./CampaignDropdown";
 import { NavPill } from "./NavPill";
+import { Sidebar } from "./Sidebar";
+import { WalkTourStrip } from "./WalkTourStrip";
 
 /**
  * Authed-shell layout. Renders the top bar + campaign dropdown chrome
@@ -36,10 +42,27 @@ export default async function AuthedLayout({
 }) {
   const campaigns = await listActiveCampaigns();
 
+  // Resolve which campaign the sidebar should render for. Layouts don't
+  // receive searchParams in Next 16, so we read an `fc_active_campaign`
+  // cookie written by CampaignDropdown on navigation and fall back to
+  // the first active campaign. Page-level search params (?c=<uuid>) still
+  // win for the main content — this only affects which campaign's health
+  // rail shows on the right rail.
+  const cookieStore = await cookies();
+  const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
+  const sidebarCampaignId = resolveCurrentCampaignId(campaigns, cookieCampaign);
+  const sidebarCampaign = campaigns.find((c) => c.id === sidebarCampaignId) ?? null;
+
   return (
     <div className="min-h-screen bg-bg">
-      <TopBar campaigns={campaigns} />
-      <main className="mx-auto max-w-[1440px] px-7 py-6">{children}</main>
+      <TopBar campaigns={campaigns} activeCampaignId={sidebarCampaignId} />
+      <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-7 py-6 xl:flex-row xl:items-start xl:gap-6">
+        <main className="min-w-0 flex-1">
+          <WalkTourStrip />
+          {children}
+        </main>
+        {sidebarCampaign ? <Sidebar campaign={sidebarCampaign} /> : null}
+      </div>
     </div>
   );
 }
@@ -55,14 +78,11 @@ export default async function AuthedLayout({
  */
 async function TopBar({
   campaigns,
+  activeCampaignId,
 }: {
   campaigns: Awaited<ReturnType<typeof listActiveCampaigns>>;
+  activeCampaignId: string | null;
 }) {
-  // Best-effort active campaign for the dropdown pill — it only matters
-  // for the selected-row highlight inside the dropdown; tracker/match
-  // pages re-resolve from their own search params on every request.
-  const activeCampaignId = campaigns[0]?.id ?? null;
-
   return (
     <header className="sticky top-0 z-50 flex items-center gap-5 border-b border-border bg-surface px-7 py-3.5 shadow-[var(--shadow)]">
       {/* Brand mark — rotated indigo square + wordmark */}
