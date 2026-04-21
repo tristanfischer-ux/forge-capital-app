@@ -18,11 +18,33 @@ import { DEFAULT_HERO_TEXT } from "./match-constants";
  * Port strategy (per `CLAUDE.md §"Use V4's CSS directly — it's already
  * imported"`): the DOM structure and class names are lifted from V4
  * verbatim. V4's CSS (imported via `app/v4-mockup.css`) provides every
- * class used below — `.hero`, `.hero-input`, `.arch-row`, `.arch-card`,
- * `.arch-suggest`, `.substrate-hint`, `.conflict-banner`, `.batch-bar`,
- * `.results-head`, `.results-sort`, `.result-card`, `.scorecard`,
- * `.dim`, `.near-miss`, `.tag-chip`, `.walk-callout`, etc. We do NOT
- * re-derive them with Tailwind.
+ * class used below — `.hero`, `.hero-title`, `.hero-sub`, `.hero-input-wrap`,
+ * `.hero-input`, `.hero-btn`, `.kbd`, `.arch-row`, `.arch-card`,
+ * `.arch-card.active`, `.arch-head`, `.arch-ico`, `.arch-title`,
+ * `.arch-dir`, `.arch-desc`, `.arch-example`, `.arch-suggest`, `.as-ico`,
+ * `.as-link`, `.substrate-hint`, `.conflict-banner`, `.cb-icon`,
+ * `.cb-link`, `.batch-bar`, `.bb-sel`, `.bb-chk`, `.bb-label`,
+ * `.bb-count`, `.bb-spacer`, `.bb-btn`, `.results-head`, `.results-title`,
+ * `.count`, `.section-sub`, `.results-sort`, `.result-card`, `.rc-chk-col`,
+ * `.rc-chk`, `.rc-body`, `.result-top`, `.result-headline`,
+ * `.result-name`, `.firm`, `.result-meta`, `.sep`, `.result-score`,
+ * `.score-pct`, `.score-label`, `.scorecard`, `.dim`, `.d-hi`, `.d-md`,
+ * `.d-lo`, `.dim-lbl`, `.dim-bar`, `.dim-fill`, `.dim-val`, `.near-miss`,
+ * `.result-tags`, `.tag-chip`, `.tag-approved`, `.tag-warn`,
+ * `.tag-blocked`, `.tag-status`, `.dot`, `.walk-callout`, `.wc-num`.
+ * **We do NOT re-derive these with Tailwind.**
+ *
+ * Classes V4 did NOT provide (flagged):
+ *  - Toast / feedback row — V4's mockup has no shortlist-ack affordance.
+ *    Rendered with inline CSS variables so it still matches the token
+ *    palette. No Tailwind used.
+ *  - Empty states — V4 always renders 5 cards, so there's no V4 class
+ *    for "no matches" or "archetype pool not wired yet". Inline styles
+ *    with CSS-variable tokens — no Tailwind.
+ *  - Inline `style` attributes on the two places V4 uses them verbatim:
+ *    the batch-bar separator span (V4 line 980) and the trailing
+ *    "+ 5 more between 67-71%" paragraph (V4 line 1144). Preserved
+ *    1:1 from V4.
  *
  * Data wiring: the initial scored top-10 comes from `getMatchScore` on
  * the server. Client interactions (edit textarea → press Find matches,
@@ -291,19 +313,19 @@ export function FindAMatch({
         </>
       )}
 
-      {/* V4 `.walk-callout` (line 1142) */}
+      {/* V4 `.walk-callout` (line 1142) — V4 markup has the <span.wc-num>
+          and the text as direct children of the div, no wrapping span. */}
       {rows.length > 0 && archetype === "investor" ? (
         <>
           <div className="walk-callout">
             <span className="wc-num">1</span>
-            <span>
-              <b>Batch action: tick the top 5 cards, hit “Shortlist to approval sheet”.</b>{" "}
-              That one click writes a new{" "}
-              <code>260421 Outreach Summary for Stephan TF v12</code>{" "}
-              sheet, updates the tracker to <b>+0 Pending approval</b>, and
-              emails Stephan a preview link. Approvals come back as a reply;
-              the approval section below ingests them. Zero babysitting.
-            </span>
+            <b>Batch action: tick the top 5 cards, hit “Shortlist to approval sheet”.</b>{" "}
+            That one click writes a new{" "}
+            <code>260421 Outreach Summary for Stephan TF v12</code>{" "}
+            sheet, updates the tracker to <b>+0 Pending approval</b>, and emails
+            Stephan a preview link. Approvals come back as a reply; the{" "}
+            <a href="#approval">approval section</a> below ingests them. Zero
+            babysitting.
           </div>
           <p
             style={{
@@ -459,19 +481,13 @@ function AutoSuggestBanner({
 }) {
   const label =
     detected === "investor" ? "Investor" : detected === "customer" ? "Customer" : "Supplier";
+  const signalsText = signals.map((s) => `“${s}”`).join(", ");
   return (
     <div className="arch-suggest">
       <span className="as-ico">✓</span>
       <span>
         Auto-suggested archetype from your text: <b>{label}</b> &middot; signal
-        words detected:{" "}
-        {signals.map((s, i) => (
-          <span key={`${s}-${i}`}>
-            {i > 0 ? ", " : ""}
-            <span>“{s}”</span>
-          </span>
-        ))}
-        .
+        words detected: <span>{signalsText}</span>.
       </span>
       {differs ? (
         <span className="as-link" onClick={onOverride} role="button" tabIndex={0}>
