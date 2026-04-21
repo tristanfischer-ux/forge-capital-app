@@ -112,6 +112,14 @@ export default async function HomePage({
   // the campaign identically. DraftsPage ignores searchParams (it spans
   // every campaign), so we don't pass anything there.
   //
+  // We also pass `initialCampaigns` + `initialCampaignId` so each section
+  // reuses our already-resolved data instead of re-running
+  // `listActiveCampaigns()` + cookies() independently. Before this,
+  // composing /home fired ~7 identical campaign queries + cookie reads
+  // per request. Each section still falls back to its own fetch when
+  // invoked directly (e.g. /tracker, /review), so deep-link URLs work
+  // unchanged.
+  //
   // Every one of these default exports is an async server component and
   // returns `<section id="…" className="section">…</section>` — stacking
   // them produces V4's single-page scroll 1:1.
@@ -126,19 +134,39 @@ export default async function HomePage({
       />
 
       {/* ──────────────── 2. Approval ──────────────── */}
-      <ApprovalPage searchParams={searchParams} />
+      <ApprovalPage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
 
       {/* ──────────────── 3. Automation pipeline ──────────────── */}
-      <PipelinePage searchParams={searchParams} />
+      <PipelinePage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
 
       {/* ──────────────── 4. Templates ──────────────── */}
-      <TemplatesPage searchParams={searchParams} />
+      <TemplatesPage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
 
       {/* ──────────────── 5. Eyeball review ──────────────── */}
-      <ReviewPage searchParams={searchParams} />
+      <ReviewPage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
 
       {/* ──────────────── 6. Email verification gate ──────────────── */}
-      <VerificationPage searchParams={searchParams} />
+      <VerificationPage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
 
       {/* ──────────────── 7. Gmail drafts ──────────────── */}
       {/* DraftsPage default export takes no props — it queries across
@@ -146,10 +174,18 @@ export default async function HomePage({
       <DraftsPage />
 
       {/* ──────────────── 8. Tracker ──────────────── */}
-      <TrackerPage searchParams={searchParams} />
+      <TrackerPage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
 
       {/* ──────────────── 9. Weekly counterpart update ──────────────── */}
-      <WeeklyPage searchParams={searchParams} />
+      <WeeklyPage
+        searchParams={searchParams}
+        initialCampaigns={campaigns}
+        initialCampaignId={campaignId}
+      />
     </>
   );
 }

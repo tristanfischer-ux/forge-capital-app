@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
+  type CampaignSummary,
 } from "@/lib/queries/campaigns";
 import {
   getPipelineLanes,
@@ -30,20 +31,35 @@ type SearchParams = Promise<{ c?: string }>;
 
 export default async function PipelinePage({
   searchParams,
+  initialCampaigns,
+  initialCampaignId,
 }: {
   searchParams: SearchParams;
+  /** Optional pre-fetched campaigns list (passed by /home composer to
+   *  avoid re-running `listActiveCampaigns()` 7× per render). When
+   *  omitted — e.g. direct navigation to /pipeline — we fetch as before. */
+  initialCampaigns?: CampaignSummary[];
+  /** Optional pre-resolved active campaign id (same rationale). */
+  initialCampaignId?: string | null;
 }) {
   const { c } = await searchParams;
 
   // Same campaign-resolution rule the rest of the app uses: ?c=<uuid>
   // wins, then the `fc_active_campaign` cookie, then the first active
   // campaign. The sidebar in the shell follows the cookie fallback
-  // independently — this page controls only its own data.
-  const cookieStore = await cookies();
-  const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
-
-  const campaigns = await listActiveCampaigns();
-  const campaignId = resolveCurrentCampaignId(campaigns, c ?? cookieCampaign);
+  // independently — this page controls only its own data. Skipped when
+  // the composer passes pre-fetched data.
+  let campaigns: CampaignSummary[];
+  let campaignId: string | null;
+  if (initialCampaigns !== undefined) {
+    campaigns = initialCampaigns;
+    campaignId = initialCampaignId ?? null;
+  } else {
+    const cookieStore = await cookies();
+    const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
+    campaigns = await listActiveCampaigns();
+    campaignId = resolveCurrentCampaignId(campaigns, c ?? cookieCampaign);
+  }
 
   if (!campaignId) {
     return (

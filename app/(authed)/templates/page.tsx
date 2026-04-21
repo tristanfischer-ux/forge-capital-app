@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
+  type CampaignSummary,
 } from "@/lib/queries/campaigns";
 import {
   getCampaignTemplates,
@@ -40,13 +41,28 @@ type SearchParams = Promise<{ c?: string }>;
 
 export default async function TemplatesPage({
   searchParams,
+  initialCampaigns,
+  initialCampaignId,
 }: {
   searchParams: SearchParams;
+  /** Optional pre-fetched campaigns list (passed by /home composer to
+   *  avoid re-running `listActiveCampaigns()` 7× per render). When
+   *  omitted — e.g. direct navigation to /templates — we fetch as before. */
+  initialCampaigns?: CampaignSummary[];
+  /** Optional pre-resolved active campaign id (same rationale). */
+  initialCampaignId?: string | null;
 }) {
   const { c } = await searchParams;
 
-  const campaigns = await listActiveCampaigns();
-  const campaignId = resolveCurrentCampaignId(campaigns, c);
+  let campaigns: CampaignSummary[];
+  let campaignId: string | null;
+  if (initialCampaigns !== undefined) {
+    campaigns = initialCampaigns;
+    campaignId = initialCampaignId ?? null;
+  } else {
+    campaigns = await listActiveCampaigns();
+    campaignId = resolveCurrentCampaignId(campaigns, c);
+  }
 
   if (!campaignId) {
     return (

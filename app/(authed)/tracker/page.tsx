@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
+  type CampaignSummary,
 } from "@/lib/queries/campaigns";
 import { getTrackerRows } from "@/lib/queries/tracker";
 import { TrackerTable } from "./TrackerTable";
@@ -31,13 +32,28 @@ type SearchParams = Promise<{ c?: string }>;
 
 export default async function TrackerPage({
   searchParams,
+  initialCampaigns,
+  initialCampaignId,
 }: {
   searchParams: SearchParams;
+  /** Optional pre-fetched campaigns list (passed by /home composer to
+   *  avoid re-running `listActiveCampaigns()` 7× per render). When
+   *  omitted — e.g. direct navigation to /tracker — we fetch as before. */
+  initialCampaigns?: CampaignSummary[];
+  /** Optional pre-resolved active campaign id (same rationale). */
+  initialCampaignId?: string | null;
 }) {
   const { c } = await searchParams;
 
-  const campaigns = await listActiveCampaigns();
-  const campaignId = resolveCurrentCampaignId(campaigns, c);
+  let campaigns: CampaignSummary[];
+  let campaignId: string | null;
+  if (initialCampaigns !== undefined) {
+    campaigns = initialCampaigns;
+    campaignId = initialCampaignId ?? null;
+  } else {
+    campaigns = await listActiveCampaigns();
+    campaignId = resolveCurrentCampaignId(campaigns, c);
+  }
 
   // No campaigns at all — usually means unauthenticated. The layout
   // switcher already surfaces a copy-level explanation; we echo it here.

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
+  type CampaignSummary,
 } from "@/lib/queries/campaigns";
 import { getDraftsReadyForReview } from "@/lib/queries/review";
 import { ReviewStack } from "./ReviewStack";
@@ -30,18 +31,34 @@ type SearchParams = Promise<{ c?: string }>;
 
 export default async function ReviewPage({
   searchParams,
+  initialCampaigns,
+  initialCampaignId,
 }: {
   searchParams: SearchParams;
+  /** Optional pre-fetched campaigns list (passed by /home composer to
+   *  avoid re-running `listActiveCampaigns()` 7× per render). When
+   *  omitted — e.g. direct navigation to /review — we fetch as before. */
+  initialCampaigns?: CampaignSummary[];
+  /** Optional pre-resolved active campaign id (same rationale). */
+  initialCampaignId?: string | null;
 }) {
   const { c } = await searchParams;
 
   // Campaign resolution matches the pattern used by the tracker page:
   // ?c=<uuid> wins, else fall back to the `fc_active_campaign` cookie set
-  // by the top-bar switcher, else the first active campaign.
-  const campaigns = await listActiveCampaigns();
-  const cookieStore = await cookies();
-  const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
-  const campaignId = resolveCurrentCampaignId(campaigns, c ?? cookieCampaign);
+  // by the top-bar switcher, else the first active campaign. Skipped when
+  // the composer passes pre-fetched data.
+  let campaigns: CampaignSummary[];
+  let campaignId: string | null;
+  if (initialCampaigns !== undefined) {
+    campaigns = initialCampaigns;
+    campaignId = initialCampaignId ?? null;
+  } else {
+    campaigns = await listActiveCampaigns();
+    const cookieStore = await cookies();
+    const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
+    campaignId = resolveCurrentCampaignId(campaigns, c ?? cookieCampaign);
+  }
 
   if (!campaignId) {
     return (
