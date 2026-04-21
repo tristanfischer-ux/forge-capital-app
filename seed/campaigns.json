@@ -1,0 +1,42 @@
+[
+  {
+    "name": "SkySails Power",
+    "campaign_intent": "investor",
+    "company_description": "SkySails Power is the world's first commercial airborne wind energy company. Their system uses autonomous kite-like wings tethered to a ground station, flying figure-eight patterns at 200–400m altitude where wind speeds are significantly stronger and more consistent than at conventional turbine height. The result is a mobile, containerised power system that can operate in locations where traditional wind turbines cannot — islands, off-grid mines, disaster relief, and remote industrial sites.",
+    "raise_size": "€5M Series A bridge",
+    "company_website": "https://skysails-power.com",
+    "status": "active"
+  },
+  {
+    "name": "FishFrom Technologies",
+    "campaign_intent": "investor",
+    "company_description": "FishFrom Technologies has developed a photocatalytic ozonation platform — a proprietary advanced oxidation system that eliminates micropollutants and pathogens in recirculating water systems. The immediate application is aquaculture, where every land-based salmon farm loses up to £1.25M per year to depuration (starving fish for 10–15 days to clear off-flavour compounds). FishFrom's compact unit replaces that entirely, in-line, with no fish handling. Beyond aquaculture, the same platform addresses municipal drinking water, EU wastewater treatment, cooling tower Legionella control, and food and beverage processing.",
+    "raise_size": "£500K EIS seed (matched by ~£473K Scottish Enterprise grant)",
+    "company_website": "https://fishfrom.com",
+    "status": "active"
+  },
+  {
+    "name": "Panatere",
+    "campaign_intent": "investor",
+    "company_description": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. Pull the most recent Panatere first-contact send before Phase 2.",
+    "raise_size": "TODO: needs capture from Gmail",
+    "company_website": "https://panatere.com",
+    "status": "active"
+  },
+  {
+    "name": "ForgeOS",
+    "campaign_intent": "investor",
+    "company_description": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. Pull Tristan's most recent ForgeOS first-contact send before Phase 2. ForgeOS is Tristan's own company (Fractional Forge's product).",
+    "raise_size": "TODO: needs capture from Gmail",
+    "company_website": "https://fractionalforge.app",
+    "status": "active"
+  },
+  {
+    "name": "Fischer Farms Customer",
+    "campaign_intent": "customer",
+    "company_description": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. Customer-side outreach for Fischer Farms vertical farm produce begins July 2026; no real first-contact template captured yet.",
+    "raise_size": null,
+    "company_website": "https://fischerfarms.co.uk",
+    "status": "planned"
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "campaign_name": "SkySails Power",
+    "template_name": "SkySails Power — cold first-contact (2026-04)",
+    "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
+    "credibility_paragraph_short": "Since stepping down at the beginning of this year as CEO of Fischer Farms, one of the largest vertical farming businesses in the world, I have been working with a small number of companies on their fundraising. One of them is SkySails Power.",
+    "company_paragraph": "SkySails Power is the world's first commercial airborne wind energy company. Their system uses autonomous kite-like wings tethered to a ground station, flying figure-eight patterns at 200–400m altitude where wind speeds are significantly stronger and more consistent than at conventional turbine height. The result is a mobile, containerised power system that can operate in locations where traditional wind turbines cannot — islands, off-grid mines, disaster relief, and remote industrial sites.\n\nThe company has operational units deployed with paying customers, validated energy yields, and a clear commercial pipeline. They are raising €5M as a Series A bridge to scale production and fulfil existing customer commitments.",
+    "intelligent_synthesis_template": "My understanding is that {{FIRM_NAME}} {{FIRM_THESIS}}. SkySails has a first-mover advantage in commercial airborne wind and a growing pipeline of deployment contracts.",
+    "cta_variant": "presentation_first",
+    "full_template_rendered": null,
+    "source_thread_id": "19d9a5da5fd04397",
+    "captured_from": "Gmail — Tristan Fischer → Cecilie Melbye (Smedvig), 2026-04-17. Subject: 'SkySails Power — airborne wind energy, €5M Series A bridge'. See REAL-TEMPLATES-FROM-GMAIL.md Sample 1."
+  },
+  {
+    "campaign_name": "FishFrom Technologies",
+    "template_name": "FishFrom Technologies — cold first-contact (2026-04)",
+    "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
+    "credibility_paragraph_short": "Since stepping down at the beginning of this year as CEO of Fischer Farms, one of the largest vertical farming businesses in the world, I have been working with a small number of companies on their fundraising. One of them is FishFrom Technologies.",
+    "company_paragraph": "One of the companies I am working with is FishFrom Technologies, which has developed a photocatalytic ozonation platform — a proprietary advanced oxidation system that eliminates micropollutants and pathogens in recirculating water systems. The immediate application is aquaculture, where every land-based salmon farm loses up to £1.25M per year to depuration (starving fish for 10–15 days to clear off-flavour compounds). FishFrom's compact unit replaces that entirely, in-line, with no fish handling. Beyond aquaculture, the same platform addresses municipal drinking water, EU wastewater treatment (where advanced oxidation is now mandated), cooling tower Legionella control, and food and beverage processing — a combined addressable market in the tens of billions. The business model is rental — £35K per month per unit, hardware payback in six months, 75% gross margin. Swansea University trials complete Q4 2026, with a Mitsubishi-backed beta deployment in Finland following in Q1 2027. They are raising £500K seed (EIS-qualifying), matched by ~£473K in Scottish Enterprise grant funding.\n\nAndrew Robertson (co-founder, FishFrom) has also recorded a short video introduction that explains the technology and the commercial case: https://drive.google.com/file/d/1NaBR14yfBOzrS9GiauCRYDEYs6JpBh7O/view",
+    "intelligent_synthesis_template": "I am reaching out because my understanding is that {{FIRM_NAME}}'s thesis {{FIRM_THESIS}} — which is exactly where FishFrom lives. The photocatalytic ozonation platform is materials-science-led (advanced oxidation chemistry), IP-protected, and it scales from an acute food-systems problem (aquaculture depuration) into multi-billion-pound adjacent markets.",
+    "cta_variant": "20min_call",
+    "full_template_rendered": null,
+    "source_thread_id": "19dab4a448a950d9",
+    "captured_from": "Gmail — Tristan Fischer → Christy (Alabaster), 2026-04-20. Subject: 'FishFrom — materials-science water treatment for aquaculture & beyond (£500K EIS seed)'. See REAL-TEMPLATES-FROM-GMAIL.md Sample 2."
+  },
+  {
+    "campaign_name": "Panatere",
+    "template_name": "Panatere — cold first-contact (TODO)",
+    "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
+    "credibility_paragraph_short": "Since stepping down at the beginning of this year as CEO of Fischer Farms, one of the largest vertical farming businesses in the world, I have been working with a small number of companies on their fundraising. One of them is Panatere.",
+    "company_paragraph": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. Pull the most recent Panatere first-contact send and transcribe verbatim.",
+    "intelligent_synthesis_template": "TODO: needs capture from Gmail — use the 'My understanding is that {{FIRM_NAME}}...' or 'I am reaching out because {{FIRM_NAME}}'s thesis...' hedge pattern from Rule 1.",
+    "cta_variant": null,
+    "full_template_rendered": null,
+    "source_thread_id": null,
+    "captured_from": "TODO: needs capture from Gmail"
+  },
+  {
+    "campaign_name": "ForgeOS",
+    "template_name": "ForgeOS — cold first-contact (TODO)",
+    "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
+    "credibility_paragraph_short": "Since stepping down at the beginning of this year as CEO of Fischer Farms, one of the largest vertical farming businesses in the world, I have been working with a small number of companies on their fundraising. Alongside that, I am building ForgeOS.",
+    "company_paragraph": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. ForgeOS is Tristan's own; pull his most recent ForgeOS first-contact send and transcribe verbatim. Tristan flagged in REAL-TEMPLATES-FROM-GMAIL.md that ForgeOS voice is 'shorter, more conversational' than the SkySails/FishFrom cold-send template — do not reuse FishFrom paragraph structure.",
+    "intelligent_synthesis_template": "TODO: needs capture from Gmail — use the 'My understanding is that {{FIRM_NAME}}...' or 'I am reaching out because {{FIRM_NAME}}'s thesis...' hedge pattern from Rule 1.",
+    "cta_variant": null,
+    "full_template_rendered": null,
+    "source_thread_id": null,
+    "captured_from": "TODO: needs capture from Gmail"
+  },
+  {
+    "campaign_name": "Fischer Farms Customer",
+    "template_name": "Fischer Farms Customer — cold first-contact (TODO, July 2026)",
+    "credibility_paragraph_full": "I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.",
+    "credibility_paragraph_short": null,
+    "company_paragraph": "TODO: needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5. Customer-side outreach for Fischer Farms produce starts July 2026; no real first-contact template exists yet. The voice is customer (wholesale buyer, retailer, foodservice operator), not investor — the credibility paragraph and hedge structure will need reworking, not copy-pasting from the investor templates.",
+    "intelligent_synthesis_template": "TODO: needs capture from Gmail. Note: customer outreach is not investor outreach — the 'thesis' hedge doesn't apply. Replace with a buyer-specific hedge once real sends exist.",
+    "cta_variant": null,
+    "full_template_rendered": null,
+    "source_thread_id": null,
+    "captured_from": "TODO: needs capture from Gmail (campaign starts July 2026)"
+  }
+]
