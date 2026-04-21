@@ -62,8 +62,12 @@ interface TrackerJoinRow {
  * investor's thesis_summary. Returns null if the source is empty. We
  * deliberately do not fabricate — if the mirror row has no summary,
  * the grid shows an em-dash.
+ *
+ * Exported so the match-list surface can derive the same two-sentence
+ * blurb without duplicating the logic. Single source of truth for the
+ * "company + investor context" microcopy.
  */
-function deriveCompanySummary(thesisSummary: string | null): string | null {
+export function deriveCompanySummary(thesisSummary: string | null): string | null {
   if (!thesisSummary) return null;
   const trimmed = thesisSummary.trim();
   if (trimmed.length === 0) return null;
@@ -84,8 +88,12 @@ function deriveCompanySummary(thesisSummary: string | null): string | null {
  * relevant field names we know about are `why_them`, `connection`, and
  * `intelligent_synthesis`. Probe each in turn; if none match or the
  * jsonb is not an object, return null rather than inventing copy.
+ *
+ * Exported so the match-list surface can render the same paragraph that
+ * the tracker row drawer renders (V4-FEEDBACK-ROUND-2.md: "one source
+ * of truth, two places it renders").
  */
-function deriveWhyThem(synthesisData: unknown): string | null {
+export function deriveWhyThem(synthesisData: unknown): string | null {
   if (!synthesisData || typeof synthesisData !== "object") return null;
   const rec = synthesisData as Record<string, unknown>;
   const candidateKeys = ["why_them", "connection", "intelligent_synthesis"];

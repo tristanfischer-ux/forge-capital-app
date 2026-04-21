@@ -40,9 +40,15 @@ export default async function AuthedLayout({
         <nav className="ml-2.5 flex gap-0.5">
           <Link
             href="/tracker"
-            className="inline-flex items-center rounded-[8px] bg-accent px-3.5 py-1.5 text-[13px] font-medium text-white"
+            className="inline-flex items-center rounded-[8px] px-3.5 py-1.5 text-[13px] font-medium text-text hover:bg-accent-softer hover:text-accent"
           >
             Tracker
+          </Link>
+          <Link
+            href="/match"
+            className="inline-flex items-center rounded-[8px] px-3.5 py-1.5 text-[13px] font-medium text-text hover:bg-accent-softer hover:text-accent"
+          >
+            Shortlist
           </Link>
         </nav>
 
