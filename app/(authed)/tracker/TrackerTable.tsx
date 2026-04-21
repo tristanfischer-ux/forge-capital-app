@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { TrackerRow } from "@/lib/queries/tracker";
 import { StatusBadge } from "./StatusBadge";
 import { TierBadge } from "./TierBadge";
+import { TrackerRowDrawer } from "./TrackerRowDrawer";
 
 /**
  * Tracker grid — mockup-faithful port of Phase2-Mockup-V4 §"Tracker —
@@ -173,8 +174,8 @@ export function TrackerTable({ rows }: { rows: TrackerRow[] }) {
           {sorted.map((row) => {
             const expanded = expandedId === row.id;
             return (
+              <Fragment key={row.id}>
               <tr
-                key={row.id}
                 className="cursor-pointer border-b border-border-soft align-top last:border-b-0 hover:bg-surface-alt"
                 onClick={() =>
                   setExpandedId((current) => (current === row.id ? null : row.id))
@@ -232,6 +233,21 @@ export function TrackerTable({ rows }: { rows: TrackerRow[] }) {
                   ) : null}
                 </td>
               </tr>
+              {expanded ? (
+                <tr
+                  className="border-b border-border-soft last:border-b-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <td colSpan={5} className="p-0">
+                    <TrackerRowDrawer
+                      campaignPartnerId={row.id}
+                      currentStatusCode={row.status_code}
+                      firmName={row.firm_name}
+                    />
+                  </td>
+                </tr>
+              ) : null}
+              </Fragment>
             );
           })}
         </tbody>
