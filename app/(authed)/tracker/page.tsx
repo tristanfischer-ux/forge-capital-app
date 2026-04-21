@@ -5,6 +5,7 @@ import {
 } from "@/lib/queries/campaigns";
 import { getTrackerRows } from "@/lib/queries/tracker";
 import { TrackerTable } from "./TrackerTable";
+import { StatusSummary } from "./StatusSummary";
 
 /**
  * Tracker page — V1 read-only grid over `campaign_partners` joined with
@@ -90,7 +91,10 @@ export default async function TrackerPage({
       {rows.length === 0 ? (
         <EmptyState campaignName={activeCampaign?.name ?? ""} />
       ) : (
-        <TrackerTable rows={rows} />
+        <>
+          <StatusSummary rows={rows} />
+          <TrackerTable rows={rows} />
+        </>
       )}
     </div>
   );
