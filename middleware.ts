@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { getDevSession, isDevAuthBypassEnabled } from "@/lib/dev-auth";
 
 /**
  * Session-aware middleware. Two jobs:
@@ -16,6 +17,15 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
  *     magic-link callback can return them to where they were headed.
  *
  *  The / landing page + /auth/callback route stay public so sign-in works.
+ *
+ *  ─── Dev-only auth bypass ────────────────────────────────────────────
+ *  When BOTH `NODE_ENV !== "production"` AND `DEV_SKIP_AUTH === "1"` are
+ *  set, the middleware mints a real Supabase session for the dev test
+ *  user and writes the session cookies on the response. Sub-agents doing
+ *  parity screenshots can then hit authed surfaces without going through
+ *  magic-link email. See `lib/dev-auth.ts` for the mechanism. The two
+ *  env-var check is belt-and-braces — production accidentally setting
+ *  DEV_SKIP_AUTH=1 is still inert because NODE_ENV === "production".
  */
 
 const GATED_PREFIXES = [
@@ -54,9 +64,39 @@ export async function middleware(request: NextRequest) {
   );
 
   // IMPORTANT: getUser() must be called to refresh the token.
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Dev bypass: if the flag is on AND we don't have a session yet, mint
+  // one and push it into the current request's supabase client. setSession
+  // fires SIGNED_IN → @supabase/ssr's storage adapter writes the session
+  // cookies via our setAll callback above, so downstream server components
+  // see the same user as if they'd magic-linked in.
+  //
+  // Guarded by `isDevAuthBypassEnabled()` which checks BOTH env vars.
+  // Production is safe: NODE_ENV === "production" short-circuits.
+  if (!user && isDevAuthBypassEnabled()) {
+    try {
+      const devSession = await getDevSession();
+      const { data: setData, error: setError } = await supabase.auth.setSession({
+        access_token: devSession.access_token,
+        refresh_token: devSession.refresh_token,
+      });
+      if (setError) {
+        // Surface loudly in dev logs — silent failure would mean pages
+        // still redirect and we'd debug for 20 minutes.
+        console.warn("[dev-auth] setSession failed:", setError.message);
+      } else {
+        user = setData.user;
+      }
+    } catch (err) {
+      console.warn(
+        "[dev-auth] bypass failed, falling through to normal gate:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   const pathname = request.nextUrl.pathname;
   const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

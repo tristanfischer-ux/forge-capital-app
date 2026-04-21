@@ -89,6 +89,39 @@ No commit message without a parity summary. No push until the diff is ✓.
 If agent-browser can't screenshot (auth, infra), say so in the report.
 Don't silently commit claiming parity.
 
+### Dev-only auth bypass for screenshot sub-agents
+
+Every authed route in this app lives behind middleware that redirects
+unauthed traffic to `/?next=<path>`. For sub-agents taking parity
+screenshots, magic-link email is not an option.
+
+Mechanism: set `DEV_SKIP_AUTH=1` in `.env.local` (it's already
+documented, commented-out, in `.env.local.example`). When active, the
+middleware mints a real Supabase session for `tristan.fischer@gmail.com`
+via admin-generate-link → verifyOtp, writes the `sb-<ref>-auth-token`
+cookie on the response, and lets the request through as if the user
+signed in. Implementation in `lib/dev-auth.ts`, wired at the top of
+`middleware.ts`.
+
+How to use it for a parity screenshot run:
+```
+echo "DEV_SKIP_AUTH=1" >> .env.local   # once; or uncomment the example line
+npm run dev
+agent-browser open http://localhost:3000/home --headless
+agent-browser screenshot -c
+```
+The `/home` request will transparently authenticate the test user and
+render as if Tristan signed in.
+
+Belt-and-braces guarantee: the flag is inert in production. The check is
+`NODE_ENV !== "production" && DEV_SKIP_AUTH === "1"` — both conditions
+must be true. A production env variable leak alone cannot activate it.
+The `lib/dev-auth.ts` module short-circuits at its exported guard; the
+middleware short-circuits at the same guard. Never remove either check.
+
+Never commit `.env.local`. Never export `DEV_SKIP_AUTH` in Vercel env
+config.
+
 ## Architecture — locked
 
 - **V4 is one scrolling page.** Not multi-route. The 8 topbar pills are
