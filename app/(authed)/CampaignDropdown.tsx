@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
 
@@ -184,21 +185,39 @@ function CampaignOption({
   campaign: CampaignSummary;
   active: boolean;
 }) {
-  // Cookie the selection so the authed layout's Sidebar (server
-  // component) can resolve which campaign is active without reading
-  // search params (layouts don't receive searchParams in Next 16). The
-  // URL's `?c=` still wins for any page-level query.
-  function onClick() {
+  const router = useRouter();
+  const pathname = usePathname() ?? "/home";
+
+  // Stay on the user's current page when switching campaigns. Clicking
+  // a campaign used to force-navigate to /tracker — jarring when the
+  // user was on /home or any other section. Now we:
+  //   1. Write the `fc_active_campaign` cookie client-side so next
+  //      SSR read picks it up.
+  //   2. Push the current pathname with `?c=<uuid>` so page-level
+  //      reads that honour the query param refresh immediately.
+  //   3. router.refresh() to invalidate the cached RSC tree so the
+  //      top-bar campaign label and sidebar re-render with the new
+  //      cookie value (without this, the label stays stale until the
+  //      next full navigation).
+  function onClick(e: React.MouseEvent) {
+    e.preventDefault();
     const maxAge = 60 * 60 * 24 * 365;
     document.cookie = `fc_active_campaign=${campaign.id}; path=/; max-age=${maxAge}; samesite=lax`;
+    const target = `${pathname}?c=${campaign.id}`;
+    router.push(target);
+    router.refresh();
   }
 
   const dotClass = pickDotClass(campaign.id);
   const miniType = intentBadgeClass(campaign.campaign_intent);
 
+  // Fallback href for the no-JavaScript case — matches the onClick
+  // destination so a direct click without JS still lands correctly.
+  const fallbackHref = `${pathname}?c=${campaign.id}`;
+
   return (
     <Link
-      href={`/tracker?c=${campaign.id}`}
+      href={fallbackHref}
       onClick={onClick}
       className={active ? "camp-opt active" : "camp-opt"}
       role="option"
