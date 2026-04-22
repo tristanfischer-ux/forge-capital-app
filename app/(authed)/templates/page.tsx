@@ -8,6 +8,8 @@ import {
   getCampaignTemplates,
   type CampaignTemplate,
 } from "@/lib/queries/templates";
+import { AiSectionDrafter } from "./AiSectionDrafter";
+import type { SectionKind } from "./types";
 
 /**
  * Templates page — V4 §6 "Email draft writer — two shapes, one archetype picks"
@@ -88,14 +90,31 @@ export default async function TemplatesPage({
   const { askingForMoney, offeringMoney } = await getCampaignTemplates(campaignId);
 
   // The archetype of the active campaign determines which column is
-  // populated and which shows the greyed placeholder. Tristan's
-  // campaign_intent: investor/customer → asking; supplier → offering.
+  // rendered. Tristan's campaign_intent:
+  //   investor | customer → asking-for-money
+  //   supplier            → offering-money
+  //
+  // Enhancement 2026-04-22 (UI-B): the OPPOSING archetype column used to
+  // render as a greyed placeholder. We now skip it entirely — founders
+  // only ever work in one archetype per campaign, and rendering both
+  // sides added visual noise plus an always-stale placeholder that
+  // suggested work that wasn't needed.
   const activeArchetype: "asking-for-money" | "offering-money" | null =
     activeCampaign
       ? activeCampaign.campaign_intent === "supplier"
         ? "offering-money"
         : "asking-for-money"
       : null;
+
+  const activeSide: "asking" | "offering" | null =
+    activeArchetype === "offering-money" ? "offering" : activeArchetype ? "asking" : null;
+  const activeTemplate: CampaignTemplate | null =
+    activeSide === "offering" ? offeringMoney : activeSide === "asking" ? askingForMoney : null;
+
+  // The drafter falls back to an honest error in the UI when the key is
+  // absent (per the action contract) — this flag just lets us hide the
+  // button entirely when we already know it won't work.
+  const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
 
   return (
     <section id="templates" className="section" style={{ marginTop: 0 }}>
@@ -121,21 +140,29 @@ export default async function TemplatesPage({
         <span className="section-link">See all 6 template slots &rarr;</span>
       </div>
 
-      {/* V4 line 1457 — two-column grid, collapses to one at ≤1100px via
-          v4-mockup.css line 666. */}
-      <div className="templates-grid">
-        <TemplateColumn
-          side="asking"
-          template={askingForMoney}
-          isActiveArchetype={activeArchetype === "asking-for-money"}
-          activeCampaignName={activeCampaign?.name ?? null}
-        />
-        <TemplateColumn
-          side="offering"
-          template={offeringMoney}
-          isActiveArchetype={activeArchetype === "offering-money"}
-          activeCampaignName={activeCampaign?.name ?? null}
-        />
+      {/* Enhancement 2026-04-22 (UI-B): single-column grid — only the active
+          archetype is rendered. The opposite archetype is hidden entirely
+          (not greyed) because founders only ever work in one archetype per
+          campaign. Grid wrapper retained for V4 class parity + future
+          hybrid-campaign support. */}
+      <div className="templates-grid" style={{ gridTemplateColumns: "1fr" }}>
+        {activeSide ? (
+          <TemplateColumn
+            side={activeSide}
+            template={activeTemplate}
+            activeCampaignName={activeCampaign?.name ?? null}
+            activeCampaignId={activeCampaign?.id ?? null}
+            hasAnthropicKey={hasAnthropicKey}
+          />
+        ) : (
+          <div
+            className="template-card"
+            style={{ padding: 16, color: "var(--text-dim)", fontSize: 12 }}
+          >
+            No active campaign selected — pick one from the campaign switcher
+            to see its template.
+          </div>
+        )}
       </div>
 
       {/* V4 lines 1517–1522 — batch-drafted-strip footer. V1 keeps it as
@@ -178,13 +205,15 @@ export default async function TemplatesPage({
 function TemplateColumn({
   side,
   template,
-  isActiveArchetype,
   activeCampaignName,
+  activeCampaignId,
+  hasAnthropicKey,
 }: {
   side: "asking" | "offering";
   template: CampaignTemplate | null;
-  isActiveArchetype: boolean;
   activeCampaignName: string | null;
+  activeCampaignId: string | null;
+  hasAnthropicKey: boolean;
 }) {
   const isAsking = side === "asking";
   const headClass = isAsking ? "template-head inv" : "template-head sup";
@@ -205,12 +234,18 @@ function TemplateColumn({
       </div>
 
       {template ? (
-        <PopulatedBody template={template} side={side} />
-      ) : (
-        <GreyedPlaceholderBody
+        <PopulatedBody
+          template={template}
           side={side}
-          isActiveArchetype={isActiveArchetype}
+          activeCampaignId={activeCampaignId}
+          hasAnthropicKey={hasAnthropicKey}
+        />
+      ) : (
+        <MissingTemplateBody
+          side={side}
           activeCampaignName={activeCampaignName}
+          activeCampaignId={activeCampaignId}
+          hasAnthropicKey={hasAnthropicKey}
         />
       )}
 
@@ -223,9 +258,13 @@ function TemplateColumn({
 function PopulatedBody({
   template,
   side,
+  activeCampaignId,
+  hasAnthropicKey,
 }: {
   template: CampaignTemplate;
   side: "asking" | "offering";
+  activeCampaignId: string | null;
+  hasAnthropicKey: boolean;
 }) {
   const varClass = side === "asking" ? "tb-var" : "tb-var amber";
 
@@ -255,19 +294,44 @@ function PopulatedBody({
         ) : null}
       </div>
 
-      <Part label="1. Credibility paragraph" body={credibility} kind="prose" />
+      <Part
+        label="1. Credibility paragraph"
+        body={credibility}
+        kind="prose"
+        sectionKind="credibility_paragraph"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
+      />
       <Part
         label="2. Company paragraph"
         body={template.company_paragraph}
         kind="prose"
+        sectionKind="company_paragraph"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
       />
       <Part
         label="3. Per-investor synthesis"
         body={template.intelligent_synthesis_template}
         kind="synthesis"
         varClass={varClass}
+        sectionKind="intelligent_synthesis_template"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
       />
-      <Part label="4. Call to action" body={cta.body} kind="cta" ctaMeta={cta.meta} />
+      <Part
+        label="4. Call to action"
+        body={cta.body}
+        kind="cta"
+        ctaMeta={cta.meta}
+        sectionKind="cta"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
+      />
     </div>
   );
 }
@@ -279,12 +343,20 @@ function Part({
   kind,
   varClass,
   ctaMeta,
+  sectionKind,
+  campaignId,
+  hasAnthropicKey,
+  side,
 }: {
   label: string;
   body: string | null;
   kind: "prose" | "synthesis" | "cta";
   varClass?: string;
   ctaMeta?: string;
+  sectionKind: SectionKind;
+  campaignId: string | null;
+  hasAnthropicKey: boolean;
+  side: "asking" | "offering";
 }) {
   const isTodo =
     typeof body === "string" && body.trim().toLowerCase().startsWith("todo");
@@ -296,6 +368,7 @@ function Part({
         borderLeft: "2px solid var(--border-soft)",
         paddingLeft: 10,
         marginBottom: 12,
+        position: "relative",
       }}
     >
       <div
@@ -306,9 +379,21 @@ function Part({
           textTransform: "uppercase",
           color: "var(--text-dim)",
           marginBottom: 4,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        {label}
+        <span>{label}</span>
+        {campaignId ? (
+          <AiSectionDrafter
+            sectionKind={sectionKind}
+            campaignId={campaignId}
+            existingBody={body}
+            hasAnthropicKey={hasAnthropicKey}
+            side={side}
+          />
+        ) : null}
       </div>
       {body === null || body.trim() === "" ? (
         <EmptyPart
@@ -333,6 +418,7 @@ function Part({
     </div>
   );
 }
+
 
 /**
  * Render a prose paragraph with hard newlines preserved. DB paragraphs
@@ -419,123 +505,84 @@ function EmptyPart({ note }: { note: string }) {
 }
 
 /**
- * Greyed placeholder shown for the opposing archetype column. We never
- * invent copy for a column that has no captured template — we explain
- * which archetype lives there and why this column is empty.
+ * Body shown when the active archetype has no captured template yet.
+ * Every section ships with a "Draft with Haiku →" button so Tristan can
+ * seed the template from the page — no need to hand-edit Supabase.
  */
-function GreyedPlaceholderBody({
+function MissingTemplateBody({
   side,
-  isActiveArchetype,
   activeCampaignName,
+  activeCampaignId,
+  hasAnthropicKey,
 }: {
   side: "asking" | "offering";
-  isActiveArchetype: boolean;
   activeCampaignName: string | null;
+  activeCampaignId: string | null;
+  hasAnthropicKey: boolean;
 }) {
   const sideLabel =
     side === "asking"
       ? "asking-for-money (investor or customer)"
       : "offering-money (supplier)";
 
-  const reason = isActiveArchetype
-    ? activeCampaignName
-      ? `No template captured yet for ${activeCampaignName}. Needs capture from Gmail — see Outreach-Writing-Rules-TF.md Rule 5.`
-      : `No ${sideLabel} template captured yet.`
-    : activeCampaignName
-      ? `The active campaign (${activeCampaignName}) is a ${
-          side === "asking" ? "supplier" : "investor / customer"
-        } campaign, so this ${sideLabel} column is inactive. Switch the campaign switcher to a ${
-          side === "asking" ? "fundraising" : "supplier"
-        } campaign to populate this side.`
-      : `Inactive for this campaign.`;
+  const reason = activeCampaignName
+    ? `No template captured yet for ${activeCampaignName}. Draft a first pass below, or capture from a real send thread (Outreach-Writing-Rules-TF.md Rule 5).`
+    : `No ${sideLabel} template captured yet.`;
 
   return (
-    <div
-      className="template-body"
-      style={{
-        background: "var(--surface-alt)",
-        color: "var(--text-dim)",
-        opacity: 0.9,
-      }}
-    >
-      <div className="tb-from" style={{ borderBottom: "none", marginBottom: 8 }}>
+    <div className="template-body">
+      <div className="tb-from">
         <b>Archetype</b> {sideLabel}
       </div>
-      <EmptyPart4
-        label="1. Credibility paragraph"
-        hint="Standard Tristan bio — captured per-campaign."
-      />
-      <EmptyPart4
-        label="2. Company paragraph"
-        hint={
-          side === "asking"
-            ? "Company + raise (investor/customer)."
-            : "Requirement up front — spec, volume, timing."
-        }
-      />
-      <EmptyPart4
-        label="3. Per-investor synthesis"
-        hint={
-          side === "asking"
-            ? "Hedged thesis match (Rule 1: “My understanding is that…”)."
-            : "Capability check against supplier’s known portfolio."
-        }
-      />
-      <EmptyPart4
-        label="4. Call to action"
-        hint={
-          side === "asking"
-            ? "20‑min call or presentation-first."
-            : "Two binary qualifying questions."
-        }
-      />
       <div
         style={{
-          marginTop: 10,
+          marginBottom: 12,
           padding: "8px 10px",
           borderRadius: 6,
           border: "1px dashed var(--border)",
           fontSize: 11,
           lineHeight: 1.5,
+          color: "var(--text-dim)",
         }}
       >
         {reason}
       </div>
-    </div>
-  );
-}
-
-function EmptyPart4({ label, hint }: { label: string; hint: string }) {
-  return (
-    <div
-      className="tb-para"
-      style={{
-        borderLeft: "2px solid var(--border-soft)",
-        paddingLeft: 10,
-        marginBottom: 10,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: 0.5,
-          textTransform: "uppercase",
-          color: "var(--text-faint)",
-          marginBottom: 2,
-        }}
-      >
-        {label}
-      </div>
-      <span
-        style={{
-          color: "var(--text-faint)",
-          fontStyle: "italic",
-          fontSize: 12,
-        }}
-      >
-        {hint}
-      </span>
+      <Part
+        label="1. Credibility paragraph"
+        body={null}
+        kind="prose"
+        sectionKind="credibility_paragraph"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
+      />
+      <Part
+        label="2. Company paragraph"
+        body={null}
+        kind="prose"
+        sectionKind="company_paragraph"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
+      />
+      <Part
+        label="3. Per-investor synthesis"
+        body={null}
+        kind="synthesis"
+        sectionKind="intelligent_synthesis_template"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
+      />
+      <Part
+        label="4. Call to action"
+        body={null}
+        kind="cta"
+        sectionKind="cta"
+        campaignId={activeCampaignId}
+        hasAnthropicKey={hasAnthropicKey}
+        side={side}
+      />
     </div>
   );
 }

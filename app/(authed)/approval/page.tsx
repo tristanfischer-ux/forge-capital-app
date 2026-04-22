@@ -14,6 +14,7 @@ import {
   type IncomingApprovalRow,
   type IncomingApprovalStats,
 } from "@/lib/queries/approval";
+import ApprovalReturnDropZone from "./ApprovalReturnDropZone";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -120,6 +121,14 @@ export default async function ApprovalPage({
           </div>
         </div>
       </div>
+
+      {/* Approval-return drop-zone — surfaces research/16-parse-approval-replies.py
+          as a paste/drag surface at the top of the page. Tristan dumps
+          reply text, Haiku extracts verdicts, he confirms, we write. */}
+      <ApprovalReturnDropZone
+        campaignId={campaignId}
+        counterpartName={counterpartName}
+      />
 
       {/* Walk-callout moved to the TOP so instructions come before the
           artefact, not after. */}
