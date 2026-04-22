@@ -75,6 +75,20 @@ export const DYNAMIC_TRAILS: DynamicTrailMatcher[] = [
     ],
   },
   {
+    // /portfolio/[slug] → Home · Find a Match · <company name>
+    // Reached by clicking a portfolio chip on an investor profile. The
+    // slug is not human-friendly ("ginkgo-bioworks", "h2-green-steel"),
+    // so the page always sets an override via <BreadcrumbsOverride>
+    // with `company.name` — the default "Company" shown here is just
+    // the fallback while the page loads or if the override mounts late.
+    match: /^\/portfolio\/(?<slug>[^/]+)$/,
+    build: () => [
+      { label: "Home", href: "/home" },
+      { label: "Find a Match", href: "/match" },
+      { label: "Company" },
+    ],
+  },
+  {
     // /tracker/[campaignPartnerId]/draft → Home · Tracker · Draft email
     match: /^\/tracker\/(?<cpid>[^/]+)\/draft$/,
     build: () => [

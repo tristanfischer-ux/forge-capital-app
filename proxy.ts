@@ -3,7 +3,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getDevSession, isDevAuthBypassEnabled } from "@/lib/dev-auth";
 
 /**
- * Session-aware middleware. Two jobs:
+ * Session-aware proxy. Two jobs:
  *
  *  1. Refresh the Supabase session cookie on every request (needed by SSR
  *     — see @supabase/ssr middleware guide). Without this, tokens expire
@@ -42,7 +42,7 @@ const GATED_PREFIXES = [
   "/import",
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

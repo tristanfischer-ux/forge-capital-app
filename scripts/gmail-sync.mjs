@@ -480,16 +480,27 @@ async function syncUser(tokenRow, partnersByEmail) {
     }
   }
 
-  // Advance cursor only if the run didn't error wholesale
-  if (!DRY_RUN && errored < messageIdList.length) {
+  // Cursor-advance safety: only move the sync pointer forward when
+  // EVERY message ingested cleanly. On partial failures we leave the
+  // cursor where it was so the next tick re-lists the missed set.
+  // Earlier bug (2026-04-22 afternoon): the cursor used to advance
+  // whenever ANY messages succeeded — 195 of 223 messages were lost
+  // on the first live run after an `on_conflict` constraint issue
+  // because the cursor jumped past them before they could retry.
+  // Status columns still get written regardless so the UI reflects
+  // the partial state.
+  if (!DRY_RUN) {
+    const update = {
+      last_gmail_sync_status: errored === 0 ? "ok" : "partial",
+      last_gmail_sync_error: errored === 0 ? null : `${errored} message errors`,
+      updated_at: new Date().toISOString(),
+    };
+    if (errored === 0) {
+      update.last_gmail_sync_at = runStartedAt.toISOString();
+    }
     await supabase
       .from("gmail_tokens")
-      .update({
-        last_gmail_sync_at: runStartedAt.toISOString(),
-        last_gmail_sync_status: errored === 0 ? "ok" : "partial",
-        last_gmail_sync_error: errored === 0 ? null : `${errored} message errors`,
-        updated_at: new Date().toISOString(),
-      })
+      .update(update)
       .eq("user_id", tokenRow.user_id);
   }
 

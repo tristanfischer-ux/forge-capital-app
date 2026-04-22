@@ -112,31 +112,51 @@ On `/portfolio/[slug]`:
 
 ## Other known follow-ups (smaller)
 
-- **Replicate env vars in Vercel are dead weight.** `REPLICATE_API_TOKEN`
-  is still registered in Production + Development but no code reads it.
-  Clean up via `vercel env rm REPLICATE_API_TOKEN production && rm preview
-  && rm development` when convenient.
-- **`OPENAI_API_KEY` not yet in Vercel Preview env.** CLI hiccup on the
-  initial add — Production + Development landed, Preview didn't. Retry
-  with the interactive `vercel env add OPENAI_API_KEY preview` next time.
-- **Nightly `com.forgecapital.push-embeddings` cron pushes nomic
-  vectors, not OpenAI ones** — will overwrite OpenAI doc embeddings
-  every morning at 06:45. Either (a) disable that plist and schedule
-  the Next-side `scripts/embed-investors.mjs` to run nightly instead,
-  or (b) modify the Python script to call OpenAI. Option (a) is simpler.
-- **Gmail sync daemon advances cursor on partial-failure runs** —
-  should only advance when `errored === 0`. Documented in
-  `~/.claude/projects/-Users-tristanfischer/memory/forge-capital-app.md`.
-  Low priority — the 15-min retry still converges.
-- **Middleware → proxy rename** (Next 16 deprecation warning). Not
-  urgent but needed before the next Next major.
+- **`OPENAI_API_KEY` not in Vercel Preview env** — Production +
+  Development are set, Preview kept rejecting stdin-piped values with
+  "Run one of the commands in next[] to complete without prompting".
+  Needs `vercel env add OPENAI_API_KEY preview --git-branch=*` or
+  a one-shot interactive `vercel env add` from a real TTY. Not
+  blocking — Preview deploys fall back to lexical scoring cleanly
+  when the key is absent.
+- **Forge-Capital pipeline `.env` points at ForgeOS Supabase** —
+  `NEXT_PUBLIC_SUPABASE_URL` in `~/Developer/Forge-Capital/.env` is
+  the forgeos/nightshift project (`jyarhvinengfyrwgtskq`) not
+  apex-outreach (`kgkajatjyqfetdtbzmwg`). New pipeline push scripts
+  (14-push-capital-app.py, 14b-push-embeddings…, 14c-push-portfolio…)
+  each sanity-check for the correct URL and refuse to run with the
+  wrong one — so they fail safe, but the `.env` is still a landmine
+  for any new script. Should set apex-outreach creds via the plists
+  directly, or add a second `.env.capital-app` with the right vars.
 
 ---
 
 ## Closed (kept for grep-ability)
 
-- ✅ Level 1 partner profile route — `/partner/[id]` (commit
-  `[pending]` 2026-04-22 late).
+- ✅ **Level 3 — `/portfolio/[slug]` canonical + junction** (this commit).
+  Migration 018 + `portfolio_companies` (slug-unique) + `investor_portfolio_links`
+  junction + pipeline push script 14c + daily 06:55 BST cron.
+  463 canonical companies / 412 junctions after initial --limit 500
+  live run (projected ~64k canonical / ~93k junctions at full push).
+  InvestorProfileView portfolio chips now link to the new route.
+- ✅ **Discovery cron actually uses Haiku** (this commit). `USE_HAIKU=1`
+  set in the plist + pipeline `.env`. Log message at `01-discover.js:70`
+  now reflects real routing. Smoke-tested — 1 new firm landed within
+  90s (VC Eclipse); Ollama provably not called.
+- ✅ **Nightly embeddings cron swapped** (this commit).
+  `com.forgecapital.push-embeddings.plist` renamed to `.plist.disabled`
+  (nomic path). New `com.forgecapital.openai-embed-nightly.plist`
+  runs `scripts/embed-investors.mjs` daily at 06:50 BST — OpenAI
+  text-embedding-3-small at dim=768. Verified mid-run: 9349 rows
+  fetched, batches 1-6 succeeded.
+- ✅ **Gmail cursor-advance safety** (this commit). Cursor only
+  advances when `errored === 0`. Partial failures now re-list the
+  missed window on the next tick.
+- ✅ **Replicate env vars cleaned** (this commit). Dead `REPLICATE_API_TOKEN`
+  removed from Vercel Production + Development. Not present in Preview.
+- ✅ **`middleware.ts` → `proxy.ts` rename** (this commit). Next 16
+  deprecation warning gone; build output now shows `ƒ Proxy (Middleware)`.
+- ✅ Level 1 partner profile route — `/partner/[id]` (commit `eb2c80a`).
 - ✅ Level 2 cross-link partner names in match / tracker / investor
   profile / draft / investor modal (same commit as L1).
 - ✅ Semantic search via OpenAI `text-embedding-3-small` dim=768

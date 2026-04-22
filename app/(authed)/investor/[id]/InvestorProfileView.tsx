@@ -475,20 +475,54 @@ function FocusCard({ profile }: { profile: InvestorProfileData }) {
   );
 }
 
+/**
+ * Slugify a portfolio-company display name to the URL-safe canonical form
+ * used by `/portfolio/[slug]`. MUST stay in lock-step with the
+ * server-side dedupe slug in
+ * `research/14c-push-portfolio-to-capital-app.py::slugify` — rule is:
+ *   1. lower-case
+ *   2. replace any run of non-[a-z0-9] with '-'
+ *   3. trim leading/trailing '-'
+ * Empty result (e.g. name is "—") means we can't link; fall back to a
+ * plain chip so the card never shows a broken Link.
+ */
+function slugifyCompany(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function PortfolioCard({ names }: { names: string[] }) {
   return (
     <div className="ms-card">
       <h4>Portfolio · {names.length}</h4>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {names.slice(0, 24).map((n) => (
-          <span
-            key={n}
-            className="tag-chip tag-neutral"
-            style={{ fontSize: 11 }}
-          >
-            {n}
-          </span>
-        ))}
+        {names.slice(0, 24).map((n) => {
+          const slug = slugifyCompany(n);
+          if (!slug) {
+            return (
+              <span
+                key={n}
+                className="tag-chip tag-neutral"
+                style={{ fontSize: 11 }}
+              >
+                {n}
+              </span>
+            );
+          }
+          return (
+            <Link
+              key={n}
+              href={`/portfolio/${slug}`}
+              className="tag-chip tag-neutral partner-link"
+              style={{ fontSize: 11 }}
+              aria-label={`Open portfolio profile for ${n}`}
+            >
+              {n}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
