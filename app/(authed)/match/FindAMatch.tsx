@@ -1583,6 +1583,12 @@ function PitchInput({
         onChange={(e) => setHeroText(e.target.value)}
         onKeyDown={onKeyDown}
         spellCheck={false}
+        // V4's .hero-input has padding: 16px 120px 16px 20px — the 120px
+        // right-pad is reserved for the Find matches button sitting in
+        // the textarea corner. We've moved Find matches OUT to the
+        // action row below, so give the right-pad back to the content
+        // and let the full textarea be a clean drop target.
+        style={{ paddingRight: 20 }}
       />
 
       {/* Drag overlay — only shown while a file is being dragged over. */}
@@ -1626,42 +1632,31 @@ function PitchInput({
         </div>
       ) : null}
 
-      {/* Find matches — bottom-right, primary. V4 positions it via .hero-btn. */}
-      <button
-        type="button"
-        className="hero-btn"
-        onClick={onFindMatches}
-        disabled={isPending || extracting}
-      >
-        {isPending ? "Matching…" : "Find matches"}{" "}
-        <span className="kbd">⌘↵</span>
-      </button>
-
-      {/* Upload deck + status line — sit BELOW the textarea so they never
-          collide with Find matches and never overlap typed content. The
-          textarea itself still accepts drops thanks to onDragOver/onDrop
-          on .hero-input-wrap. */}
+      {/* Action row under the textarea — Upload deck on the left,
+          Find matches on the right. Nothing overlaps the textarea drop
+          target. The textarea itself still accepts drops thanks to
+          onDragOver / onDrop on .hero-input-wrap. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: 12,
-          marginTop: 8,
+          marginTop: 10,
           flexWrap: "wrap",
         }}
       >
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          title="Upload a pitch deck, business plan, PDF, DOCX, or PPTX — or just drag it onto the textarea. We'll extract the text for matching."
+          title="Upload a pitch deck, business plan, PDF, DOCX, or PPTX — or just drag it onto the box above. We'll extract the text for matching."
           disabled={extracting || isPending}
           style={{
-            padding: "6px 12px",
-            fontSize: 12,
+            padding: "8px 14px",
+            fontSize: 13,
             fontWeight: 500,
             border: "1px solid var(--border)",
             background: "var(--surface)",
-            color: "var(--text-dim)",
+            color: "var(--text)",
             borderRadius: 8,
             cursor: extracting || isPending ? "not-allowed" : "pointer",
             whiteSpace: "nowrap",
@@ -1669,7 +1664,13 @@ function PitchInput({
         >
           📎 Upload deck (PDF / PPTX / DOCX)
         </button>
-        <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+        <span
+          style={{
+            fontSize: 11,
+            color: "var(--text-dim)",
+            flex: "0 1 auto",
+          }}
+        >
           or drag a file onto the box above
         </span>
         <input
@@ -1679,6 +1680,45 @@ function PitchInput({
           style={{ display: "none" }}
           onChange={onFileChange}
         />
+
+        {/* Spacer pushes Find matches to the far right. */}
+        <div style={{ flex: 1 }} />
+
+        <button
+          type="button"
+          onClick={onFindMatches}
+          disabled={isPending || extracting}
+          // Inline styles deliberately — .hero-btn has `position: absolute`
+          // baked into v4-mockup.css for its in-textarea placement. Re-use
+          // the V4 accent colour + typography here without the positioning.
+          style={{
+            padding: "10px 18px",
+            borderRadius: 8,
+            background: "var(--accent)",
+            color: "#fff",
+            border: "none",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: isPending || extracting ? "not-allowed" : "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            opacity: isPending || extracting ? 0.7 : 1,
+          }}
+        >
+          {isPending ? "Matching…" : "Find matches"}{" "}
+          <span
+            style={{
+              fontSize: 10,
+              opacity: 0.7,
+              padding: "1px 5px",
+              background: "rgba(255,255,255,0.18)",
+              borderRadius: 3,
+            }}
+          >
+            ⌘↵
+          </span>
+        </button>
       </div>
 
       {/* Status line below the textarea. */}
