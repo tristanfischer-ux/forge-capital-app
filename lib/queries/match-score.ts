@@ -49,9 +49,9 @@ export interface GetMatchScoreOptions {
   heroText: string;
   archetype: Archetype;
   campaignId: string;
-  /** How many top-scored rows to return. V4 shows 5 top + "+5 more". V1 returns top 10. */
+  /** How many top-scored rows to return. V4 shows 5 top + "+5 more". V1 returns top 10; enhancement wave (2026-04-22) defaults to 25. */
   limit?: number;
-  /** How many raw candidates to score in Node. Default 200. */
+  /** How many raw candidates to score in Node. Default 2000 (raised from 600 on 2026-04-22 to give full ~9.3k-pool visibility per page). */
   candidatePool?: number;
   /** Sort tab: best match / thesis only / near-miss. */
   tab?: "best" | "thesis" | "near_miss";
@@ -456,8 +456,8 @@ export async function getMatchScore(
     heroText,
     archetype,
     campaignId,
-    limit = 10,
-    candidatePool = 600,
+    limit = 25,
+    candidatePool = 2000,
     tab = "best",
     minMatch = 0,
     hideContacted = true,

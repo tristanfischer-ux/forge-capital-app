@@ -388,3 +388,241 @@ button {
   color: var(--accent);
   border: 1px solid #d7d5fc;
 }
+
+/* -----------------------------------------------------------------------------
+   Find-a-Match enhancements (2026-04-22) — filter row, New/Show-all toggle,
+   dump-info drop box. Everything sits on V4 tokens (no new colours).
+   ----------------------------------------------------------------------------- */
+
+/* Filter bar — one-line row between hero and results-head. */
+.fm-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 10px 14px;
+  margin: 0 0 12px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.fm-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-right: 4px;
+  border-right: 1px solid var(--border-soft);
+}
+
+.fm-filter-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.fm-filter-field > span {
+  font-weight: 500;
+}
+
+.fm-filter-field select {
+  padding: 5px 24px 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 9px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.fm-filter-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.fm-filter-clear {
+  margin-left: auto;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-softer);
+  border: 1px solid #e0dcff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fm-filter-clear:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+/* New/Show-all toggle — two pill buttons pulled from V4's `.pill` family. */
+.fm-show-toggle {
+  display: inline-flex;
+  gap: 0;
+  padding: 2px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.fm-show-toggle button {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fm-show-toggle button:hover:not(.active) {
+  color: var(--text);
+}
+
+.fm-show-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Dump-info box — sits above the hero, styled as a secondary surface so
+   it doesn't compete visually with the primary hero panel. */
+.fm-dump-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 12px 16px;
+  margin: 0 0 14px 0;
+  background: var(--accent-softer);
+  border: 1px dashed #c7d2fe;
+  border-radius: 12px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.fm-dump-box.drag-over {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.fm-dump-box.busy {
+  opacity: 0.9;
+}
+
+.fm-dump-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.fm-dump-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.fm-dump-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.fm-dump-text {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  font-family: inherit;
+  min-height: 72px;
+}
+
+.fm-dump-text:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.fm-dump-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fm-dump-btn {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fm-dump-btn:hover:not(:disabled) {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+.fm-dump-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fm-dump-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.fm-dump-msg {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.fm-dump-msg.ok {
+  color: var(--green);
+  background: var(--green-light);
+  border: 1px solid #bbf7d0;
+}
+
+.fm-dump-msg.info {
+  color: var(--accent);
+  background: var(--accent-light);
+  border: 1px solid #d7d5fc;
+}
+
+.fm-dump-msg.err {
+  color: var(--red);
+  background: var(--red-light);
+  border: 1px solid #fecaca;
+}

@@ -55,11 +55,14 @@ export default async function MatchPage({
   // Seed the initial results with the V4 SkySails sample text so the
   // first paint has real cards. The client component persists whatever
   // the user types in localStorage and re-runs the query on submit.
+  // Enhancement wave 2026-04-22: default page size is 25 and the scorer
+  // sweeps the 2,000-row candidate pool (was 10 / 600). Client component
+  // handles Load-more pagination by asking the server for a larger limit.
   const initialData = await getMatchScore({
     heroText: DEFAULT_HERO_TEXT,
     archetype,
     campaignId,
-    limit: 10,
+    limit: 25,
     tab: "best",
   });
 

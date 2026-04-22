@@ -12,7 +12,10 @@ import type {
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
 import { findMatches, findLookalikes, shortlistSelected } from "./match-v4-actions";
 import { DEFAULT_HERO_TEXT } from "./match-constants";
-import { EmailHuntModal } from "./EmailHuntModal";
+// NOTE: EmailHuntModal is now mounted at the authed shell level
+// (`app/(authed)/layout.tsx`) so the verification-gate buttons and
+// any future surface can also dispatch `fc:resolve-email`. The modal
+// subscribes to the same window event — no contract change here.
 import {
   MIN_LOOKALIKE_ANCHORS,
   type LookalikeAnchor,
@@ -72,6 +75,40 @@ export interface FindAMatchProps {
 type Tab = "best" | "thesis" | "near_miss" | "lookalike";
 type SortBy = "match" | "alphabetical" | "approval" | "recent_contact";
 
+/**
+ * Page size for the matched-investor list. Default 25 (was 10 pre-
+ * 2026-04-22 enhancement wave). Tristan wants fuller visibility into the
+ * 9,349-strong pool; the server scores a 2,000-row candidate pool and
+ * client-side Load-more appends successive pages by asking for a bigger
+ * `limit` on the next server call.
+ */
+const PAGE_SIZE = 25;
+
+/**
+ * Client-side filter row — sits between the hero and the results head.
+ * All filters are applied AFTER scoring. Future step: push these into
+ * the server-side scorer so they prune the candidate pool instead of
+ * trimming the displayed rows.
+ */
+type StageFilter = "any" | "pre-seed" | "seed" | "series-a" | "series-b" | "growth";
+type GeoFilter = "any" | "uk" | "eu" | "us" | "global";
+type TypeFilter = "any" | "vc" | "accelerator" | "grant" | "corporate" | "angel";
+type ChequeFilter = "any" | "lt500k" | "500k-2m" | "2m-10m" | "10m-plus";
+
+interface Filters {
+  stage: StageFilter;
+  geo: GeoFilter;
+  type: TypeFilter;
+  cheque: ChequeFilter;
+}
+
+const DEFAULT_FILTERS: Filters = {
+  stage: "any",
+  geo: "any",
+  type: "any",
+  cheque: "any",
+};
+
 // Approval-status ranking: lower number sorts first. Any positive status
 // code (+1, +2, ...) means the counterpart greenlit the row — those come
 // first; then pending (+0); then rejected/archived; then rows that have
@@ -130,6 +167,100 @@ interface PoolCounts {
   investor: number;
 }
 
+/**
+ * Apply the client-side filter row to a scored row set. Each filter
+ * degrades to "match anything" when set to "any". Geography is read from
+ * `geo_focus + hq_location`; cheque uses the already-parsed raw strings
+ * from `cheque_min_raw / cheque_max_raw`. Type is heuristic until a
+ * proper `investor_type` column lands in `investors_mirror`.
+ */
+function applyFilters(
+  rows: GetMatchScoreResult["rows"],
+  f: Filters,
+): GetMatchScoreResult["rows"] {
+  if (
+    f.stage === "any" &&
+    f.geo === "any" &&
+    f.type === "any" &&
+    f.cheque === "any"
+  ) {
+    return rows;
+  }
+  return rows.filter((r) => {
+    if (f.stage !== "any") {
+      const sf = (r.stage_focus ?? "").toLowerCase();
+      const wanted =
+        f.stage === "pre-seed" ? /pre-?seed/ :
+        f.stage === "seed" ? /\bseed\b/ :
+        f.stage === "series-a" ? /series\s*a/ :
+        f.stage === "series-b" ? /series\s*b/ :
+        f.stage === "growth" ? /growth|late|series\s*c|series\s*d/ :
+        null;
+      if (wanted && !wanted.test(sf)) return false;
+    }
+    if (f.geo !== "any") {
+      const gf = `${r.geo_focus ?? ""} ${r.hq_location ?? ""}`.toLowerCase();
+      const wanted =
+        f.geo === "uk" ? /uk|united kingdom|britain|london|england/ :
+        f.geo === "eu" ? /eu|europe|germany|france|spain|italy|netherlands/ :
+        f.geo === "us" ? /\bus\b|usa|united states|america|california|new york/ :
+        f.geo === "global" ? /global|worldwide/ :
+        null;
+      if (wanted && !wanted.test(gf)) return false;
+    }
+    if (f.type !== "any") {
+      // Heuristic — no dedicated investor_type column yet. Match against
+      // firm_name + sector_focus. "Angel" rarely in firm_name so it
+      // relies on single-partner fund structure.
+      const blob =
+        `${r.firm_name ?? ""} ${r.sector_focus ?? ""}`.toLowerCase();
+      if (f.type === "accelerator" && !/accelerator|incubator|y ?combinator|techstars/.test(blob)) return false;
+      if (f.type === "grant" && !/grant|innovate uk|horizon europe|arpa|doe|darpa|nsf/.test(blob)) return false;
+      if (f.type === "corporate" && !/corporate|ventures|strategic/.test(blob)) return false;
+      if (f.type === "angel" && !(r.partner_count === 1 || /angel/.test(blob))) return false;
+      if (f.type === "vc") {
+        if (/accelerator|incubator|grant|angel/.test(blob)) return false;
+        // VC is the default-shape assumption — anything not an accelerator /
+        // grant / angel passes through.
+      }
+    }
+    if (f.cheque !== "any") {
+      const min = parseApproxAmount(r.cheque_min_raw);
+      const max = parseApproxAmount(r.cheque_max_raw);
+      if (min === null && max === null) return false;
+      const lo = min ?? 0;
+      const hi = max ?? Number.POSITIVE_INFINITY;
+      const [fLo, fHi] =
+        f.cheque === "lt500k" ? [0, 500_000] :
+        f.cheque === "500k-2m" ? [500_000, 2_000_000] :
+        f.cheque === "2m-10m" ? [2_000_000, 10_000_000] :
+        f.cheque === "10m-plus" ? [10_000_000, Number.POSITIVE_INFINITY] :
+        [0, Number.POSITIVE_INFINITY];
+      // Overlap test.
+      if (!(lo <= fHi && hi >= fLo)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Lightweight amount parser — handles "$30M", "€1.5m", "~£500k", "2000000".
+ * Returns null when nothing numeric can be extracted. Kept separate from
+ * the server's parser (which is richer) because the client doesn't ship
+ * the full match-score internals.
+ */
+function parseApproxAmount(raw: string | null): number | null {
+  if (!raw) return null;
+  const s = raw.toLowerCase().replace(/[, ~]/g, "");
+  const m = s.match(/([€£$]?)([\d.]+)\s*([kmb]?)/);
+  if (!m) return null;
+  const base = parseFloat(m[2]);
+  if (!Number.isFinite(base)) return null;
+  const unit = m[3];
+  const mult = unit === "b" ? 1e9 : unit === "m" ? 1e6 : unit === "k" ? 1e3 : 1;
+  return base * mult;
+}
+
 export function FindAMatch({
   campaignId,
   campaignName,
@@ -147,6 +278,19 @@ export function FindAMatch({
   // sortBy chooses HOW they're ordered within that set. "match" is the
   // default — keep the server's ranking untouched.
   const [sortBy, setSortBy] = useState<SortBy>("match");
+  // Filter row — client-side until server-side filtering lands.
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // "New only" hides already-contacted firms (default). "Show all"
+  // flips the server's hideContacted flag so the full pool shows,
+  // including firms already on this campaign.
+  const [showAll, setShowAll] = useState<boolean>(false);
+  // Pagination — client increments the visible count, then when we hit
+  // the rows we already fetched from the server we ask the server for
+  // more. `requestedLimit` tracks the highest limit we've asked the
+  // server for.
+  const [requestedLimit, setRequestedLimit] = useState<number>(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const [isLoadingMore, startLoadMoreTransition] = useTransition();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   // Single-click expands a result card inline; double-click navigates to
   // the full `/investor/[id]` profile. At most one card is expanded at a
@@ -208,10 +352,22 @@ export function FindAMatch({
   );
 
   const runFindMatches = useCallback(
-    (opts?: { tab?: Tab; archetype?: Archetype; hideContacted?: boolean; minMatch?: number }) => {
+    (opts?: {
+      tab?: Tab;
+      archetype?: Archetype;
+      hideContacted?: boolean;
+      minMatch?: number;
+      /** Override the requested limit (defaults to PAGE_SIZE to reset). */
+      limit?: number;
+    }) => {
       const nextTab = opts?.tab ?? tab;
       const nextArch = opts?.archetype ?? archetype;
+      const nextHideContacted = opts?.hideContacted ?? !showAll;
+      const nextLimit = opts?.limit ?? PAGE_SIZE;
       setToast(null);
+      // Reset pagination whenever a fresh query kicks off.
+      setRequestedLimit(nextLimit);
+      setVisibleCount(nextLimit);
       startTransition(async () => {
         // Lookalike tab uses a different server action — the hero text
         // doesn't matter, the algorithm reads positive signals from
@@ -224,10 +380,10 @@ export function FindAMatch({
           heroText,
           archetype: nextArch,
           campaignId,
-          limit: 10,
+          limit: nextLimit,
           tab: nextTab,
           minMatch: opts?.minMatch ?? 0,
-          hideContacted: opts?.hideContacted ?? true,
+          hideContacted: nextHideContacted,
         });
         if (out.ok) {
           setData(out.data);
@@ -242,8 +398,67 @@ export function FindAMatch({
         }
       });
     },
-    [heroText, archetype, campaignId, tab],
+    [heroText, archetype, campaignId, tab, showAll],
   );
+
+  /**
+   * Load-more handler — expose one more PAGE_SIZE page. If the server
+   * already handed us enough scored rows we just widen the visible
+   * window; otherwise we re-request with a bigger limit.
+   */
+  const loadMore = useCallback(() => {
+    const nextVisible = visibleCount + PAGE_SIZE;
+    // If the server already has these rows in the current payload, no
+    // round-trip needed.
+    if (data.rows.length >= nextVisible) {
+      setVisibleCount(nextVisible);
+      return;
+    }
+    // Lookalike has its own pager path (V1 doesn't paginate lookalikes
+    // yet — the algorithm surfaces top-10 against the respondent
+    // signature and the overlap curve drops off quickly after). Skip
+    // the server round-trip for that tab.
+    if (tab === "lookalike") {
+      setVisibleCount(nextVisible);
+      return;
+    }
+    const scoredTab: "best" | "thesis" | "near_miss" = tab;
+    // Otherwise ask the server for a wider slice. Cap at the total
+    // scored pool so we don't push requestedLimit into the stratosphere
+    // on small result sets.
+    const nextRequested = Math.min(
+      Math.max(nextVisible, requestedLimit + PAGE_SIZE),
+      data.totalScored,
+    );
+    setRequestedLimit(nextRequested);
+    startLoadMoreTransition(async () => {
+      const out = await findMatches({
+        heroText,
+        archetype,
+        campaignId,
+        limit: nextRequested,
+        tab: scoredTab,
+        minMatch: 0,
+        hideContacted: !showAll,
+      });
+      if (out.ok) {
+        setData(out.data);
+        setVisibleCount(nextVisible);
+      } else {
+        setToast({ kind: "err", message: out.error });
+      }
+    });
+  }, [
+    visibleCount,
+    data.rows.length,
+    data.totalScored,
+    requestedLimit,
+    heroText,
+    archetype,
+    campaignId,
+    tab,
+    showAll,
+  ]);
 
   const runFindLookalikes = useCallback(() => {
     setToast(null);
@@ -341,13 +556,103 @@ export function FindAMatch({
     }
   };
 
-  const rows = useMemo(() => sortRows(data.rows, sortBy), [data.rows, sortBy]);
-  const topN = Math.min(10, rows.length);
+  // Pipeline: server-scored rows → secondary sort → client-side filters →
+  // visible-window slice. Keep these as separate useMemos so a filter or
+  // sort change doesn't blow away the whole ranking.
+  const sortedRows = useMemo(
+    () => sortRows(data.rows, sortBy),
+    [data.rows, sortBy],
+  );
+  const filteredRows = useMemo(
+    () => applyFilters(sortedRows, filters),
+    [sortedRows, filters],
+  );
+  // "visibleRows" is what renders. Slice is over the filtered set.
+  const rows = useMemo(
+    () => filteredRows.slice(0, visibleCount),
+    [filteredRows, visibleCount],
+  );
+  const topN = rows.length;
+  const hasMoreToShow = visibleCount < filteredRows.length;
+  // Also true when we could ask the server for more scored rows.
+  const canRequestMoreFromServer =
+    !hasMoreToShow && data.rows.length < data.totalScored;
+  const canLoadMore = hasMoreToShow || canRequestMoreFromServer;
   const showAutoSuggest = liveSuggest.signals.length > 0;
   const autoSuggestDiffers = liveSuggest.suggested !== archetype;
 
+  /**
+   * Pre-fill the hero textarea + filter row from a "Dump info" drop.
+   * Extracted here so the floating box at the top of the section can
+   * mutate the same state as the textarea and the filter selects.
+   */
+  const applyExtractedProfile = useCallback(
+    (profile: {
+      stage: string | null;
+      geography: string | null;
+      raise_amount: string | null;
+      sectors: string[];
+      description: string | null;
+    }) => {
+      // Textarea: use the description if we have one, else a synthesised
+      // one-liner so Find-matches has SOMETHING to score.
+      if (profile.description && profile.description.trim().length > 0) {
+        setHeroText(profile.description.trim());
+      } else {
+        const bits: string[] = [];
+        if (profile.raise_amount) bits.push(`Raising ${profile.raise_amount}`);
+        if (profile.stage) bits.push(`at ${profile.stage}`);
+        if (profile.sectors.length > 0) bits.push(`in ${profile.sectors.join(", ")}`);
+        if (profile.geography) bits.push(`(${profile.geography})`);
+        const line = bits.join(" ").trim();
+        if (line) setHeroText(line + ".");
+      }
+
+      // Filter row: only overwrite when we have a strong match — we
+      // don't want Haiku's "Pre-seed/Seed" hedge to clobber a user's
+      // explicit Series A choice.
+      setFilters((prev) => {
+        const next: Filters = { ...prev };
+        const stageKey = profile.stage?.toLowerCase() ?? "";
+        if (stageKey.includes("pre-seed") || stageKey.includes("pre seed"))
+          next.stage = "pre-seed";
+        else if (stageKey === "seed") next.stage = "seed";
+        else if (stageKey.includes("series a")) next.stage = "series-a";
+        else if (stageKey.includes("series b")) next.stage = "series-b";
+        else if (stageKey.includes("growth")) next.stage = "growth";
+
+        const geoKey = profile.geography?.toLowerCase() ?? "";
+        if (geoKey === "uk" || geoKey === "united kingdom") next.geo = "uk";
+        else if (geoKey === "eu" || geoKey === "europe") next.geo = "eu";
+        else if (geoKey === "us" || geoKey === "united states") next.geo = "us";
+        else if (geoKey === "global") next.geo = "global";
+
+        const raise = profile.raise_amount ?? "";
+        const raiseNum = parseApproxAmount(
+          raise
+            .replace(/[€£$]/g, "")
+            .split(/[–\-to]+/)[0] ?? "",
+        );
+        if (raiseNum !== null) {
+          if (raiseNum < 500_000) next.cheque = "lt500k";
+          else if (raiseNum < 2_000_000) next.cheque = "500k-2m";
+          else if (raiseNum < 10_000_000) next.cheque = "2m-10m";
+          else next.cheque = "10m-plus";
+        }
+
+        return next;
+      });
+    },
+    [],
+  );
+
   return (
     <section id="find-a-match" className="section" style={{ marginTop: 0 }}>
+      {/* Dump-info drop zone — above the hero. Drag any deck/email/bio
+          snippet and Haiku pre-fills the hero textarea AND the filter
+          row. Degrades to "paste into textarea" if no Haiku key. */}
+      <DumpInfoBox onProfile={applyExtractedProfile} setHeroText={setHeroText} />
+
       {/* V4 `.hero` — single panel wraps textarea + button + archetype
           cards + auto-suggest banner + substrate hint (lines 915-964). */}
       <section className="hero">
@@ -393,6 +698,12 @@ export function FindAMatch({
           fund, the stronger their thesis signal gets.
         </div>
       </section>
+
+      {/* Filter row — sits above the results head so the user can
+          narrow the scored set before reading any card. Client-side
+          (applied to the already-scored rows); server-side pruning
+          lands in a future step. */}
+      <FilterBar filters={filters} onChange={setFilters} />
 
       {/* V4 `.conflict-banner` (lines 966-970). Renders only when the scored
           result set contains a firm in another campaign within 14 days. */}
@@ -462,6 +773,12 @@ export function FindAMatch({
         isLookalikePending={isLookalikePending}
         lookalikeData={lookalikeData}
         campaignName={campaignName}
+        showAll={showAll}
+        onToggleShowAll={(next) => {
+          setShowAll(next);
+          runFindMatches({ hideContacted: !next });
+        }}
+        visibleCount={topN}
       />
 
       {/* Lookalike mode renders a different card set — anchored on
@@ -503,28 +820,61 @@ export function FindAMatch({
       )}
 
       {tab !== "lookalike" && rows.length > 0 && archetype === "investor" ? (
-        <>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 6,
+            margin: "18px 0 0 0",
+          }}
+        >
+          {canLoadMore ? (
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={isLoadingMore || isPending}
+              style={{
+                padding: "9px 20px",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--accent)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: isLoadingMore || isPending ? "wait" : "pointer",
+                opacity: isLoadingMore || isPending ? 0.7 : 1,
+              }}
+            >
+              {isLoadingMore
+                ? "Loading more…"
+                : `Load more (${PAGE_SIZE} more)`}
+            </button>
+          ) : null}
           <p
             style={{
               textAlign: "center",
               color: "var(--text-faint)",
-              fontSize: 12,
-              margin: "14px 0 0 0",
+              fontSize: 11,
+              margin: 0,
             }}
           >
-            + {Math.max(0, data.totalScored - topN)} more between 67–71% ·{" "}
-            <a style={{ cursor: "pointer" }} onClick={() => runFindMatches({ tab })}>
-              show them
-            </a>
+            {filters.stage === "any" &&
+            filters.geo === "any" &&
+            filters.type === "any" &&
+            filters.cheque === "any"
+              ? `Showing ${topN} of ${data.totalScored.toLocaleString("en-GB")} scored in the pool.`
+              : `Showing ${topN} of ${filteredRows.length.toLocaleString("en-GB")} after filters · ${data.totalScored.toLocaleString("en-GB")} scored in pool.`}
           </p>
-        </>
+        </div>
       ) : null}
 
-      {/* Email-hunt modal (#69). Lives at the section root so it stays
-          mounted while any result card is open. Listens globally for the
-          `fc:resolve-email` custom event dispatched from the result
-          card's "Resolve email →" chip and the drill-down panel CTA. */}
-      <EmailHuntModal />
+      {/* Email-hunt modal (#69) lifted to `app/(authed)/layout.tsx` on
+          2026-04-22 so the verification-gate "Resolve email" button can
+          dispatch the same `fc:resolve-email` event and have the modal
+          appear without a page-specific mount. The result card's
+          "Resolve email →" chip still works unchanged — dispatch
+          contract is identical. */}
     </section>
   );
 }
@@ -560,7 +910,7 @@ const ARCHETYPES: ArchetypeCardDef[] = [
       <>
         <b>Today’s pool:</b> {pools.investor.toLocaleString("en-GB")} active
         investors &middot; 6 matching dimensions: Thesis / Stage / Geo /
-        Cheque / Activity / Data.
+        Cheque / Activity / Confidence.
       </>
     ),
   },
@@ -886,6 +1236,9 @@ function ResultsHead({
   isLookalikePending,
   lookalikeData,
   campaignName,
+  showAll,
+  onToggleShowAll,
+  visibleCount,
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
@@ -897,6 +1250,9 @@ function ResultsHead({
   isLookalikePending: boolean;
   lookalikeData: LookalikeResult | null;
   campaignName: string;
+  showAll: boolean;
+  onToggleShowAll: (next: boolean) => void;
+  visibleCount: number;
 }) {
   const poolLabel =
     archetype === "investor" ? archetypePoolSize.toLocaleString("en-GB") : "—";
@@ -914,7 +1270,7 @@ function ResultsHead({
               {anchorCount >= MIN_LOOKALIKE_ANCHORS ? (
                 <span className="count">
                   {" "}
-                  &middot; top {Math.min(10, totalScored)} of {scoredLabel} scored
+                  &middot; top {visibleCount} of {scoredLabel} scored
                 </span>
               ) : null}
             </>
@@ -922,7 +1278,7 @@ function ResultsHead({
             <>
               Matched investors{" "}
               <span className="count">
-                &middot; top {Math.min(10, totalScored)} of {scoredLabel} scored
+                &middot; showing {visibleCount} of {scoredLabel} scored
               </span>
             </>
           )}
@@ -935,8 +1291,9 @@ function ResultsHead({
             </>
           ) : (
             <>
-              Already-contacted firms hidden by default &middot;{" "}
-              <a>show all {poolLabel}</a> &middot; <a>re-score with new pool</a>
+              {showAll
+                ? `Showing every firm in the ${poolLabel}-strong pool — contacted and uncontacted alike.`
+                : "Already-contacted firms hidden."}
             </>
           )}
         </div>
@@ -945,6 +1302,37 @@ function ResultsHead({
         className="results-sort"
         style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
       >
+        {/* New-only / Show-all toggle — only meaningful on the hero-scored
+            tabs (not Lookalike, which runs its own pool filter). */}
+        {!isLookalike ? (
+          <div
+            className="fm-show-toggle"
+            role="tablist"
+            aria-label="Show new only or every firm"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!showAll}
+              className={!showAll ? "active" : ""}
+              onClick={() => onToggleShowAll(false)}
+              title="Hide firms already on this campaign"
+            >
+              New only
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={showAll}
+              className={showAll ? "active" : ""}
+              onClick={() => onToggleShowAll(true)}
+              title={`Show every firm in the ${poolLabel}-strong pool`}
+            >
+              Show all {poolLabel}
+            </button>
+          </div>
+        ) : null}
+
         <button className={tab === "best" ? "active" : ""} onClick={() => onTab("best")}>
           Best match
         </button>
@@ -1093,12 +1481,11 @@ function ResultCard({
           </div>
         </div>
 
-        {row.near_miss ? (
-          <div className="near-miss">
-            <b>{row.near_miss.headline}</b> {row.near_miss.body}
-          </div>
-        ) : null}
-
+        {/* Scorecard goes first (under the headline+score). Near-miss
+            moved BELOW, inside the expand panel so it sits after
+            "Why them". Removing it from this slot is deliberate —
+            the old order put the weakness above the scorecard which
+            buried the positive signal. */}
         <ScoreCard dims={row.dims} />
 
         <div className="result-tags">
@@ -1203,10 +1590,26 @@ function ResultCardDrillDown({
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
+      {/* Order flip (2026-04-22): "Why them" leads, THEN near-miss
+          weakness, THEN the meta grid. The old layout put near-miss
+          above the scorecard which read as "why NOT them" before
+          the user had a chance to see the positive signal. */}
       {hasWhyThem ? (
         <div className="rc-expand-block">
           <div className="rc-expand-label">Why them</div>
           <p>{row.why_them}</p>
+        </div>
+      ) : (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Why them</div>
+          <p style={{ color: "var(--text-dim)", fontStyle: "italic" }}>
+            Haiku synthesis queued · nightly pipeline fills this.
+          </p>
+        </div>
+      )}
+      {row.near_miss ? (
+        <div className="near-miss" style={{ marginTop: 0 }}>
+          <b>{row.near_miss.headline}</b> {row.near_miss.body}
         </div>
       ) : null}
       {hasThesis ? (
@@ -1424,13 +1827,19 @@ function ResultTagRow({ row }: { row: MatchResultRow }) {
 /* SCORECARD — V4 lines 1014-1021                                             */
 /* ========================================================================= */
 
+/**
+ * Scorecard dim labels as shown to the user. The 6th dim's internal key
+ * is still `data` (migrations + match-score-types.ts untouched), but the
+ * user-facing label flipped to "Confidence" on 2026-04-22 because "Data"
+ * reads as "how much data do you have?" not "how confident are we?".
+ */
 const DIM_ORDER: Array<{ key: keyof ScoreDims; label: string }> = [
   { key: "thesis", label: "Thesis" },
   { key: "stage", label: "Stage" },
   { key: "geo", label: "Geo" },
   { key: "cheque", label: "Cheque" },
   { key: "activity", label: "Activity" },
-  { key: "data", label: "Data" },
+  { key: "data", label: "Confidence" },
 ];
 
 function ScoreCard({ dims }: { dims: ScoreDims }) {
@@ -2113,6 +2522,289 @@ function PitchInput({
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* FILTER BAR — client-side post-score filtering                              */
+/* ========================================================================= */
+
+/**
+ * One-line filter bar with four dropdowns: Stage, Geography, Type,
+ * Cheque Size. Sits between the hero panel and the batch bar. Filters
+ * apply client-side over the already-scored rows; the server-side
+ * pruning equivalent lands in a future step (will let the scorer
+ * exclude candidates up front rather than rank-then-hide).
+ */
+function FilterBar({
+  filters,
+  onChange,
+}: {
+  filters: Filters;
+  onChange: (next: Filters) => void;
+}) {
+  const reset = () => onChange(DEFAULT_FILTERS);
+  const active =
+    filters.stage !== "any" ||
+    filters.geo !== "any" ||
+    filters.type !== "any" ||
+    filters.cheque !== "any";
+  return (
+    <div className="fm-filter-bar" role="region" aria-label="Filter matches">
+      <span className="fm-filter-label">Filter</span>
+
+      <label className="fm-filter-field">
+        <span>Stage</span>
+        <select
+          value={filters.stage}
+          onChange={(e) => onChange({ ...filters, stage: e.target.value as StageFilter })}
+        >
+          <option value="any">Any</option>
+          <option value="pre-seed">Pre-seed</option>
+          <option value="seed">Seed</option>
+          <option value="series-a">Series A</option>
+          <option value="series-b">Series B</option>
+          <option value="growth">Growth</option>
+        </select>
+      </label>
+
+      <label className="fm-filter-field">
+        <span>Geography</span>
+        <select
+          value={filters.geo}
+          onChange={(e) => onChange({ ...filters, geo: e.target.value as GeoFilter })}
+        >
+          <option value="any">Any</option>
+          <option value="uk">United Kingdom</option>
+          <option value="eu">European Union</option>
+          <option value="us">United States</option>
+          <option value="global">Global</option>
+        </select>
+      </label>
+
+      <label className="fm-filter-field">
+        <span>Type</span>
+        <select
+          value={filters.type}
+          onChange={(e) => onChange({ ...filters, type: e.target.value as TypeFilter })}
+        >
+          <option value="any">Any</option>
+          <option value="vc">Venture capital</option>
+          <option value="accelerator">Accelerator</option>
+          <option value="grant">Grant</option>
+          <option value="corporate">Corporate</option>
+          <option value="angel">Angel</option>
+        </select>
+      </label>
+
+      <label className="fm-filter-field">
+        <span>Cheque size</span>
+        <select
+          value={filters.cheque}
+          onChange={(e) => onChange({ ...filters, cheque: e.target.value as ChequeFilter })}
+        >
+          <option value="any">Any</option>
+          <option value="lt500k">Under $500K</option>
+          <option value="500k-2m">$500K – $2M</option>
+          <option value="2m-10m">$2M – $10M</option>
+          <option value="10m-plus">$10M+</option>
+        </select>
+      </label>
+
+      {active ? (
+        <button
+          type="button"
+          onClick={reset}
+          className="fm-filter-clear"
+          title="Clear all filters"
+        >
+          Clear filters
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* DUMP INFO BOX — drag-and-drop profile extraction via Haiku                 */
+/* ========================================================================= */
+
+/**
+ * Floating drop zone above the hero. Accepts a file OR a block of
+ * pasted text, ships it to `/api/extract-pitch?mode=profile` (which
+ * calls Haiku), and pre-fills both the hero textarea and the filter
+ * row from the structured response.
+ *
+ * Graceful degradation: if `ANTHROPIC_API_KEY` isn't configured the
+ * route returns `{ ok: false, reason: "no_haiku_key" }` and we drop
+ * the raw text straight into the textarea instead — the founder can
+ * still match, they just don't get the auto-filled filter row.
+ */
+function DumpInfoBox({
+  onProfile,
+  setHeroText,
+}: {
+  onProfile: (p: {
+    stage: string | null;
+    geography: string | null;
+    raise_amount: string | null;
+    sectors: string[];
+    description: string | null;
+  }) => void;
+  setHeroText: (s: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<
+    | { kind: "ok"; summary: string }
+    | { kind: "info"; summary: string }
+    | { kind: "err"; summary: string }
+    | null
+  >(null);
+
+  const extractFromText = useCallback(
+    async (raw: string) => {
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) return;
+      setBusy(true);
+      setMsg(null);
+      try {
+        const res = await fetch("/api/extract-pitch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "profile", text: trimmed }),
+        });
+        const json = (await res.json()) as
+          | {
+              ok: true;
+              profile: {
+                stage: string | null;
+                geography: string | null;
+                raise_amount: string | null;
+                sectors: string[];
+                description: string | null;
+              };
+            }
+          | { ok: false; reason?: string; message?: string; error?: string };
+        if (json.ok) {
+          onProfile(json.profile);
+          const filled: string[] = [];
+          if (json.profile.stage) filled.push(`stage = ${json.profile.stage}`);
+          if (json.profile.geography)
+            filled.push(`geography = ${json.profile.geography}`);
+          if (json.profile.raise_amount)
+            filled.push(`raise = ${json.profile.raise_amount}`);
+          if (json.profile.sectors.length > 0)
+            filled.push(`sectors = ${json.profile.sectors.join(", ")}`);
+          setMsg({
+            kind: "ok",
+            summary:
+              filled.length > 0
+                ? `Haiku extracted: ${filled.join(" · ")}. Textarea + filters pre-filled.`
+                : "Description extracted into the textarea. Haiku couldn't infer structured fields — refine manually.",
+          });
+          setText("");
+        } else {
+          if (json.reason === "no_haiku_key") {
+            // Graceful fallback — no Haiku key, dump raw text into textarea.
+            setHeroText(trimmed.slice(0, 8000));
+            setMsg({
+              kind: "info",
+              summary:
+                json.message ??
+                "Profile extraction unavailable. Pasted the text into the textarea instead.",
+            });
+            setText("");
+          } else {
+            setMsg({
+              kind: "err",
+              summary: json.error ?? json.message ?? "Extraction failed.",
+            });
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Extraction failed";
+        setMsg({ kind: "err", summary: message });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onProfile, setHeroText],
+  );
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.getData("text/plain");
+    if (dropped && dropped.trim().length > 0) {
+      void extractFromText(dropped);
+      return;
+    }
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      // Read the file as text and ship to profile mode. Non-text files
+      // (PDF etc.) should go through the textarea upload — surface that.
+      const isText =
+        file.type.startsWith("text/") ||
+        /\.(txt|md|eml|rtf|log)$/i.test(file.name);
+      if (!isText) {
+        setMsg({
+          kind: "err",
+          summary: `Drop a text snippet here. For decks / PDFs, use the "Upload deck" button in the hero below.`,
+        });
+        return;
+      }
+      file.text().then((body) => void extractFromText(body));
+    }
+  }
+
+  return (
+    <div
+      className={`fm-dump-box${dragOver ? " drag-over" : ""}${busy ? " busy" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragOver) setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      aria-label="Dump pitch info — drag text, an email, or a bio here"
+    >
+      <div className="fm-dump-head">
+        <span className="fm-dump-title">Dump pitch info</span>
+        <span className="fm-dump-sub">
+          Drop an email, bio, or paste a snippet — Haiku fills the textarea
+          and the filter row in one step.
+        </span>
+      </div>
+      <textarea
+        className="fm-dump-text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Paste anything a reader would need to route you: a forwarded email, a founder bio, a deck blurb, a one-line elevator pitch…"
+        spellCheck={false}
+        rows={3}
+      />
+      <div className="fm-dump-actions">
+        <button
+          type="button"
+          onClick={() => void extractFromText(text)}
+          disabled={busy || text.trim().length === 0}
+          className="fm-dump-btn"
+        >
+          {busy ? "Extracting…" : "Extract with Haiku"}
+        </button>
+        {msg ? (
+          <span className={`fm-dump-msg ${msg.kind}`} role="status">
+            {msg.summary}
+          </span>
+        ) : (
+          <span className="fm-dump-hint">
+            Or drag a text file / snippet onto this box.
+          </span>
+        )}
+      </div>
     </div>
   );
 }

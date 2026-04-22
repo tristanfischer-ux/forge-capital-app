@@ -42,7 +42,7 @@ export async function findMatches(input: {
     heroText,
     archetype,
     campaignId,
-    limit = 10,
+    limit = 25,
     tab = "best",
     minMatch = 0,
     hideContacted = true,
