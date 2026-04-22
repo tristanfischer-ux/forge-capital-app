@@ -680,6 +680,7 @@ export function FindAMatch({
           onFindMatches={() => runFindMatches()}
           isPending={isPending}
           textareaRef={textareaRef}
+          onSynthesised={applyExtractedProfile}
         />
 
         {showAutoSuggest ? (
@@ -2283,6 +2284,7 @@ function PitchInput({
   onFindMatches,
   isPending,
   textareaRef,
+  onSynthesised,
 }: {
   heroText: string;
   setHeroText: (s: string) => void;
@@ -2290,19 +2292,37 @@ function PitchInput({
   onFindMatches: () => void;
   isPending: boolean;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  /** Called when the upload endpoint returns a Haiku-synthesised
+   *  profile. Parent applies the structured fields to the filter
+   *  bar. Matches the DumpInfoBox `onProfile` contract. */
+  onSynthesised?: (profile: {
+    stage: string | null;
+    geography: string | null;
+    raise_amount: string | null;
+    sectors: string[];
+    description: string | null;
+  }) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractMsg, setExtractMsg] = useState<
-    | { kind: "ok"; filename: string; chars: number }
+    | {
+        kind: "ok";
+        filename: string;
+        chars: number;
+        synthesised: boolean;
+        rawText: string | null;
+      }
     | { kind: "err"; message: string }
     | null
   >(null);
+  const [showRaw, setShowRaw] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setExtracting(true);
     setExtractMsg(null);
+    setShowRaw(false);
     try {
       const form = new FormData();
       form.append("file", file);
@@ -2315,11 +2335,19 @@ function PitchInput({
         setExtractMsg({ kind: "err", message: json.error ?? "Extraction failed" });
         return;
       }
+      // The server returns `text` = summary if Haiku synthesised it, else
+      // raw text. Both paths populate the hero textarea. When synthesis
+      // fired, also bubble the structured profile up to the filter bar.
       setHeroText(json.text);
+      if (onSynthesised && json.profile) {
+        onSynthesised(json.profile);
+      }
       setExtractMsg({
         kind: "ok",
         filename: json.filename,
         chars: json.originalChars,
+        synthesised: Boolean(json.summary),
+        rawText: typeof json.raw_text === "string" ? json.raw_text : null,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Extraction failed";
@@ -2499,7 +2527,10 @@ function PitchInput({
         </button>
       </div>
 
-      {/* Status line below the textarea. */}
+      {/* Status line below the textarea. When Haiku synthesised the
+          deck, tell the user we're showing the summary + the filter
+          bar has been pre-filled. Offer a toggle to peek at the raw
+          extracted text in case the summary missed something. */}
       {extractMsg ? (
         <div
           style={{
@@ -2513,13 +2544,53 @@ function PitchInput({
         >
           {extractMsg.kind === "ok" ? (
             <>
-              ✓ Extracted {extractMsg.chars.toLocaleString("en-GB")} chars
-              from <b>{extractMsg.filename}</b>. Edit the text above before
-              hitting Find matches if you want to focus the pitch.
+              {extractMsg.synthesised ? (
+                <>
+                  ✓ Synthesised <b>{extractMsg.filename}</b> ({extractMsg.chars.toLocaleString("en-GB")} chars →{" "}
+                  {heroText.length.toLocaleString("en-GB")} char pitch · filter bar pre-filled).
+                  Edit the text above before hitting Find matches.
+                  {extractMsg.rawText ? (
+                    <>
+                      {" · "}
+                      <a
+                        style={{ cursor: "pointer", textDecoration: "underline" }}
+                        onClick={() => setShowRaw((v) => !v)}
+                      >
+                        {showRaw ? "hide original" : "show original deck text"}
+                      </a>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  ✓ Extracted {extractMsg.chars.toLocaleString("en-GB")} chars
+                  from <b>{extractMsg.filename}</b>. Edit the text above before
+                  hitting Find matches if you want to focus the pitch.
+                </>
+              )}
             </>
           ) : (
             <>⚠ {extractMsg.message}</>
           )}
+        </div>
+      ) : null}
+      {extractMsg?.kind === "ok" && showRaw && extractMsg.rawText ? (
+        <div
+          style={{
+            marginTop: 6,
+            padding: "10px 12px",
+            fontSize: 11,
+            color: "var(--text-dim)",
+            background: "var(--surface-alt)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            maxHeight: 260,
+            overflowY: "auto",
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.5,
+          }}
+        >
+          {extractMsg.rawText}
         </div>
       ) : null}
     </div>

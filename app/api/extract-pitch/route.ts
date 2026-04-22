@@ -155,13 +155,52 @@ export async function POST(req: NextRequest) {
       ? cleaned.slice(0, MAX_TEXT_CHARS) + "\n\n[…truncated for matching — full text not used]"
       : cleaned;
 
+    // Matching Forge Capital's upload flow (research/07b-export-python.py
+    // `summariseAndSearch`): after raw-text extraction, fire a Haiku pass
+    // that (a) compresses the deck into a 2-3 sentence description and
+    // (b) extracts structured match signals (stage/geo/raise/sectors).
+    // The client prefers the SUMMARY over the raw text for the hero
+    // textarea — a 13,000-char deck dump is noise; the summary is signal.
+    // Raw text stays available in the response for an "expand original"
+    // affordance on the client.
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    let summary: string | null = null;
+    let profile: ExtractedProfile | null = null;
+    let haikuUsage: { input_tokens: number | null; output_tokens: number | null } | null = null;
+    let haikuError: string | null = null;
+    if (apiKey && cleaned.length >= 40) {
+      const synth = await synthesisePitchText(
+        cleaned.slice(0, MAX_PROFILE_INPUT_CHARS),
+        apiKey,
+      );
+      if (synth.ok) {
+        summary = synth.summary;
+        profile = synth.profile;
+        haikuUsage = synth.usage;
+      } else {
+        haikuError = synth.error;
+      }
+    } else if (!apiKey) {
+      haikuError = "ANTHROPIC_API_KEY not set — raw text returned without synthesis.";
+    }
+
+    // Prefer the summary as the "text" field so the client hero textarea
+    // reads the compressed pitch by default. Raw text is always available
+    // in `raw_text` so the UI can offer a collapsible "view original".
+    const preferredText = summary ?? truncated;
+
     return NextResponse.json({
       ok: true,
-      text: truncated,
+      text: preferredText,
+      summary,
+      profile,
+      raw_text: truncated,
       bytes: file.size,
       originalChars: cleaned.length,
       filename: file.name,
       extension: ext,
+      haiku_usage: haikuUsage,
+      haiku_error: haikuError,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown extraction error";
@@ -305,5 +344,102 @@ async function handleProfileMode(req: NextRequest): Promise<NextResponse> {
       { ok: false, error: `Haiku call failed: ${msg}` },
       { status: 502 },
     );
+  }
+}
+
+/**
+ * Shared synthesis helper — one Haiku call returns both:
+ *   - a 2-3 sentence description (matching Forge Capital's `summariseForSearch`)
+ *   - the structured profile fields for filter auto-fill
+ *
+ * Single call keeps latency + cost down versus two round-trips. The
+ * prompt explicitly asks Haiku to output one JSON object with BOTH a
+ * `description` (the summary) and the structured signals.
+ */
+async function synthesisePitchText(
+  text: string,
+  apiKey: string,
+): Promise<
+  | {
+      ok: true;
+      summary: string;
+      profile: ExtractedProfile;
+      usage: { input_tokens: number | null; output_tokens: number | null };
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const client = new Anthropic({ apiKey });
+    const res = await client.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 700,
+      system:
+        "You extract match signals from a founder's pitch deck text. Output ONLY one JSON object matching the requested schema — no prose, no markdown fence. British spelling. Never invent values: if a field is genuinely absent from the text, return null (or [] for sectors). Description should read like a pitch elevator paragraph — what the company does, stage, sector, geography, raise size — not a summary of the document structure.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                "You are helping a startup founder find investors. Below is text extracted from their pitch deck or business plan. Extract a concise 2-3 sentence description of what this company does, what stage they are at, what sector they're in, where they're based, and how much they're raising (if mentioned). Also extract structured match signals into a single JSON object with exactly these keys:\n" +
+                "- description: 2-3 sentence elevator pitch (<= 600 chars). This replaces the deck text in the match textarea, so write it as a crisp pitch paragraph — NOT 'this deck covers X'. Null only if the text is too thin to summarise.\n" +
+                "- stage: one of 'Pre-seed' | 'Seed' | 'Series A' | 'Series B' | 'Growth' | null\n" +
+                "- geography: one of 'UK' | 'EU' | 'US' | 'Global' | null\n" +
+                "- raise_amount: short string (e.g. '£500K-£2M', '$10M+', '€2M') or null\n" +
+                "- sectors: array of short sector tags (e.g. ['maritime', 'energy']) — empty array if unclear\n\n" +
+                "DECK TEXT:\n" +
+                text,
+            },
+          ],
+        },
+      ],
+    });
+
+    const raw = res.content
+      .filter(
+        (b): b is Anthropic.TextBlock =>
+          (b as { type?: string }).type === "text",
+      )
+      .map((b) => b.text)
+      .join("")
+      .trim();
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    const obj = JSON.parse(cleaned) as Record<string, unknown>;
+    const description = typeof obj.description === "string" ? obj.description : null;
+    if (!description) {
+      return {
+        ok: false,
+        error: "Haiku returned no description — deck text too thin",
+      };
+    }
+
+    return {
+      ok: true,
+      summary: description,
+      profile: {
+        stage: typeof obj.stage === "string" ? obj.stage : null,
+        geography: typeof obj.geography === "string" ? obj.geography : null,
+        raise_amount:
+          typeof obj.raise_amount === "string" ? obj.raise_amount : null,
+        sectors: Array.isArray(obj.sectors)
+          ? obj.sectors.filter((s): s is string => typeof s === "string")
+          : [],
+        description,
+      },
+      usage: {
+        input_tokens: res.usage?.input_tokens ?? null,
+        output_tokens: res.usage?.output_tokens ?? null,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown Haiku error",
+    };
   }
 }
