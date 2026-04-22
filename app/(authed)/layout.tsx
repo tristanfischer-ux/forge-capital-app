@@ -5,8 +5,8 @@ import {
   resolveCurrentCampaignId,
 } from "@/lib/queries/campaigns";
 import { CampaignDropdown } from "./CampaignDropdown";
-import { NavPill } from "./NavPill";
 import { Sidebar } from "./Sidebar";
+import { TopNav } from "./TopNav";
 import { WalkTourStrip } from "./WalkTourStrip";
 
 /**
@@ -94,49 +94,12 @@ function TopBar({
         <span className="sub">Outreach</span>
       </Link>
 
-      {/* Nav pills — V4 lines 724-733, full 8-pill set. V4 is one
-          scrolling page (`/home`), so each pill is a scroll anchor on
-          /home and a `Link` back to `/home#anchor` on any deep-link
-          route. See ./NavPill.tsx for the routing logic. */}
-      <nav className="topnav">
-        <NavPill
-          anchor="find-a-match"
-          label="Find a match"
-          deepLinkPath="/match"
-        />
-        <NavPill
-          anchor="approval"
-          label="Approval"
-          deepLinkPath="/approval"
-        />
-        <NavPill
-          anchor="automation"
-          label="Automation"
-          deepLinkPath="/pipeline"
-          auto
-        />
-        <NavPill
-          anchor="templates"
-          label="Templates"
-          deepLinkPath="/templates"
-        />
-        <NavPill anchor="review" label="Review" deepLinkPath="/review" />
-        <NavPill
-          anchor="drafts"
-          label="Drafts"
-          deepLinkPath="/drafts"
-        />
-        <NavPill
-          anchor="tracker"
-          label="Tracker"
-          deepLinkPath="/tracker"
-        />
-        <NavPill
-          anchor="weekly"
-          label="Weekly"
-          deepLinkPath="/weekly"
-        />
-      </nav>
+      {/* Nav pills — V4 lines 724-733, full 8-pill set, with scroll-spy
+          highlighting on /home. TopNav is a single client component that
+          subscribes to scroll position and marks the pill matching the
+          currently-visible section with `.pill.active`. On deep-link
+          routes it falls back to pathname matching. See ./TopNav.tsx. */}
+      <TopNav />
 
       {/* Spacer — V4 line 734 pushes right controls to the edge */}
       <div className="spacer" />

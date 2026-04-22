@@ -51,7 +51,7 @@ import WeeklyPage from "../weekly/page";
  * `html { scroll-behavior: smooth; scroll-padding-top: 80px; }`
  * (app/v4-mockup.css line 34), imported globally — the pills in the
  * top bar use `<a href="#anchor">` on /home and `<Link href="/home#anchor">`
- * elsewhere (see ../NavPill.tsx).
+ * elsewhere (see ../TopNav.tsx).
  *
  * Force-dynamic: the composed sections read cookies + search params.
  * Default caching would pin the first-requested campaign across users.
