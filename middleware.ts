@@ -39,6 +39,7 @@ const GATED_PREFIXES = [
   "/verification",
   "/approval",
   "/weekly",
+  "/import",
 ];
 
 export async function middleware(request: NextRequest) {

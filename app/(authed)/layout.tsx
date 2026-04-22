@@ -106,6 +106,28 @@ function TopBar({
       {/* Spacer — V4 line 734 pushes right controls to the edge */}
       <div className="spacer" />
 
+      {/* Import tracker — added 2026-04-22. Source-of-truth transfer
+          from Claude Co-work's xlsx into campaign_partners. Not a
+          section pill (it's a founder-maintenance action, not daily
+          workflow), so it sits as a plain link before the campaign
+          switcher. */}
+      <Link
+        href="/import"
+        style={{
+          fontSize: 12,
+          fontWeight: 500,
+          color: "var(--text-dim)",
+          textDecoration: "none",
+          padding: "5px 10px",
+          border: "1px solid var(--border)",
+          borderRadius: 999,
+          marginRight: 10,
+        }}
+        title="Import a tracker xlsx into the active campaign"
+      >
+        Import tracker ↑
+      </Link>
+
       {/* Campaign switcher — V4 lines 735-741. Renders null if no
           campaigns are visible (RLS-denied); the sign-in hint below
           takes its place. */}
