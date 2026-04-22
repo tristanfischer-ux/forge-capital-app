@@ -9,8 +9,14 @@ import type {
   ScoreDims,
 } from "@/lib/queries/match-score-types";
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
-import { findMatches, shortlistSelected } from "./match-v4-actions";
+import { findMatches, findLookalikes, shortlistSelected } from "./match-v4-actions";
 import { DEFAULT_HERO_TEXT } from "./match-constants";
+import {
+  MIN_LOOKALIKE_ANCHORS,
+  type LookalikeAnchor,
+  type LookalikeResult,
+  type LookalikeRow,
+} from "@/lib/queries/lookalikes-types";
 
 /**
  * §3 Find-a-Match — V4 lines 912–1147.
@@ -61,7 +67,7 @@ export interface FindAMatchProps {
   initialArchetype: Archetype;
 }
 
-type Tab = "best" | "thesis" | "near_miss";
+type Tab = "best" | "thesis" | "near_miss" | "lookalike";
 
 interface PoolCounts {
   investor: number;
@@ -82,6 +88,11 @@ export function FindAMatch({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [isShortlisting, startShortlistTransition] = useTransition();
+  // Lookalike result is held separately from the hero-text match data
+  // so switching tabs back to Best/Thesis/Near-miss restores the
+  // existing scored rows without re-running the (slower) hero scorer.
+  const [lookalikeData, setLookalikeData] = useState<LookalikeResult | null>(null);
+  const [isLookalikePending, startLookalikeTransition] = useTransition();
   const [toast, setToast] = useState<
     | { kind: "ok"; shortlisted: number; skipped: Array<{ name: string; reason: string }> }
     | { kind: "err"; message: string }
@@ -123,6 +134,13 @@ export function FindAMatch({
       const nextArch = opts?.archetype ?? archetype;
       setToast(null);
       startTransition(async () => {
+        // Lookalike tab uses a different server action — the hero text
+        // doesn't matter, the algorithm reads positive signals from
+        // campaign_partners directly.
+        if (nextTab === "lookalike") {
+          // Handled by runFindLookalikes below. Don't hit the hero scorer.
+          return;
+        }
         const out = await findMatches({
           heroText,
           archetype: nextArch,
@@ -148,6 +166,24 @@ export function FindAMatch({
     [heroText, archetype, campaignId, tab],
   );
 
+  const runFindLookalikes = useCallback(() => {
+    setToast(null);
+    startLookalikeTransition(async () => {
+      const out = await findLookalikes({ campaignId, limit: 10 });
+      if (out.ok) {
+        setLookalikeData(out.data);
+        setSelected((prev) => {
+          const stillVisible = new Set(out.data.rows.map((r) => r.investor_id));
+          const next = new Set<number>();
+          for (const id of prev) if (stillVisible.has(id)) next.add(id);
+          return next;
+        });
+      } else {
+        setToast({ kind: "err", message: out.error });
+      }
+    });
+  }, [campaignId]);
+
   const onPickArchetype = useCallback(
     (next: Archetype) => {
       if (next === archetype) return;
@@ -161,9 +197,21 @@ export function FindAMatch({
     (next: Tab) => {
       if (next === tab) return;
       setTab(next);
+      // Clear selection when changing between hero-scored tabs and
+      // lookalike — the row universes are different.
+      setSelected(new Set());
+      if (next === "lookalike") {
+        // Only fetch on first switch to this tab OR if the campaign
+        // changed underneath us. We don't cache by campaignId here
+        // because switching campaigns re-mounts the page.
+        if (lookalikeData === null) {
+          runFindLookalikes();
+        }
+        return;
+      }
       runFindMatches({ tab: next });
     },
-    [tab, runFindMatches],
+    [tab, runFindMatches, runFindLookalikes, lookalikeData],
   );
 
   const toggleSelect = useCallback((investorId: number) => {
@@ -290,32 +338,51 @@ export function FindAMatch({
       <ResultsHead
         tab={tab}
         onTab={onChangeTab}
-        totalScored={data.totalScored}
+        totalScored={tab === "lookalike"
+          ? (lookalikeData?.totalScored ?? 0)
+          : data.totalScored}
         archetypePoolSize={data.archetypePoolSize}
         archetype={archetype}
+        isLookalikePending={isLookalikePending}
+        lookalikeData={lookalikeData}
+        campaignName={campaignName}
       />
 
-      {/* V4 `.result-card` stack (lines 1000-1140). */}
-      {archetype !== "investor" ? (
-        <ArchetypePoolEmpty archetype={archetype} />
-      ) : rows.length === 0 ? (
-        <EmptyResults />
+      {/* Lookalike mode renders a different card set — anchored on
+          positive-signal investors, with gated empty state below 3. */}
+      {tab === "lookalike" ? (
+        <LookalikePanel
+          data={lookalikeData}
+          isPending={isLookalikePending}
+          campaignName={campaignName}
+          selected={selected}
+          onToggle={toggleSelect}
+        />
       ) : (
         <>
-          {rows.map((row) => (
-            <ResultCard
-              key={row.investor_id}
-              row={row}
-              checked={selected.has(row.investor_id)}
-              onToggle={() => toggleSelect(row.investor_id)}
-            />
-          ))}
+          {/* V4 `.result-card` stack (lines 1000-1140). */}
+          {archetype !== "investor" ? (
+            <ArchetypePoolEmpty archetype={archetype} />
+          ) : rows.length === 0 ? (
+            <EmptyResults />
+          ) : (
+            <>
+              {rows.map((row) => (
+                <ResultCard
+                  key={row.investor_id}
+                  row={row}
+                  checked={selected.has(row.investor_id)}
+                  onToggle={() => toggleSelect(row.investor_id)}
+                />
+              ))}
+            </>
+          )}
         </>
       )}
 
       {/* V4 `.walk-callout` (line 1142) — V4 markup has the <span.wc-num>
           and the text as direct children of the div, no wrapping span. */}
-      {rows.length > 0 && archetype === "investor" ? (
+      {tab !== "lookalike" && rows.length > 0 && archetype === "investor" ? (
         <>
           <div className="walk-callout">
             <span className="wc-num">1</span>
@@ -650,28 +717,60 @@ function ResultsHead({
   totalScored,
   archetypePoolSize,
   archetype,
+  isLookalikePending,
+  lookalikeData,
+  campaignName,
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
   totalScored: number;
   archetypePoolSize: number;
   archetype: Archetype;
+  isLookalikePending: boolean;
+  lookalikeData: LookalikeResult | null;
+  campaignName: string;
 }) {
   const poolLabel =
     archetype === "investor" ? archetypePoolSize.toLocaleString("en-GB") : "—";
   const scoredLabel = totalScored.toLocaleString("en-GB");
+  const isLookalike = tab === "lookalike";
+  const anchorCount = lookalikeData?.anchorCount ?? 0;
   return (
     <div className="results-head">
       <div>
         <div className="results-title">
-          Matched investors{" "}
-          <span className="count">
-            &middot; top {Math.min(10, totalScored)} of {scoredLabel} scored
-          </span>
+          {isLookalike ? (
+            <>
+              Investors like the {anchorCount > 0 ? anchorCount : ""} who
+              replied to <b>{campaignName}</b>
+              {anchorCount >= MIN_LOOKALIKE_ANCHORS ? (
+                <span className="count">
+                  {" "}
+                  &middot; top {Math.min(10, totalScored)} of {scoredLabel} scored
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <>
+              Matched investors{" "}
+              <span className="count">
+                &middot; top {Math.min(10, totalScored)} of {scoredLabel} scored
+              </span>
+            </>
+          )}
         </div>
         <div className="section-sub">
-          Already-contacted firms hidden by default &middot;{" "}
-          <a>show all {poolLabel}</a> &middot; <a>re-score with new pool</a>
+          {isLookalike ? (
+            <>
+              Scored against the aggregate thesis signal of positive
+              respondents. {isLookalikePending ? "Scoring…" : "Already-contacted firms hidden."}
+            </>
+          ) : (
+            <>
+              Already-contacted firms hidden by default &middot;{" "}
+              <a>show all {poolLabel}</a> &middot; <a>re-score with new pool</a>
+            </>
+          )}
         </div>
       </div>
       <div className="results-sort">
@@ -683,6 +782,13 @@ function ResultsHead({
         </button>
         <button className={tab === "near_miss" ? "active" : ""} onClick={() => onTab("near_miss")}>
           Near-miss
+        </button>
+        <button
+          className={tab === "lookalike" ? "active" : ""}
+          onClick={() => onTab("lookalike")}
+          title="Investors similar to those who already replied on this campaign"
+        >
+          Lookalikes
         </button>
       </div>
     </div>
@@ -978,4 +1084,225 @@ function formatRawAmount(raw: string): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(0)}M`;
   if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
   return `$${n.toFixed(0)}`;
+}
+
+/* ========================================================================= */
+/* LOOKALIKE PANEL — rendered when tab === "lookalike"                        */
+/* ========================================================================= */
+
+function LookalikePanel({
+  data,
+  isPending,
+  campaignName,
+  selected,
+  onToggle,
+}: {
+  data: LookalikeResult | null;
+  isPending: boolean;
+  campaignName: string;
+  selected: Set<number>;
+  onToggle: (investorId: number) => void;
+}) {
+  if (data === null && isPending) {
+    return (
+      <div
+        style={{
+          textAlign: "center",
+          padding: "40px 20px",
+          color: "var(--text-dim)",
+          fontSize: 13,
+        }}
+      >
+        Scoring the pool against the respondent signature…
+      </div>
+    );
+  }
+  if (data === null) {
+    // Transition hasn't started — never reachable in practice because
+    // onChangeTab kicks off the fetch immediately. Defensive render.
+    return null;
+  }
+
+  const gated = data.anchorCount < MIN_LOOKALIKE_ANCHORS;
+
+  return (
+    <>
+      {/* Anchor strip — shows which respondents the algorithm is
+          projecting from. Same visual vocabulary as result tag chips
+          so it sits naturally below the results head. */}
+      {data.anchors.length > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            padding: "10px 14px",
+            margin: "0 0 10px 0",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            background: "var(--surface-alt)",
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: "var(--text-dim)", marginRight: 4 }}>
+            Based on {data.anchorCount} respondent
+            {data.anchorCount === 1 ? "" : "s"}:
+          </span>
+          {data.anchors.map((a) => (
+            <AnchorChip key={a.investor_id} anchor={a} />
+          ))}
+        </div>
+      ) : null}
+
+      {gated ? (
+        <div
+          style={{
+            padding: "32px 22px",
+            border: "1px dashed var(--border)",
+            borderRadius: 12,
+            background: "var(--surface-alt)",
+            textAlign: "center",
+            color: "var(--text-dim)",
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
+            Not enough respondents yet for lookalikes.
+          </div>
+          <div>
+            {campaignName} has {data.anchorCount} positive signal
+            {data.anchorCount === 1 ? "" : "s"} on file. Need at least{" "}
+            {MIN_LOOKALIKE_ANCHORS} before projecting a thesis signature —
+            one or two responses are too narrow to generalise from.
+          </div>
+          <div style={{ marginTop: 10, color: "var(--text-faint)", fontSize: 12 }}>
+            Positive signal = status <code>+6</code> (reply) through{" "}
+            <code>+12</code> (committed). Lookalikes activate automatically
+            once more responses land.
+          </div>
+        </div>
+      ) : data.rows.length === 0 ? (
+        <div
+          style={{
+            textAlign: "center",
+            padding: "40px 20px",
+            color: "var(--text-dim)",
+            fontSize: 13,
+          }}
+        >
+          Scored {data.totalScored} investors but none overlap strongly enough
+          with the respondents&rsquo; signature. Try re-syncing the pool or
+          tightening the thesis text on the current respondents.
+        </div>
+      ) : (
+        <>
+          {data.rows.map((row) => (
+            <LookalikeCard
+              key={row.investor_id}
+              row={row}
+              checked={selected.has(row.investor_id)}
+              onToggle={() => onToggle(row.investor_id)}
+            />
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+function AnchorChip({ anchor }: { anchor: LookalikeAnchor }) {
+  const label = anchor.status_label ?? anchor.status_code;
+  return (
+    <span
+      className="tag-chip tag-approved"
+      title={`${label} — weight ${anchor.weight}`}
+      style={{ fontWeight: 600 }}
+    >
+      {anchor.firm_name}{" "}
+      <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>
+        · {anchor.status_code}
+      </span>
+    </span>
+  );
+}
+
+function LookalikeCard({
+  row,
+  checked,
+  onToggle,
+}: {
+  row: LookalikeRow;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={`result-card${checked ? " checked" : ""}`}
+      data-card={row.investor_id}
+    >
+      <div className="rc-chk-col">
+        <span
+          className={`rc-chk${checked ? " on" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+          role="checkbox"
+          aria-checked={checked}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === " " || e.key === "Enter") {
+              e.preventDefault();
+              onToggle();
+            }
+          }}
+        >
+          {checked ? "✓" : ""}
+        </span>
+      </div>
+      <div className="rc-body">
+        <div className="result-top">
+          <div className="result-headline">
+            <div className="result-name">
+              <span className="firm">{row.firm_name}</span>
+            </div>
+            <div className="result-meta">
+              {row.hq_location ? <span>{row.hq_location}</span> : null}
+              {row.sector_focus ? (
+                <>
+                  <span className="sep">·</span>
+                  <span>{row.sector_focus.split(",").slice(0, 3).join(", ")}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="result-score">
+            <div className="score-pct">{row.match_score}%</div>
+            <div className="score-label">lookalike</div>
+          </div>
+        </div>
+        {/* Reason — why this one surfaced. Uses V4's `.near-miss` chrome
+            because the visual weight is right: it's a callout, not a
+            warning. */}
+        <div className="near-miss" style={{ borderLeftColor: "var(--accent)" }}>
+          {row.reason}
+        </div>
+        {row.thesis_summary ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-dim)",
+              lineHeight: 1.55,
+              marginTop: 4,
+            }}
+          >
+            {row.thesis_summary.length > 240
+              ? row.thesis_summary.slice(0, 240).trim() + "…"
+              : row.thesis_summary}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }

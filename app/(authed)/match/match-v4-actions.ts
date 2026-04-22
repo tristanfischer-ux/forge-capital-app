@@ -8,6 +8,10 @@ import {
   type GetMatchScoreResult,
   type Archetype,
 } from "@/lib/queries/match-score";
+import {
+  getLookalikeMatches,
+  type LookalikeResult,
+} from "@/lib/queries/lookalikes";
 
 /**
  * Server actions for the V4 §3 Find-a-Match surface. Distinct from the
@@ -68,6 +72,43 @@ export async function findMatches(input: {
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Unknown match-score error",
+    };
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+
+export type FindLookalikesResult =
+  | { ok: true; data: LookalikeResult }
+  | { ok: false; error: string };
+
+/**
+ * Lookalike matching — find investors similar to the ones who
+ * already replied positively on this campaign. Distinct from
+ * `findMatches` above: that one scores against the user's hero
+ * text; this one scores against the respondent anchors.
+ */
+export async function findLookalikes(input: {
+  campaignId: string;
+  limit?: number;
+}): Promise<FindLookalikesResult> {
+  const { campaignId, limit = 10 } = input;
+  if (!campaignId) return { ok: false, error: "campaignId required" };
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  try {
+    const data = await getLookalikeMatches(campaignId, limit);
+    return { ok: true, data };
+  } catch (err) {
+    console.error("findLookalikes failed:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown lookalike error",
     };
   }
 }
