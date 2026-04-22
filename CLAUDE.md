@@ -74,15 +74,28 @@ Tailwind equivalent".
 No commit message without a parity summary. No push until the diff is ✓.
 
 1. Open V4 in agent-browser at the local server URL. Navigate to the
-   section you're porting. Screenshot at 1440×900 to `/tmp/v4-<section>.png`.
-2. Open your production build (`npm run dev`) at the same viewport.
-   Screenshot to `/tmp/prod-<section>.png`.
-3. Read Tristan's reference images in `audit-20260421/v4-reference/` —
+   section you're porting. Screenshot at 1440×900 **with the `--full`
+   flag** to `/tmp/v4-<section>.png`. Viewport-only screenshots hide
+   90% of single-scrolling-page content and are the #1 cause of false
+   "parity ✓" claims.
+2. Open your production build at the same viewport. Screenshot
+   **full-page** to `/tmp/prod-<section>.png`. Start the dev server
+   with `env -i PATH=$PATH HOME=$HOME npm run dev` — a polluted shell
+   (e.g. `NEXT_PUBLIC_SUPABASE_URL` pointing at another project) will
+   silently override `.env.local` and ship a screenshot of the wrong
+   backend's data.
+3. Sanity-check both PNGs before claiming parity:
+   - `sips -g pixelHeight /tmp/v4-*.png /tmp/prod-*.png` — heights
+     should match within ~10%. >30% drift means content is missing.
+   - `file /tmp/v4-*.png` — a <50KB PNG is almost always a 404 error
+     page. Verify the Python http.server is rooted at
+     `audit-20260421/` (`lsof -i :8765` + `ps aux | grep http.server`).
+4. Read Tristan's reference images in `audit-20260421/v4-reference/` —
    these show the target with populated real data.
-4. Diff section-by-section: for every `<section>`, card, tile, callout,
+5. Diff section-by-section: for every `<section>`, card, tile, callout,
    button, badge, pill in V4 — is it present in production? Same copy?
    Same spacing? Same colour family?
-5. **Log the diff in the commit message** — what matches (✓), what is off
+6. **Log the diff in the commit message** — what matches (✓), what is off
    and by how much (⚠). A commit with ⚠ entries must be iterated before
    push.
 
@@ -155,6 +168,21 @@ the commit message which sections rely on them.
   auto-batch run: Tue 09:00" before the cron scheduler lands), render
   the V4 copy verbatim AND add an in-code comment + a title-attribute
   tooltip flagging "wires to X in Phase Y". Never hide the debt.
+- **Empty states use V4's vocabulary, not generic Tailwind filler.**
+  When a Supabase query returns zero rows, render "No activity recorded
+  yet — contact events will populate once the Gmail sync runs" (i.e. a
+  sentence that names the specific pipeline stage) rather than
+  "No data". The empty-state copy IS product copy and has to feel like
+  Tristan wrote it. If V4 doesn't show an empty state for that card,
+  invent one in the same tone and commit the string alongside the
+  component.
+- **Copy varies by `campaigns.campaign_intent`.** Subject and noun
+  choices are data-driven: "fundraise update" (investor),
+  "buyer pipeline update" (customer), "supplier update" (supplier).
+  Don't hardcode investor-specific words — route every display string
+  through the intent. The weekly composer (`research/17-compose-weekly-draft.py`)
+  and the draft composer (`app/(authed)/tracker/[campaignPartnerId]/draft/compose.ts`)
+  both do this; follow the same pattern in any new surface.
 
 ## Copy rules — no invention
 
@@ -189,6 +217,42 @@ the commit message which sections rely on them.
   owns pushes.
 - Don't flip a repo from private to public without stating the decision
   in the commit message.
+
+## Lessons learned — what worked (verified 2026-04-22)
+
+The HTML-as-code port approach succeeded. Parity scan of `/home` vs
+`Phase2-Mockup-V4.html`: prod 8,037px vs V4 8,436px (within 5%), all
+10 sections present in the correct order with matching colour family
+and typography stack. The weekly section's SVG line + stacked-bar
+charts render from real `campaign_partners` / `contact_events` data
+with empty-state copy when data is absent. Subject-line variation by
+`campaign_intent` works end-to-end (SkySails → "fundraise update";
+Fischer Farms Customer → "buyer pipeline update").
+
+What made it work, kept together so a future port doesn't have to
+re-discover:
+
+1. **Extract V4's `<style>` block once** —
+   `sed -n '49,714p' audit-20260421/Phase2-Mockup-V4.html > app/v4-mockup.css`
+   (adjust line range if V4 is revised). Import it at the top of
+   `app/globals.css` **before** `@tailwind base` — otherwise PostCSS
+   errors on `@import must precede all other rules`.
+2. **Class names come from V4, not Tailwind.** `.topbar`, `.brand`,
+   `.hero`, `.wk-stat`, `.chart-card`, `.weekly-grid-stats` — all
+   live in `v4-mockup.css`. Writing Tailwind approximations is the
+   failure mode that cost 2026-04-21. Don't re-derive.
+3. **Empty states are part of the design.** Every real-data surface
+   should also ship an empty-state variant in the same tone (see
+   "Copy rules" above). The weekly section's "No activity recorded
+   yet — contact events will populate once the Gmail sync runs" is
+   the reference pattern.
+4. **The parity gate catches screenshot scams.** `--full` flag + PNG
+   height sanity check + `env -i` clean shell are the three things
+   that prevent "I took a viewport screenshot of the wrong Supabase
+   backend and called it parity ✓."
+5. **Single scrolling page with anchor pills is the architecture.**
+   Don't multi-route. `/tracker`, `/match`, `/weekly` stay as shareable
+   deep-links of individual sections but `/home` is the canonical view.
 
 ## Why this file exists
 
