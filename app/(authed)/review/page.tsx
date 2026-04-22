@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import {
   listActiveCampaigns,
@@ -89,15 +90,17 @@ export default async function ReviewPage({
             have to remember the rules.
           </div>
         </div>
-        {/* V4 `.section-link` on the right (line 1532). The "full list" lands
-            in a later phase; shown as an inert affordance, title explains why. */}
-        <span
+        {/* V4 `.section-link` on the right (line 1532). Wired to the tracker
+            for the active campaign so the founder can jump from the keyboard
+            review stack into the full master sheet without losing campaign
+            context. */}
+        <Link
+          href={`/tracker?c=${campaignId}`}
           className="section-link"
-          title="The full drafted-list view lands in a later phase."
-          style={{ cursor: "not-allowed", opacity: 0.7 }}
+          title="Open the full tracker for this campaign (keeps the campaign selection)."
         >
-          Open full list ({drafts.length}) &rarr;
-        </span>
+          Go to tracker ({drafts.length}) &rarr;
+        </Link>
       </div>
 
       <ReviewStack drafts={drafts} />

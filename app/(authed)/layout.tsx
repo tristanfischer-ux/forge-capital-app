@@ -7,6 +7,7 @@ import {
 import { CampaignDropdown } from "./CampaignDropdown";
 import { TopNav } from "./TopNav";
 import { WalkTourStrip } from "./WalkTourStrip";
+import { EmailHuntModal } from "./match/EmailHuntModal";
 
 /**
  * Authed shell — 1:1 port of V4 topbar + layout chrome
@@ -63,6 +64,13 @@ export default async function AuthedLayout({
           {children}
         </main>
       </div>
+      {/* Shell-level EmailHuntModal (lifted 2026-04-22 from FindAMatch).
+          Subscribes to the global `fc:resolve-email` custom event so any
+          surface — find-a-match result cards, verification-gate "Resolve
+          email" button, future places — can open the modal by dispatching
+          `new CustomEvent("fc:resolve-email", { detail: { investorId } })`.
+          Always-mounted, native <dialog> handles focus + Escape. */}
+      <EmailHuntModal />
     </>
   );
 }

@@ -4,11 +4,16 @@ import {
   resolveCurrentCampaignId,
   type CampaignSummary,
 } from "@/lib/queries/campaigns";
-import { getTrackerRows } from "@/lib/queries/tracker";
+import {
+  getTrackerRows,
+  isTrackerTierFilter,
+  type TrackerTierFilter,
+} from "@/lib/queries/tracker";
 import { TrackerTable } from "./TrackerTable";
 import { StatusSummary } from "./StatusSummary";
 import { TrackerStatTilesStrip } from "./StatTilesStrip";
 import { TrackerHealthCallout } from "./TrackerHealthCallout";
+import { TrackerDropZone } from "./TrackerDropZone";
 
 /**
  * Tracker page — V4 §2 "Tracker — master sheet preview" re-port.
@@ -28,7 +33,7 @@ import { TrackerHealthCallout } from "./TrackerHealthCallout";
  */
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ c?: string }>;
+type SearchParams = Promise<{ c?: string; tier?: string }>;
 
 export default async function TrackerPage({
   searchParams,
@@ -43,7 +48,16 @@ export default async function TrackerPage({
   /** Optional pre-resolved active campaign id (same rationale). */
   initialCampaignId?: string | null;
 }) {
-  const { c } = await searchParams;
+  const { c, tier } = await searchParams;
+
+  // Deliverability-tier deep-link (?tier=corresponded|hunter_verified|
+  // unverified|generic_blocked|bounced) — used by the verification gate
+  // buttons to jump straight to the affected subset. Unknown values fall
+  // through to the unfiltered view so a typo in a hand-crafted URL still
+  // renders a useful page.
+  const tierFilter: TrackerTierFilter | null = isTrackerTierFilter(tier)
+    ? tier
+    : null;
 
   let campaigns: CampaignSummary[];
   let campaignId: string | null;
@@ -78,7 +92,7 @@ export default async function TrackerPage({
   }
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
-  const rows = await getTrackerRows(campaignId);
+  const rows = await getTrackerRows(campaignId, tierFilter);
 
   return (
     <section id="tracker" className="section" style={{ marginTop: 0 }}>
@@ -126,6 +140,14 @@ export default async function TrackerPage({
         <span className="section-link">Open master sheet ↗</span>
       </div>
 
+      {/* Tier-filter banner — only renders when ?tier=... is active. Gives
+          the user a visible way back to the unfiltered view; copy names
+          the tier in plain English so the banner reads self-explanatory
+          even when the filter arrives from a deep-link. */}
+      {tierFilter ? (
+        <TierFilterBanner tier={tierFilter} campaignId={campaignId} />
+      ) : null}
+
       {/* Stat-tiles strip — 4 aggregate counts computed live from rows. */}
       <TrackerStatTilesStrip rows={rows} />
 
@@ -133,6 +155,22 @@ export default async function TrackerPage({
         <EmptyState campaignName={activeCampaign?.name ?? ""} />
       ) : (
         <>
+          {/* Drop-zone for pitch/email/snippet content. Sits ABOVE the
+              table per the instructions-at-top rule. Client component —
+              handles drag-drop, paste, and the apply-to-row modal. */}
+          <TrackerDropZone rows={rows} campaignId={campaignId} />
+
+          {/* One-time banner when NO partner has any email traffic.
+              Tells Tristan the Gmail sync daemon hasn't run yet rather
+              than leaving every cell silently empty. Disappears once a
+              single contact_events row lands. */}
+          {rows.every(
+            (r) =>
+              r.emails_in === 0 && r.emails_out === 0 && !r.last_event_at,
+          ) ? (
+            <GmailSyncPendingBanner />
+          ) : null}
+
           <StatusSummary rows={rows} />
           <TrackerTable
             rows={rows}
@@ -143,6 +181,107 @@ export default async function TrackerPage({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Shown when every campaign_partner_id has zero contact_events — i.e.
+ * the Gmail sync job hasn't populated any traffic yet. Placed ABOVE the
+ * table so it's seen before the per-row "no email traffic yet" copy.
+ * Once a single contact_events row lands, the banner disappears.
+ *
+ * Tone: explanatory, not apologetic — the daemon is known-pending work
+ * (it's being built in parallel as the `com.forgecapital.gmail-sync`
+ * launchd job). Empty-state copy is product copy, not filler.
+ */
+function GmailSyncPendingBanner() {
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: "10px 14px",
+        borderRadius: 8,
+        background: "var(--surface-alt)",
+        border: "1px dashed var(--border)",
+        fontSize: 12,
+        color: "var(--text-dim)",
+        lineHeight: 1.55,
+      }}
+    >
+      <b style={{ color: "var(--text)" }}>Gmail sync hasn&apos;t run yet</b> —
+      inbound/outbound events populate once the new{" "}
+      <code
+        style={{
+          fontFamily: "'SF Mono', monospace",
+          fontSize: 11,
+          background: "var(--surface)",
+          padding: "1px 6px",
+          borderRadius: 3,
+          border: "1px solid var(--border)",
+        }}
+      >
+        com.forgecapital.gmail-sync
+      </code>{" "}
+      job lands. Each row shows{" "}
+      <span style={{ fontStyle: "italic", color: "var(--text-faint)" }}>
+        &quot;no email traffic yet&quot;
+      </span>{" "}
+      until then.
+    </div>
+  );
+}
+
+/** Short human label for each deliverability tier. Kept in-file so the
+ *  banner renders without a module hop; the 5-tier taxonomy is
+ *  canonicalised in `lib/queries/tracker.ts`. */
+const TIER_LABEL: Record<TrackerTierFilter, string> = {
+  corresponded: "Corresponded",
+  hunter_verified: "Hunter-verified",
+  unverified: "Unverified",
+  generic_blocked: "Generic inbox blocked",
+  bounced: "Bounced",
+};
+
+/**
+ * Shown at the top of the tracker when a `?tier=` deep-link is active.
+ * Renders the current filter in plain English with a "Clear filter"
+ * link that drops the query param but keeps the campaign selection.
+ */
+function TierFilterBanner({
+  tier,
+  campaignId,
+}: {
+  tier: TrackerTierFilter;
+  campaignId: string;
+}) {
+  return (
+    <div
+      role="status"
+      style={{
+        margin: "0 0 12px 0",
+        padding: "10px 14px",
+        background: "var(--accent-light, #eef2ff)",
+        border: "1px solid var(--border)",
+        borderRadius: 8,
+        fontSize: 12,
+        color: "var(--text-dim)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
+      <span>
+        Filtered to <b>{TIER_LABEL[tier]}</b> partners. Source:
+        verification gate.
+      </span>
+      <Link
+        href={`/tracker?c=${campaignId}`}
+        style={{ color: "var(--accent)", textDecoration: "underline dotted" }}
+      >
+        Clear filter
+      </Link>
+    </div>
   );
 }
 

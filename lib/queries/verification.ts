@@ -2,6 +2,30 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { EmailTier } from "@/lib/queries/tracker";
 
 /**
+ * Per-tier partner references the verification gate buttons need to
+ * operate on. We expose both the `campaign_partners.id` (uuid — what
+ * `markPartnerInactive` writes against) and the underlying
+ * `partners_mirror.id` (bigint — what `queueHunterLookup` and the
+ * EmailHuntModal's `fc:resolve-email` event expect) so each button can
+ * pick the right identifier without a second round-trip.
+ *
+ * `firstInvestorIdByTier` gives the buttons a single investor to anchor
+ * the EmailHuntModal on — the modal opens per-firm. We surface the
+ * investor for the first unverified partner so "Resolve email" opens
+ * straight into a resolvable firm; if nothing is unverified the entry
+ * is absent.
+ */
+export interface VerificationTierRefs {
+  /** `campaign_partners.id` (uuid) for every row in this tier. */
+  campaignPartnerIds: string[];
+  /** `partners_mirror.id` (bigint) for every row in this tier. */
+  partnerIds: number[];
+  /** First investor-id for a partner in this tier; used to open the
+   *  EmailHuntModal on a concrete firm. null when tier has no rows. */
+  firstInvestorId: number | null;
+}
+
+/**
  * One row per deliverability tier, sized by the count of partners in the
  * active campaign whose `partners_mirror.email_tier` equals that tier.
  *
@@ -98,4 +122,102 @@ export async function getVerificationCounts(
     tier,
     count: counts.get(tier) ?? 0,
   }));
+}
+
+/**
+ * Returns per-tier identifier bundles for the active campaign. Used by
+ * the verification gate buttons to decide which partners to operate on
+ * for tier-wide actions (queue Hunter for every generic-inbox partner,
+ * mark every bounced partner inactive, etc.).
+ *
+ * Implementation mirrors `getVerificationCounts` — one round-trip for
+ * the campaign's campaign_partners + partner ids, a second for the
+ * partners_mirror rows with email_tier + investor_id. NULL `email_tier`
+ * rolls into `unverified` so the buttons operate on a consistent bucket
+ * with the gate's counts.
+ */
+export async function getVerificationTierRefs(
+  campaignId: string,
+): Promise<Record<VerificationTier, VerificationTierRefs>> {
+  const empty = (): Record<VerificationTier, VerificationTierRefs> => {
+    const out = {} as Record<VerificationTier, VerificationTierRefs>;
+    for (const tier of VERIFICATION_TIER_ORDER) {
+      out[tier] = {
+        campaignPartnerIds: [],
+        partnerIds: [],
+        firstInvestorId: null,
+      };
+    }
+    return out;
+  };
+
+  if (!campaignId) return empty();
+
+  const supabase = await createServerClient();
+
+  // Campaign partner rows with their partner_id — (campaign_partner_id,
+  // partner_id) pairs for downstream bucketing.
+  const { data: cpRows, error: cpErr } = await supabase
+    .from("campaign_partners")
+    .select("id, partner_id")
+    .eq("campaign_id", campaignId);
+
+  if (cpErr) {
+    console.error("getVerificationTierRefs campaign_partners fetch failed:", cpErr.message);
+    return empty();
+  }
+
+  const pairs = (cpRows ?? [])
+    .map((r) => r as { id: string; partner_id: number | null })
+    .filter((r): r is { id: string; partner_id: number } =>
+      typeof r.partner_id === "number",
+    );
+
+  if (pairs.length === 0) return empty();
+
+  const partnerIdList = pairs.map((p) => p.partner_id);
+
+  const { data: partnerRows, error: partnerErr } = await supabase
+    .from("partners_mirror")
+    .select("id, email_tier, investor_id")
+    .in("id", partnerIdList);
+
+  if (partnerErr) {
+    console.error("getVerificationTierRefs partners_mirror fetch failed:", partnerErr.message);
+    return empty();
+  }
+
+  // Map partner_id → (tier, investor_id). NULL tiers fold to `unverified`.
+  const partnerMeta = new Map<
+    number,
+    { tier: VerificationTier; investorId: number | null }
+  >();
+  for (const row of partnerRows ?? []) {
+    const r = row as {
+      id: number;
+      email_tier: string | null;
+      investor_id: number | null;
+    };
+    const tier: VerificationTier =
+      r.email_tier && (VERIFICATION_TIER_ORDER as string[]).includes(r.email_tier)
+        ? (r.email_tier as VerificationTier)
+        : "unverified";
+    partnerMeta.set(r.id, { tier, investorId: r.investor_id });
+  }
+
+  const out = empty();
+  for (const { id: cpId, partner_id } of pairs) {
+    const meta = partnerMeta.get(partner_id) ?? {
+      tier: "unverified" as VerificationTier,
+      investorId: null,
+    };
+    const bucket = out[meta.tier];
+    bucket.campaignPartnerIds.push(cpId);
+    bucket.partnerIds.push(partner_id);
+    if (bucket.firstInvestorId === null && meta.investorId !== null) {
+      bucket.firstInvestorId = meta.investorId;
+    }
+  }
+
+  return out;
 }

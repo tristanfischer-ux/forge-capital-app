@@ -87,6 +87,38 @@ function formatDays(days: number | null): string {
 }
 
 /**
+ * Human-relative last-touched. "never" when no contact_events exist for
+ * the partner. Uses the same day-bucket maths as days_since_last_contact
+ * but reads from `last_event_at` (contact_events-sourced) rather than
+ * `last_contact_at` (campaign_partners-sourced) so the freshness reflects
+ * the actual email traffic, not a manual status-edit bump.
+ */
+function formatLastTouched(iso: string | null): string {
+  if (!iso) return "never";
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "never";
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const days = Math.max(0, Math.floor((now - then) / msPerDay));
+  if (days === 0) {
+    const hours = Math.max(0, Math.floor((now - then) / (1000 * 60 * 60)));
+    if (hours === 0) return "just now";
+    return `${hours}h ago`;
+  }
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
+
+/** Truncate a subject line to ~60 chars with an ellipsis. */
+function truncateSubject(s: string | null, max = 60): string | null {
+  if (!s) return null;
+  const trimmed = s.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length <= max) return trimmed;
+  return trimmed.slice(0, max - 1) + "…";
+}
+
+/**
  * Simple relative timestamp for the sheet-head-strip "last synced X"
  * meta line. V4 hard-codes "2 min ago"; in production we render the
  * real time since the last tracker row was last_contact_at. When all
@@ -167,28 +199,34 @@ export function TrackerTable({
         </div>
       </div>
 
-      {/* Results table — V4 `table.sheet` (line 1818) */}
+      {/* Results table — V4 `table.sheet` (line 1818). Columns (L→R):
+          Firm · Contact · Status · Days since · Emails · Commentary.
+          Emails column carries in/out counts, human-relative last-touched,
+          and the latest subject truncated to 60 chars. Populates when the
+          Gmail sync daemon lands — until then every row reads "no email
+          traffic yet" (faint). */}
       <table className="sheet">
         <thead>
           <tr>
             <th
-              style={{ width: "26%", cursor: "pointer" }}
+              style={{ width: "22%", cursor: "pointer" }}
               onClick={() => onSort("firm")}
             >
               Firm · Contact{sortIndicator("firm")}
             </th>
             <th
-              style={{ width: "18%", cursor: "pointer" }}
+              style={{ width: "16%", cursor: "pointer" }}
               onClick={() => onSort("status")}
             >
               Status{sortIndicator("status")}
             </th>
             <th
-              style={{ width: "8%", cursor: "pointer" }}
+              style={{ width: "7%", cursor: "pointer" }}
               onClick={() => onSort("days")}
             >
               Days since{sortIndicator("days")}
             </th>
+            <th style={{ width: "20%" }}>Emails</th>
             <th>Commentary (chronological, ` | ` separated)</th>
           </tr>
         </thead>
@@ -226,13 +264,16 @@ export function TrackerTable({
                   <td style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 11 }}>
                     {formatDays(row.days_since_last_contact)}
                   </td>
+                  <td>
+                    <EmailStatsCell row={row} />
+                  </td>
                   <td className="comment-af">
                     <CommentaryCell row={row} />
                   </td>
                 </tr>
                 {expanded ? (
                   <tr onClick={(e) => e.stopPropagation()}>
-                    <td colSpan={4} style={{ padding: 0 }}>
+                    <td colSpan={5} style={{ padding: 0 }}>
                       <TrackerRowDrawer
                         campaignPartnerId={row.id}
                         currentStatusCode={row.status_code}
@@ -279,5 +320,72 @@ function CommentaryCell({ row }: { row: TrackerRow }) {
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Per-row email stats. Two lines:
+ *   1. `↓ N in · ↑ N out · Xd ago` — counts + relative last-touched
+ *   2. latest subject (truncated to 60 chars)
+ *
+ * When a partner has zero contact_events, shows the faint
+ * "no email traffic yet" line — matches the empty-state vocabulary used
+ * elsewhere in the app (weekly section, drawer commentary log).
+ */
+function EmailStatsCell({ row }: { row: TrackerRow }) {
+  const totalEvents = row.emails_in + row.emails_out;
+  if (totalEvents === 0 && !row.last_event_at) {
+    return (
+      <span style={{ color: "var(--text-faint)", fontStyle: "italic", fontSize: 11 }}>
+        no email traffic yet
+      </span>
+    );
+  }
+
+  const truncated = truncateSubject(row.latest_subject, 60);
+  const relative = formatLastTouched(row.last_event_at);
+
+  return (
+    <div style={{ fontSize: 11, lineHeight: 1.55 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontFamily: "'SF Mono', ui-monospace, Menlo, monospace",
+          color: "var(--text-dim)",
+        }}
+      >
+        <span title={`${row.emails_in} inbound`}>
+          <span style={{ color: "var(--green)" }}>↓</span>{" "}
+          <span style={{ color: "var(--text)", fontWeight: 600 }}>
+            {row.emails_in}
+          </span>
+        </span>
+        <span title={`${row.emails_out} outbound`}>
+          <span style={{ color: "var(--accent)" }}>↑</span>{" "}
+          <span style={{ color: "var(--text)", fontWeight: 600 }}>
+            {row.emails_out}
+          </span>
+        </span>
+        <span style={{ color: "var(--text-faint)" }}>·</span>
+        <span style={{ color: "var(--text-faint)" }}>{relative}</span>
+      </div>
+      {truncated ? (
+        <div
+          style={{
+            marginTop: 3,
+            color: "var(--text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "100%",
+          }}
+          title={row.latest_subject ?? undefined}
+        >
+          {truncated}
+        </div>
+      ) : null}
+    </div>
   );
 }

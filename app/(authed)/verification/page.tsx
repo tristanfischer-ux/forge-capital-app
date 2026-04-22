@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import {
   listActiveCampaigns,
@@ -6,10 +7,13 @@ import {
 } from "@/lib/queries/campaigns";
 import {
   getVerificationCounts,
+  getVerificationTierRefs,
   VERIFICATION_TIER_ORDER,
   type VerificationTier,
   type VerificationTierCount,
+  type VerificationTierRefs,
 } from "@/lib/queries/verification";
+import { TierRowActions } from "./TierRowActions";
 
 /**
  * V4 §7 Email verification gate — visualisation of the 5-tier deliverability
@@ -68,7 +72,10 @@ export default async function VerificationPage({
   }
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId) ?? null;
-  const counts = await getVerificationCounts(campaignId);
+  const [counts, tierRefs] = await Promise.all([
+    getVerificationCounts(campaignId),
+    getVerificationTierRefs(campaignId),
+  ]);
   const totalPartners = counts.reduce((acc, row) => acc + row.count, 0);
   const blockedTotal = counts
     .filter((row) => BLOCKING_TIERS.has(row.tier))
@@ -149,7 +156,9 @@ export default async function VerificationPage({
 
         {/* Ladder — one `.gate-row` per tier in the 5-tier taxonomy.
             Counts are real; if the campaign has zero partners the rows
-            render with "0" and the explanatory copy still reads true. */}
+            render with "0" and the explanatory copy still reads true.
+            `tierRefs` gives each row the partner-ids it operates on
+            (Hunter queue, mark-inactive, modal-open). */}
         {VERIFICATION_TIER_ORDER.map((tier) => {
           const row = counts.find((r) => r.tier === tier);
           return (
@@ -158,6 +167,8 @@ export default async function VerificationPage({
               tier={tier}
               count={row?.count ?? 0}
               totalPartners={totalPartners}
+              campaignId={campaignId}
+              refs={tierRefs[tier]}
             />
           );
         })}
@@ -221,7 +232,7 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     ],
     chip: { label: "+2 Ready", klass: "tag-approved" },
     cta: "Open in tracker",
-    ctaTitle: "Tracker deep-link lands in a later phase.",
+    ctaTitle: "Jump to the tracker filtered to Corresponded partners.",
   },
   hunter_verified: {
     label: "Hunter verified",
@@ -241,7 +252,7 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     ],
     chip: { label: "+2 Ready", klass: "tag-approved" },
     cta: "Open in tracker",
-    ctaTitle: "Tracker deep-link lands in a later phase.",
+    ctaTitle: "Jump to the tracker filtered to Hunter-verified partners.",
   },
   unverified: {
     label: "Unverified",
@@ -261,7 +272,7 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     ],
     chip: { label: "+1 Approved", klass: "tag-status" },
     cta: "Resolve email",
-    ctaTitle: "Resolve-email flow lands in a later phase.",
+    ctaTitle: "Open the resolve-email modal on the first unverified firm.",
   },
   generic_blocked: {
     label: "Generic inbox blocked",
@@ -281,7 +292,7 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     ],
     chip: { label: "+1 Approved", klass: "tag-warn" },
     cta: "Hunt for replacement",
-    ctaTitle: "Replacement-hunt flow lands in a later phase.",
+    ctaTitle: "Queue every generic-inbox partner for the nightly Hunter run.",
   },
   bounced: {
     label: "Bounced",
@@ -301,7 +312,8 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     ],
     chip: { label: "-2 Bounced", klass: "tag-blocked" },
     cta: "Mark inactive",
-    ctaTitle: "Mark-inactive flow lands in a later phase.",
+    ctaTitle:
+      "Mark every bounced partner inactive (-3 Disqualified). Reversible via tracker.",
   },
 };
 
@@ -309,14 +321,24 @@ function TierRow({
   tier,
   count,
   totalPartners,
+  campaignId,
+  refs,
 }: {
   tier: VerificationTier;
   count: number;
   totalPartners: number;
+  campaignId: string;
+  refs: VerificationTierRefs;
 }) {
   const meta = TIER_META[tier];
   const percent =
     totalPartners > 0 ? Math.round((count / totalPartners) * 100) : 0;
+
+  // Ready tiers (corresponded / hunter_verified) open the tracker with
+  // a tier filter applied — server-rendered <Link>, no client state.
+  // Blocked tiers delegate to the client `TierRowActions` component
+  // which handles the modal / bulk server action / toast.
+  const isReadyTier = tier === "corresponded" || tier === "hunter_verified";
 
   return (
     <div className="gate-row">
@@ -351,14 +373,31 @@ function TierRow({
         ))}
       </div>
       <div className="gate-age">{count > 0 ? `${count} on list` : "—"}</div>
-      <button
-        className="btn primary sm"
-        disabled
-        title={meta.ctaTitle}
-        style={{ cursor: "not-allowed", opacity: 0.7 }}
-      >
-        {meta.cta}
-      </button>
+      {isReadyTier ? (
+        <Link
+          href={`/tracker?c=${campaignId}&tier=${tier}`}
+          className="btn primary sm"
+          title={meta.ctaTitle}
+          aria-label={meta.cta}
+          data-tier={tier}
+          style={
+            count === 0
+              ? { pointerEvents: "none", opacity: 0.5, cursor: "not-allowed" }
+              : undefined
+          }
+          aria-disabled={count === 0 ? "true" : undefined}
+        >
+          {meta.cta}
+        </Link>
+      ) : (
+        <TierRowActions
+          tier={tier}
+          count={count}
+          firstInvestorId={refs.firstInvestorId}
+          partnerIds={refs.partnerIds}
+          campaignPartnerIds={refs.campaignPartnerIds}
+        />
+      )}
     </div>
   );
 }
