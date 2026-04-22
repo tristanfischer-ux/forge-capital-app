@@ -5,6 +5,32 @@ rule below is load-bearing. Violations are what produced the mess
 Tristan called out on 2026-04-21 evening. The rules exist because we
 already paid the cost of ignoring them.
 
+## Phase — we are past the port, now enhancing (2026-04-22)
+
+Tristan called this explicitly: *"I think we've reached a stage where
+we shouldn't be doing mock-ups and we should be just changing the app
+directly; otherwise, we're going to have too much of a loop. The key
+part of what it looks like is already done, and now we are in the
+enhancing stage of the app. Let's do everything now directly into the
+new app rather than having a mock-up."*
+
+So — for this codebase, the global CLAUDE.md "Mockup before code" rule
+is suspended. When Tristan asks for a new feature or enhancement:
+
+1. Build it directly in the React app. No standalone HTML mockup.
+2. Keep using V4 class names + the existing CSS design tokens — the
+   visual vocabulary is locked. A new section gets V4-style `.section`
+   / `.section-head` / `.section-title` / `.section-sub` chrome unless
+   Tristan explicitly asks for something new.
+3. Parity-gate rules still apply for any change that RE-TOUCHES an
+   existing V4 section — don't break the port while adding things.
+4. If the enhancement is genuinely novel (not an extension of any V4
+   section — e.g. a whole new data-model concept that needs UI
+   design), STOP and ask Tristan if he wants a mockup. Default is no.
+
+Re-enable mockup-first ONLY if Tristan explicitly says so, or the
+whole app is being redesigned again.
+
 ## The spec is V4. Full stop.
 
 - **The mockup is the spec.** Not a reference. Not a vibe. The spec.
