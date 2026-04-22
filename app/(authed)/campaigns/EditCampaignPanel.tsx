@@ -41,12 +41,6 @@ export function EditCampaignPanel({
   const [counterpartRole, setCounterpartRole] = useState(
     campaign.counterpart_role ?? "",
   );
-  const [weekStartedAt, setWeekStartedAt] = useState(
-    campaign.week_started_at ?? "",
-  );
-  const [weekCountTarget, setWeekCountTarget] = useState(
-    campaign.week_count_target?.toString() ?? "16",
-  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -58,9 +52,12 @@ export function EditCampaignPanel({
         counterpartName,
         counterpartEmail,
         counterpartRole,
-        weekStartedAt,
-        weekCountTarget:
-          weekCountTarget.trim() === "" ? null : Number(weekCountTarget),
+        // Week fields removed from the UI 2026-04-22 (Tristan flagged
+        // "not necessary"). Server action still accepts them to avoid
+        // a breaking signature change; pass null so nothing overwrites
+        // existing values.
+        weekStartedAt: null,
+        weekCountTarget: null,
       });
       if (out.ok) {
         router.refresh();
@@ -148,28 +145,6 @@ export function EditCampaignPanel({
             onChange={setCounterpartRole}
             placeholder="e.g. investor approver"
           />
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <Field
-                label="Week 1 started on"
-                hint="Week counter counts from here."
-                value={weekStartedAt}
-                onChange={setWeekStartedAt}
-                placeholder=""
-                type="date"
-              />
-            </div>
-            <div style={{ width: 120 }}>
-              <Field
-                label="Total weeks"
-                hint="e.g. 16 for a 4-month raise."
-                value={weekCountTarget}
-                onChange={setWeekCountTarget}
-                placeholder="16"
-                type="number"
-              />
-            </div>
-          </div>
         </div>
 
         {error ? (

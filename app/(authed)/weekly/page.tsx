@@ -100,14 +100,11 @@ export default async function WeeklyPage({
         ? "supplier pipeline update"
         : "fundraise update";
 
-  // Week heading: "Week N of M" where M is per-campaign from
-  // week_count_target (migration 012). Omit the "of M" when the
-  // campaign has no week_started_at or target — falls back to the
-  // calendar week so the user sees an honest number.
-  const weekHeading =
-    summary.weekOfCampaign !== null
-      ? `Week ${summary.weekOfCampaign} of ${summary.weekCountTarget} · ${summary.campaignName} · ${intentLabel}`
-      : `Week ${summary.weekNumber} · ${summary.campaignName} · ${intentLabel}`;
+  // 2026-04-22: dropped "Week N of M" — Tristan flagged it as not
+  // useful. Header is now just the campaign name + intent. The ISO
+  // calendar week number is kept as a subtle timestamp on the
+  // generated line for reference, nothing more.
+  const weekHeading = `${summary.campaignName} · ${intentLabel}`;
 
   const generatedHuman = formatGeneratedLabel(summary.generatedAt);
 

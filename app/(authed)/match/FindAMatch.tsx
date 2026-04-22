@@ -292,25 +292,14 @@ export function FindAMatch({
           pools={{ investor: data.archetypePoolSize }}
         />
 
-        <div className="hero-input-wrap">
-          <textarea
-            ref={textareaRef}
-            className="hero-input"
-            value={heroText}
-            onChange={(e) => setHeroText(e.target.value)}
-            onKeyDown={onKeyDown}
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            className="hero-btn"
-            onClick={() => runFindMatches()}
-            disabled={isPending}
-          >
-            {isPending ? "Matching…" : "Find matches"}{" "}
-            <span className="kbd">⌘↵</span>
-          </button>
-        </div>
+        <PitchInput
+          heroText={heroText}
+          setHeroText={setHeroText}
+          onKeyDown={onKeyDown}
+          onFindMatches={() => runFindMatches()}
+          isPending={isPending}
+          textareaRef={textareaRef}
+        />
 
         {showAutoSuggest ? (
           <AutoSuggestBanner
@@ -1395,6 +1384,213 @@ function LookalikeCard({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* PITCH INPUT — textarea + drag-and-drop pitch extraction                   */
+/* ========================================================================= */
+
+function PitchInput({
+  heroText,
+  setHeroText,
+  onKeyDown,
+  onFindMatches,
+  isPending,
+  textareaRef,
+}: {
+  heroText: string;
+  setHeroText: (s: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onFindMatches: () => void;
+  isPending: boolean;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractMsg, setExtractMsg] = useState<
+    | { kind: "ok"; filename: string; chars: number }
+    | { kind: "err"; message: string }
+    | null
+  >(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    setExtracting(true);
+    setExtractMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/extract-pitch", {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        setExtractMsg({ kind: "err", message: json.error ?? "Extraction failed" });
+        return;
+      }
+      setHeroText(json.text);
+      setExtractMsg({
+        kind: "ok",
+        filename: json.filename,
+        chars: json.originalChars,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Extraction failed";
+      setExtractMsg({ kind: "err", message });
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    // reset so the same file can be re-selected later
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  return (
+    <div
+      className="hero-input-wrap"
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragOver) setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      style={{ position: "relative" }}
+    >
+      <textarea
+        ref={textareaRef}
+        className="hero-input"
+        value={heroText}
+        onChange={(e) => setHeroText(e.target.value)}
+        onKeyDown={onKeyDown}
+        spellCheck={false}
+      />
+
+      {/* Drag overlay — only shown while a file is being dragged over. */}
+      {dragOver ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(79, 70, 229, 0.08)",
+            border: "2px dashed var(--accent)",
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--accent)",
+            fontSize: 14,
+            fontWeight: 600,
+            pointerEvents: "none",
+          }}
+        >
+          Drop your deck / PDF / DOCX / PPTX to extract the pitch text
+        </div>
+      ) : null}
+
+      {/* Extracting spinner overlay. */}
+      {extracting ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255,255,255,0.85)",
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--text-dim)",
+            fontSize: 13,
+          }}
+        >
+          Reading the file…
+        </div>
+      ) : null}
+
+      {/* Upload + find-matches buttons stack (above textarea right side). */}
+      <div
+        style={{
+          position: "absolute",
+          right: 12,
+          bottom: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          alignItems: "flex-end",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          title="Upload a pitch deck, business plan, PDF, DOCX, or PPTX. We'll extract the text for matching."
+          disabled={extracting || isPending}
+          style={{
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 500,
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            color: "var(--text-dim)",
+            borderRadius: 8,
+            cursor: extracting || isPending ? "not-allowed" : "pointer",
+          }}
+        >
+          📎 Upload deck
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.pptx,.docx,.xlsx,.odt,.odp,.ods,.txt,.md"
+          style={{ display: "none" }}
+          onChange={onFileChange}
+        />
+        <button
+          type="button"
+          className="hero-btn"
+          onClick={onFindMatches}
+          disabled={isPending || extracting}
+        >
+          {isPending ? "Matching…" : "Find matches"}{" "}
+          <span className="kbd">⌘↵</span>
+        </button>
+      </div>
+
+      {/* Status line below the textarea. */}
+      {extractMsg ? (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 11,
+            color:
+              extractMsg.kind === "ok"
+                ? "var(--green)"
+                : "var(--red)",
+          }}
+        >
+          {extractMsg.kind === "ok" ? (
+            <>
+              ✓ Extracted {extractMsg.chars.toLocaleString("en-GB")} chars
+              from <b>{extractMsg.filename}</b>. Edit the text above before
+              hitting Find matches if you want to focus the pitch.
+            </>
+          ) : (
+            <>⚠ {extractMsg.message}</>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
