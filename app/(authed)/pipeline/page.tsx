@@ -1,312 +1,559 @@
-import { cookies } from "next/headers";
-import Link from "next/link";
 import {
-  listActiveCampaigns,
-  resolveCurrentCampaignId,
-  type CampaignSummary,
-} from "@/lib/queries/campaigns";
-import {
-  getPipelineLanes,
-  getPipelineSummary,
-  type LaneItem,
-  type PipelineLane,
-} from "@/lib/queries/pipeline";
+  getPipelineHealth,
+  type EnrichmentDay,
+  type PipelineStage,
+  type StageStatus,
+} from "@/lib/queries/pipeline-health";
 
 /**
- * Automation pipeline — V4 §4 port (Phase2-Mockup-V4.html lines 1297-1445).
+ * Automation pipeline — honest-state dashboard.
  *
- * Single section, rendered as its own route so /pipeline works as a
- * sharable deep-link. The layout chrome (topbar + sidebar) comes from
- * the authed layout; this page only emits the `<section id="automation">`
- * V4 produced, verbatim. All classes below are V4's — styling lives in
- * `app/v4-mockup.css` and is untouched here.
+ * The real "pipeline" isn't a page of buttons the web app drives; it's
+ * nine launchd agents on Tristan's Mac (discover → enrich → synthesise
+ * → push → email-verify → email-hunt-queue → gmail-sync → send →
+ * parse-reply). This page is a read-only dashboard reflecting where
+ * each stage stands right now.
  *
- * Force dynamic: the sidebar reads the `fc_active_campaign` cookie;
- * Next's default caching would otherwise pin the first-requested
- * campaign for every user.
+ * Numbers come from Supabase (COUNT queries against the mirror tables).
+ * Freshness comes from two sources: Supabase MAX-timestamps (always
+ * available) and filesystem mtimes of the cron log files (only on
+ * localhost — Vercel has no access to ~/.forge-capital/*.log).
+ *
+ * There are no action buttons. The cron is owned by launchd, not the
+ * web app. Anything that looks like a CTA would be a lie — so none
+ * are rendered.
+ *
+ * Force dynamic: health changes minute-to-minute; we refuse to cache.
  */
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ c?: string }>;
 
-export default async function PipelinePage({
-  searchParams,
-  initialCampaigns,
-  initialCampaignId,
-}: {
-  searchParams: SearchParams;
-  /** Optional pre-fetched campaigns list (passed by /home composer to
-   *  avoid re-running `listActiveCampaigns()` 7× per render). When
-   *  omitted — e.g. direct navigation to /pipeline — we fetch as before. */
-  initialCampaigns?: CampaignSummary[];
-  /** Optional pre-resolved active campaign id (same rationale). */
-  initialCampaignId?: string | null;
-}) {
-  const { c } = await searchParams;
+export default async function PipelinePage(_props: {
+  searchParams?: SearchParams;
+  // Present so the /home composer can pass them without type error; this
+  // dashboard doesn't scope by campaign (it reflects cross-campaign
+  // cron health). Kept in the signature for composition-safety only.
+  initialCampaigns?: unknown;
+  initialCampaignId?: unknown;
+} = {}) {
+  const health = await getPipelineHealth();
 
-  // Same campaign-resolution rule the rest of the app uses: ?c=<uuid>
-  // wins, then the `fc_active_campaign` cookie, then the first active
-  // campaign. The sidebar in the shell follows the cookie fallback
-  // independently — this page controls only its own data. Skipped when
-  // the composer passes pre-fetched data.
-  let campaigns: CampaignSummary[];
-  let campaignId: string | null;
-  if (initialCampaigns !== undefined) {
-    campaigns = initialCampaigns;
-    campaignId = initialCampaignId ?? null;
-  } else {
-    const cookieStore = await cookies();
-    const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
-    campaigns = await listActiveCampaigns();
-    campaignId = resolveCurrentCampaignId(campaigns, c ?? cookieCampaign);
-  }
+  const okCount = health.stages.filter((s) => s.status === "ok").length;
+  const warnCount = health.stages.filter((s) => s.status === "warn").length;
+  const brokenCount = health.stages.filter((s) => s.status === "broken").length;
 
-  if (!campaignId) {
-    return (
-      <section id="automation" className="section" style={{ marginTop: 0 }}>
-        <div className="section-head">
-          <div>
-            <div className="section-title">
-              Automation pipeline <span className="new-tag">NEW</span>
-            </div>
-            <div className="section-sub">
-              Sign in to load your campaign pipeline.
-            </div>
-          </div>
-        </div>
-        <div className="mx-auto max-w-2xl rounded-[10px] border border-border bg-surface p-8 text-center shadow-[var(--shadow)]">
-          <Link
-            href="/"
-            className="inline-flex items-center rounded-[8px] bg-accent px-4 py-2 text-[13px] font-medium text-white hover:bg-accent-dark"
-          >
-            Go to sign-in
-          </Link>
-        </div>
-      </section>
-    );
-  }
+  const headerChipClass =
+    brokenCount > 0
+      ? "evidence-chip red"
+      : warnCount > 0
+        ? "evidence-chip pending"
+        : "evidence-chip";
 
-  const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
-  const [lanes, summary] = await Promise.all([
-    getPipelineLanes(campaignId),
-    getPipelineSummary(campaignId),
-  ]);
+  const headerChipText =
+    brokenCount > 0
+      ? `${brokenCount} stage${brokenCount === 1 ? "" : "s"} broken`
+      : warnCount > 0
+        ? `${warnCount} stage${warnCount === 1 ? "" : "s"} warn`
+        : `${okCount} / ${health.stages.length} stages healthy`;
 
   return (
     <section id="automation" className="section" style={{ marginTop: 0 }}>
-      {/* V4 `.section-head` (line 1298) — title on the left, evidence
-          chip + filter link on the right. */}
       <div className="section-head">
         <div>
           <div className="section-title">
-            Automation pipeline <span className="new-tag">NEW</span>
+            Automation pipeline <span className="new-tag">LIVE</span>
           </div>
           <div className="section-sub">
-            Every partner in every campaign, by where they sit in the flow.
-            Each lane has a batch-process button &mdash; one click moves 25
-            partners to the next step.
+            Nine launchd agents run the Forge Capital pipeline on
+            Tristan&rsquo;s Mac. This page is a read-only dashboard — it
+            reads Supabase + the local cron logs to show where each stage
+            stands. No buttons: the cron is owned by launchd, not the
+            web app.
           </div>
         </div>
         <div className="row" style={{ gap: 6 }}>
-          <span className="evidence-chip">
-            <span className="dot" />
-            Live across all {campaigns.length || 0} campaign
-            {campaigns.length === 1 ? "" : "s"}
-          </span>
-          <span className="section-link">
-            Campaign filter: {activeCampaign?.name ?? "—"} &rarr;
-          </span>
-        </div>
-      </div>
-
-      {/* V4 `.pipeline` wrapper (line 1309) contains the horizontal
-          `.pipe-lanes` grid + a footer `.pipe-summary` strip. */}
-      <div className="pipeline">
-        <div className="pipe-lanes">
-          {lanes.map((lane) => (
-            <Lane key={`${lane.label}-${lane.statusCode ?? "empty"}`} lane={lane} />
-          ))}
-        </div>
-
-        {/* V4 `.pipe-summary` footer (line 1435) — running tally strip
-            along the bottom. Numbers come from live Supabase counts. */}
-        <div className="pipe-summary">
-          <b>{summary.total}</b>{" "}
-          partner{summary.total === 1 ? "" : "s"} in{" "}
-          {activeCampaign?.name ?? "this campaign"} &middot;{" "}
-          <span>{summary.approvedPast} approved + past</span> &middot;{" "}
-          <span style={{ color: "var(--amber)" }}>
-            {summary.gateBlocked} blocked at a gate
-          </span>{" "}
-          &middot;{" "}
-          <span style={{ color: "var(--green)" }}>
-            {summary.replyInThisWeek} reply-in this week
-          </span>
           <span
-            style={{ marginLeft: "auto" }}
-            title="Hard-coded in V1 — wires to cron scheduler in Phase 8"
+            className={headerChipClass}
+            title="Aggregate health across all nine stages."
           >
-            Last batch run: <b>&mdash;</b> &middot; next auto-run Tue 09:00
+            <span className="dot" />
+            {headerChipText}
           </span>
         </div>
       </div>
 
-      {/* V4 `.walk-callout` yellow dashed footer strip (line 1444) —
-          verbatim from the mockup; tour-copy, not data. */}
+      {/* Last batch / next scheduled — pulled from launchd log mtime. */}
+      <div
+        className="pipe-summary"
+        style={{
+          marginTop: 0,
+          marginBottom: 14,
+          paddingTop: 0,
+          borderTop: "none",
+        }}
+      >
+        <span>
+          Last full-pipeline run:{" "}
+          <b>{formatLongTs(health.lastBatchAt)}</b>
+        </span>
+        <span>&middot;</span>
+        <span>
+          Next scheduled:{" "}
+          <b>{health.nextScheduledAt}</b>{" "}
+          <span style={{ color: "var(--text-faint)" }}>
+            (com.forgecapital.full-pipeline)
+          </span>
+        </span>
+        {!health.fsProbeAvailable ? (
+          <span
+            style={{ color: "var(--amber)" }}
+            title="This dashboard is running on a server with no access to ~/.forge-capital/*.log — all freshness chips fall back to Supabase-visible timestamps."
+          >
+            &middot; cron log mtimes unavailable (Supabase-only fallback)
+          </span>
+        ) : null}
+      </div>
+
+      {/* Two-column layout: vertical stepper on the left, side-cards on
+          the right. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) 300px",
+          gap: 16,
+          alignItems: "start",
+        }}
+      >
+        <ol
+          className="ms-stepper"
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            padding: "8px 14px",
+            background: "var(--surface)",
+          }}
+        >
+          {health.stages.map((stage, idx) => (
+            <StageRow
+              key={stage.id}
+              stage={stage}
+              isLast={idx === health.stages.length - 1}
+            />
+          ))}
+        </ol>
+
+        <div style={{ display: "grid", gap: 12 }}>
+          <EnrichmentCard days={health.enrichment7d} />
+          <QueueCard
+            pending={health.huntQueuePending}
+            stage={
+              health.stages.find((s) => s.id === "email-hunt-queue") ?? null
+            }
+          />
+          <GmailCard
+            stage={health.stages.find((s) => s.id === "gmail-sync") ?? null}
+          />
+        </div>
+      </div>
+
       <div className="walk-callout">
-        <span className="wc-num">3</span>
-        <b>This is the nerve centre.</b> Every partner sits in exactly one
-        lane. Batch actions promote cohorts of 10&ndash;25 partners at a
-        time. A human (you) only touches three lanes: the yellow flags in{" "}
-        <b>OOO</b>, the reply-in lane (log conversation), and the
-        reviewed-by-me lane (hit send in Gmail). The other six lanes run
-        on their own.
+        <span className="wc-num">!</span>
+        <b>Honest by design.</b> Every number comes from a Supabase count or
+        a log-file mtime — never from a hand-coded constant. If a stage
+        says &ldquo;broken&rdquo; the cron genuinely has not reported in for
+        &gt; 72h. If a stage says &ldquo;warn&rdquo; and its count is zero,
+        the underlying feature isn&rsquo;t deployed yet — not that the
+        cron failed.
       </div>
     </section>
   );
 }
 
-/**
- * Single `.lane` card. V4 markup (lines 1312-1325) is:
- *
- *   <div class="lane">
- *     <div class="lane-head">
- *       <div>
- *         <div class="lane-count">{count}</div>
- *         <div class="lane-label">{label}</div>
- *       </div>
- *     </div>
- *     <div class="lane-hint">{hint}</div>
- *     <div class="lane-pills">
- *       <div class="lane-pill"><span class="lp-name">…</span><span class="lp-age">…</span></div>
- *       …
- *       <div class="lane-pill"><span class="lp-name">+ N more</span><span class="lp-age"/></div>
- *     </div>
- *     <button class="lane-batch-btn">{cta}</button>
- *   </div>
- *
- * We copy that DOM exactly. Empty lanes still render the full skeleton
- * (hint + empty pills area) so the kanban grid stays visually uniform.
- */
-function Lane({ lane }: { lane: PipelineLane }) {
-  const countClass = lane.tone ? `lane-count ${lane.tone}` : "lane-count";
-  const pillExtraClass = lane.pillClass ? ` ${lane.pillClass}` : "";
+/* -------------------------------------------------------------------
+   Stepper row — one stage
+   ------------------------------------------------------------------- */
 
-  const overflow = lane.totalMatched - lane.items.length;
+function StageRow({ stage, isLast }: { stage: PipelineStage; isLast: boolean }) {
+  // Bullet styling: ok → done (green tick), warn → active (accent ring),
+  // broken → red ring.
+  const bulletClass =
+    stage.status === "ok"
+      ? "ms-step done"
+      : stage.status === "broken"
+        ? "ms-step active"
+        : "ms-step active";
 
-  // Batch CTA className + props. `disabled` variant matches V4 by
-  // using the className AND the `disabled` attribute — the mockup
-  // carries both on line 1430.
-  const ctaClass =
-    lane.batchCtaVariant === "ghost"
-      ? "lane-batch-btn ghost"
-      : lane.batchCtaVariant === "disabled"
-        ? "lane-batch-btn disabled"
-        : "lane-batch-btn";
-
-  return (
-    <div className="lane">
-      <div className="lane-head">
-        <div>
-          <div
-            className={countClass}
-            title={lane.statusLabel ? `${lane.statusCode} ${lane.statusLabel}` : undefined}
-          >
-            {lane.count}
-          </div>
-          <div className="lane-label">{lane.label}</div>
-        </div>
-      </div>
-      <div
-        className="lane-hint"
-        title={lane.emptyReason ?? undefined}
-      >
-        {lane.hint}
-      </div>
-      <div className="lane-pills">
-        {lane.items.length === 0 ? (
-          <EmptyLanePill reason={lane.emptyReason} />
-        ) : (
-          <>
-            {lane.items.map((item) => (
-              <LanePill
-                key={item.partnerId}
-                item={item}
-                extraClass={pillExtraClass}
-              />
-            ))}
-            {overflow > 0 ? (
-              <div className={`lane-pill${pillExtraClass}`}>
-                <span className="lp-name">+ {overflow} more</span>
-                <span className="lp-age" />
-              </div>
-            ) : null}
-          </>
-        )}
-      </div>
-      <button
-        type="button"
-        className={ctaClass}
-        disabled={lane.batchCtaVariant === "disabled"}
-        title={
-          lane.batchCtaVariant === "disabled"
-            ? "Batch actions land in Phase 8 — CTA shown for V4 parity"
-            : "Batch actions wire up in Phase 8 — CTA shown for V4 parity"
+  const bulletStyle: React.CSSProperties =
+    stage.status === "broken"
+      ? {
+          background: "var(--red)",
+          boxShadow: "0 0 0 3px var(--red-light)",
         }
-        style={{ cursor: "not-allowed", opacity: 0.85 }}
-      >
-        {lane.batchCta}
-      </button>
-    </div>
-  );
-}
+      : stage.status === "warn"
+        ? {
+            background: "var(--amber)",
+            boxShadow: "0 0 0 3px var(--amber-light)",
+          }
+        : {};
 
-function LanePill({
-  item,
-  extraClass,
-}: {
-  item: LaneItem;
-  extraClass: string;
-}) {
-  const firm = item.firmName ?? "—";
-  const age =
-    item.daysSince === null
-      ? ""
-      : item.daysSince === 0
-        ? "0d"
-        : `${item.daysSince}d`;
+  const rowBorder: React.CSSProperties = isLast
+    ? {}
+    : { borderBottom: "1px solid var(--border-soft)" };
 
   return (
-    <div
-      className={`lane-pill${extraClass}`}
-      title={item.partnerName ? `${item.partnerName} · ${firm}` : firm}
-    >
-      <span className="lp-name">{firm}</span>
-      <span className="lp-age">{age}</span>
-    </div>
-  );
-}
-
-/**
- * Placeholder pill for lanes with zero matching rows. Dashed box
- * keeps the vertical rhythm of the lane card even when there's no
- * partner to render.
- */
-function EmptyLanePill({ reason }: { reason?: string }) {
-  return (
-    <div
-      className="lane-pill"
-      title={reason ?? "No partners in this lane yet"}
+    <li
+      className={bulletClass}
       style={{
-        borderStyle: "dashed",
-        color: "var(--text-faint)",
-        justifyContent: "flex-start",
+        gap: 12,
+        padding: "12px 0",
+        alignItems: "flex-start",
+        ...rowBorder,
       }}
     >
-      <span className="lp-name" style={{ fontStyle: "italic" }}>
-        {reason ? "Lands in a later phase" : "No partners yet"}
+      <span
+        className="bullet"
+        style={{
+          marginTop: 3,
+          width: 18,
+          height: 18,
+          fontSize: 10,
+          ...bulletStyle,
+        }}
+        title={stage.statusReason}
+      >
+        {stage.status === "ok" ? "✓" : stage.status === "broken" ? "!" : ""}
       </span>
-      <span className="lp-age" />
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "baseline",
+          }}
+        >
+          <div>
+            {/* Deliberately NOT using className="label" — V4's
+                `.ms-step.done .label` applies a strikethrough that
+                would make healthy stages look dead. */}
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+              }}
+            >
+              {stage.label}
+            </span>
+            {stage.launchdLabel ? (
+              <span
+                style={{
+                  marginLeft: 8,
+                  color: "var(--text-faint)",
+                  fontSize: 10,
+                  fontFamily: "'SF Mono', ui-monospace, Menlo, monospace",
+                }}
+                title="launchd plist label"
+              >
+                {stage.launchdLabel}
+              </span>
+            ) : null}
+          </div>
+          <StatusChip status={stage.status} reason={stage.statusReason} />
+        </div>
+
+        <div
+          className="meta"
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: "var(--text-dim)",
+            lineHeight: 1.5,
+          }}
+        >
+          {stage.hint}
+        </div>
+
+        <div
+          className="ms-kv"
+          style={{ padding: "6px 0 0 0", fontSize: 12 }}
+          title={stage.countSource}
+        >
+          <span className="k">{stage.countLabel}</span>
+          <span className="v">{formatCount(stage.count)}</span>
+        </div>
+
+        <div
+          className="ms-kv"
+          style={{ padding: "2px 0", fontSize: 11 }}
+          title={stage.lastRunSource}
+        >
+          <span className="k">Last run</span>
+          <span className="v" style={{ fontWeight: 400 }}>
+            {formatRelative(stage.lastRunAt)}{" "}
+            <span style={{ color: "var(--text-faint)" }}>
+              &middot; {formatShortTs(stage.lastRunAt)}
+            </span>
+          </span>
+        </div>
+
+        <div className="ms-kv" style={{ padding: "2px 0", fontSize: 11 }}>
+          <span className="k">Cadence</span>
+          <span className="v" style={{ fontWeight: 400 }}>
+            {stage.cadence ?? "—"}
+          </span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function StatusChip({
+  status,
+  reason,
+}: {
+  status: StageStatus;
+  reason: string;
+}) {
+  const className =
+    status === "ok"
+      ? "evidence-chip"
+      : status === "warn"
+        ? "evidence-chip pending"
+        : "evidence-chip red";
+  const label =
+    status === "ok" ? "ok" : status === "warn" ? "warn" : "broken";
+  return (
+    <span className={className} title={reason}>
+      <span className="dot" />
+      {label}
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------
+   Sidebar cards
+   ------------------------------------------------------------------- */
+
+function EnrichmentCard({ days }: { days: EnrichmentDay[] }) {
+  const max = Math.max(1, ...days.map((d) => d.count));
+  const total = days.reduce((acc, d) => acc + d.count, 0);
+
+  return (
+    <div className="ms-card">
+      <h4>Enrichment · last 7 days</h4>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 6,
+          height: 64,
+          marginBottom: 6,
+        }}
+        title="Rows with a fresh synthesized_at per day, from public.investors_mirror."
+      >
+        {days.map((d) => {
+          const heightPct = Math.round((d.count / max) * 100);
+          return (
+            <div
+              key={d.day}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "flex-end",
+                height: "100%",
+              }}
+              title={`${d.day} · ${d.count} synthesised`}
+            >
+              <div
+                style={{
+                  height: `${Math.max(2, heightPct)}%`,
+                  background: d.count === 0 ? "var(--border)" : "var(--accent)",
+                  borderRadius: 3,
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div
+        className="ms-kv"
+        style={{ padding: "2px 0", fontSize: 11 }}
+      >
+        <span className="k">Total this week</span>
+        <span className="v">{formatCount(total)} rows</span>
+      </div>
+      <div
+        className="ms-kv"
+        style={{ padding: "2px 0", fontSize: 11 }}
+      >
+        <span className="k">Busiest day</span>
+        <span className="v">
+          {busiest(days)}
+        </span>
+      </div>
     </div>
   );
+}
+
+function QueueCard({
+  pending,
+  stage,
+}: {
+  pending: number;
+  stage: PipelineStage | null;
+}) {
+  return (
+    <div className="ms-card">
+      <h4>Email hunt queue</h4>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 700,
+          color:
+            pending === 0
+              ? "var(--text-faint)"
+              : pending > 25
+                ? "var(--amber)"
+                : "var(--accent)",
+          letterSpacing: "-0.02em",
+          lineHeight: 1,
+          marginBottom: 6,
+        }}
+      >
+        {pending}
+      </div>
+      <div
+        style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 8 }}
+      >
+        pending partners waiting for Hunter
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          color: "var(--text-faint)",
+          lineHeight: 1.4,
+        }}
+        title={stage?.statusReason}
+      >
+        {stage?.statusReason ??
+          "Users queue rows via Find-a-Match → Resolve email. The nightly pipeline drains them."}
+      </div>
+    </div>
+  );
+}
+
+function GmailCard({ stage }: { stage: PipelineStage | null }) {
+  const notDeployed = stage?.count === 0;
+  return (
+    <div className="ms-card">
+      <h4>Gmail sync</h4>
+      {notDeployed ? (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--amber)",
+              marginBottom: 8,
+              fontWeight: 500,
+            }}
+          >
+            Not yet deployed
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-dim)",
+              lineHeight: 1.5,
+            }}
+          >
+            Gmail sync not yet deployed — stats will populate once{" "}
+            <code
+              style={{
+                fontFamily:
+                  "'SF Mono', ui-monospace, Menlo, monospace",
+                fontSize: 10,
+                background: "var(--surface-alt)",
+                padding: "1px 4px",
+                borderRadius: 3,
+              }}
+            >
+              com.forgecapital.gmail-sync
+            </code>{" "}
+            lands.
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            className="ms-kv"
+            style={{ padding: "2px 0", fontSize: 11 }}
+          >
+            <span className="k">Events ingested</span>
+            <span className="v">{formatCount(stage?.count ?? 0)}</span>
+          </div>
+          <div
+            className="ms-kv"
+            style={{ padding: "2px 0", fontSize: 11 }}
+          >
+            <span className="k">Latest</span>
+            <span className="v">
+              {formatRelative(stage?.lastRunAt ?? null)}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------
+   Format helpers
+   ------------------------------------------------------------------- */
+
+function formatCount(n: number): string {
+  return n.toLocaleString("en-GB");
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const mins = Math.round(ms / (1000 * 60));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatShortTs(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}`;
+}
+
+function formatLongTs(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return formatShortTs(iso);
+}
+
+function busiest(days: EnrichmentDay[]): string {
+  if (days.length === 0) return "—";
+  const sorted = [...days].sort((a, b) => b.count - a.count);
+  const top = sorted[0];
+  if (!top || top.count === 0) return "no activity";
+  return `${top.day.slice(5)} · ${formatCount(top.count)} rows`;
 }

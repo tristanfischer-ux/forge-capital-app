@@ -10,17 +10,29 @@
  *   GMAIL_CLIENT_SECRET    — OAuth 2.0 client secret
  *   GMAIL_REDIRECT_URI     — e.g. https://forge-capital-app.vercel.app/api/auth/gmail/callback
  *
- * Only the `https://www.googleapis.com/auth/gmail.compose` scope — the
- * narrowest scope that lets us create drafts without reading mail. (Reading
- * inbound for the approval reply parser is a separate concern — Phase 6/8
- * can add scopes then.)
+ * Scopes granted (Phase 8):
+ *   - `gmail.compose`  — create drafts (Phase 4, existing).
+ *   - `gmail.readonly` — list + fetch messages so the inbound sync daemon
+ *                        (scripts/gmail-sync.ts) can find replies/bounces
+ *                        from campaign_partners and upsert contact_events.
+ *
+ * `gmail.metadata` would be narrower but forbids the `q=` search parameter
+ * we need to filter by from:/to:/after: — so readonly is the right call.
  *
  * `access_type=offline` + `prompt=consent` are mandatory: offline so we
  * get a refresh_token, consent-prompt so we re-get a refresh_token on
  * subsequent authorisations if the user has already granted before.
+ *
+ * Users who connected pre-Phase-8 have only `gmail.compose` — the inbound
+ * daemon will log a "scope_insufficient" status for those rows and skip
+ * them until the user reconnects via /api/auth/gmail.
  */
 
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+export const GMAIL_SCOPES = [
+  "https://www.googleapis.com/auth/gmail.compose",
+  "https://www.googleapis.com/auth/gmail.readonly",
+];
+export const GMAIL_SCOPE = GMAIL_SCOPES.join(" ");
 
 export function buildAuthorizationUrl(state: string): string {
   const clientId = process.env.GMAIL_CLIENT_ID;
