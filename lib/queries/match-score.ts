@@ -10,7 +10,7 @@ import type {
   GetMatchScoreResult,
 } from "@/lib/queries/match-score-types";
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
-import { embedQueryText } from "@/lib/embeddings/replicate";
+import { embedQueryText } from "@/lib/embeddings/openai";
 
 /**
  * Match-scoring query for §3 "Find a Match" — V4 lines 913–1147.
