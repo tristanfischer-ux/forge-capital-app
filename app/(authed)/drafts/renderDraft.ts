@@ -140,7 +140,10 @@ function renderBody(
       "[Company paragraph missing — add one to the email_templates row before sending.]",
   );
 
-  // 3. Intelligent synthesis with {{FIRM_NAME}} + {{FIRM_THESIS}} fills.
+  // 3. Per-investor synthesis with {{FIRM_NAME}} + {{FIRM_THESIS}} fills.
+  // The DB column is still `intelligent_synthesis_template` (named before
+  // the "no AI-talk in product" voice rule); the user-visible placeholder
+  // below avoids the banned word.
   const synthesisTemplate = template?.intelligent_synthesis_template?.trim();
   if (synthesisTemplate) {
     const shortThesis = shortenThesisForHedge(
@@ -153,7 +156,7 @@ function renderBody(
     paragraphs.push(rendered);
   } else {
     paragraphs.push(
-      "[Intelligent synthesis template missing — add one (must open with a Rule-1 hedge) to the email_templates row before sending.]",
+      "[Per-investor synthesis template missing — add one (must open with a Rule-1 hedge) to the email_templates row before sending.]",
     );
   }
 

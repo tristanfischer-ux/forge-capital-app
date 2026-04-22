@@ -262,7 +262,7 @@ function PopulatedBody({
         kind="prose"
       />
       <Part
-        label="3. Intelligent synthesis"
+        label="3. Per-investor synthesis"
         body={template.intelligent_synthesis_template}
         kind="synthesis"
         varClass={varClass}
@@ -474,7 +474,7 @@ function GreyedPlaceholderBody({
         }
       />
       <EmptyPart4
-        label="3. Intelligent synthesis"
+        label="3. Per-investor synthesis"
         hint={
           side === "asking"
             ? "Hedged thesis match (Rule 1: “My understanding is that…”)."

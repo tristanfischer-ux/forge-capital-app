@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
+import {
+  computeCampaignWeek,
+  counterpartLabel,
+} from "@/lib/queries/campaigns-shared";
 import { EditCampaignPanel } from "./campaigns/EditCampaignPanel";
 
 /**
@@ -274,13 +278,12 @@ function CampaignOption({
             {intentLabel(campaign.campaign_intent)}
           </span>
         </div>
-        {/* V4 .s subtitle carries "Archetype · founder · week N of 16".
-            V1 has no founder column wired to campaigns yet — render a
-            minimal archetype hint so the row isn't blank. Once a
-            counterpart column lands, plug it in here.
-            TODO: wires to campaigns.counterpart_name once the column
-            migration lands. */}
-        <div className="s">{archetypeCopy(campaign.campaign_intent)}</div>
+        {/* V4 `.s` subtitle: "Archetype · counterpart · week N of M".
+            Counterpart name + week come from the campaign row (migration
+            012 added counterpart_name; week_started_at + week_count_target
+            were present earlier). Both are optional — when either is null
+            we drop the segment honestly rather than render placeholders. */}
+        <div className="s">{campaignSubtitle(campaign)}</div>
       </div>
       <div className="ct">{campaign.partner_count.toLocaleString("en-GB")}</div>
     </Link>
@@ -303,6 +306,16 @@ function archetypeCopy(intent: CampaignSummary["campaign_intent"]): string {
   if (intent === "investor") return "Money in · sell equity";
   if (intent === "customer") return "Money in · sell product";
   return "Money out · buyer posture";
+}
+
+function campaignSubtitle(campaign: CampaignSummary): string {
+  const parts = [archetypeCopy(campaign.campaign_intent)];
+  if (campaign.counterpart_name?.trim()) {
+    parts.push(counterpartLabel(campaign, "title"));
+  }
+  const week = computeCampaignWeek(campaign);
+  if (week) parts.push(`Week ${week.current} of ${week.total}`);
+  return parts.join(" · ");
 }
 
 /**

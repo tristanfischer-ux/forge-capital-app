@@ -24,11 +24,13 @@ import { CreateGmailDraftButton } from "./CreateGmailDraftButton";
  * copy").
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default async function DraftPage(props: any) {
+export default async function DraftPage({
+  params,
+}: {
   // Next.js 16 App Router: params is a Promise in RSCs.
-  const params = await props.params;
-  const campaignPartnerId = params?.campaignPartnerId as string | undefined;
+  params: Promise<{ campaignPartnerId: string }>;
+}) {
+  const { campaignPartnerId } = await params;
   if (!campaignPartnerId) notFound();
 
   const data = await getInvestorModalData(campaignPartnerId);

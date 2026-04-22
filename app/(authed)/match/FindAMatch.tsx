@@ -673,7 +673,18 @@ function AutoSuggestBanner({
         words detected: <span>{signalsText}</span>.
       </span>
       {differs ? (
-        <span className="as-link" onClick={onOverride} role="button" tabIndex={0}>
+        <span
+          className="as-link"
+          onClick={onOverride}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOverride();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+        >
           Override →
         </span>
       ) : (
