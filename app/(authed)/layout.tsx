@@ -8,6 +8,7 @@ import { CampaignDropdown } from "./CampaignDropdown";
 import { TopNav } from "./TopNav";
 import { WalkTourStrip } from "./WalkTourStrip";
 import { EmailHuntModal } from "./match/EmailHuntModal";
+import { Breadcrumbs, BreadcrumbsProvider } from "./Breadcrumbs";
 
 /**
  * Authed shell — 1:1 port of V4 topbar + layout chrome
@@ -44,7 +45,7 @@ export default async function AuthedLayout({
   const totalActive = campaigns.length;
 
   return (
-    <>
+    <BreadcrumbsProvider>
       <TopBar
         campaigns={campaigns}
         activeCampaignId={activeCampaignId}
@@ -60,6 +61,14 @@ export default async function AuthedLayout({
         style={{ gridTemplateColumns: "minmax(0, 1fr)" }}
       >
         <main className="main">
+          {/* Breadcrumb strip — auto-derived from pathname via
+              lib/ui/breadcrumb-schema. Sits above the walk-tour callout
+              so the hierarchy reads: topbar · breadcrumbs · tour ·
+              content. Pages with dynamic segments (/investor/[id],
+              /tracker/[id]/draft) can render <BreadcrumbsOverride
+              label="..." /> inside their body to swap the final crumb
+              for a human-readable string. */}
+          <Breadcrumbs />
           <WalkTourStrip />
           {children}
         </main>
@@ -71,7 +80,7 @@ export default async function AuthedLayout({
           `new CustomEvent("fc:resolve-email", { detail: { investorId } })`.
           Always-mounted, native <dialog> handles focus + Escape. */}
       <EmailHuntModal />
-    </>
+    </BreadcrumbsProvider>
   );
 }
 

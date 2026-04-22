@@ -626,3 +626,43 @@ button {
   background: var(--red-light);
   border: 1px solid #fecaca;
 }
+
+/* -----------------------------------------------------------------------------
+   Breadcrumb strip (2026-04-22) — thin nav row in the authed shell between
+   the topbar and the walk-tour callout. V4-token only: --text-dim for link
+   colour, --accent for the current page, --border-soft as a divider line.
+   ----------------------------------------------------------------------------- */
+.bcrumbs {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  height: 24px;
+  padding: 0 2px;
+  margin: 0 0 10px 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.bcrumbs a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.12s ease;
+}
+
+.bcrumbs a:hover {
+  color: var(--text);
+}
+
+.bcrumbs-sep {
+  color: var(--text-dim);
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+.bcrumbs-current {
+  color: var(--accent);
+  font-weight: 600;
+}

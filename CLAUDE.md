@@ -244,6 +244,33 @@ the commit message which sections rely on them.
 - Don't flip a repo from private to public without stating the decision
   in the commit message.
 
+## Infrastructure — full control, no clickthroughs
+
+Tristan has authorised the agent to act directly on:
+
+- **Vercel** — the `vercel` CLI is already logged in as him. Use it for
+  env vars (`vercel env add/rm/ls`), deploys (`vercel --prod`,
+  `vercel inspect`), domain config, project settings. Never tell
+  Tristan "go to the Vercel dashboard and paste X" — execute it.
+- **Supabase** — project `kgkajatjyqfetdtbzmwg` (apex-outreach) is
+  reachable via the `mcp__claude_ai_Supabase__*` MCP tools: migrations
+  via `apply_migration`, raw SQL via `execute_sql`, edge functions via
+  `deploy_edge_function`, storage/policies the same way. Never tell
+  Tristan to open the SQL editor.
+
+**Third-party services that still need Tristan's own login** (no CLI
+or MCP): Google Cloud Console (OAuth consent screens), Replicate
+(only for signup + initial token — once the token exists, Vercel env
+is the agent's job), Stripe, Gmail Workspace admin. When Tristan hands
+over a secret for one of these, the agent installs it across Vercel
+envs + local `.env.local` + any code wiring + verifies end-to-end —
+Tristan's handover is the last manual step.
+
+Codified 2026-04-22 after Tristan flagged it: "You have full control
+over Vercel. Please do not ask me to do Vercel. Claude.md should have
+very clear instructions that you have full control over Vercel and
+you have full control over Supabase."
+
 ## Lessons learned — what worked (verified 2026-04-22)
 
 The HTML-as-code port approach succeeded. Parity scan of `/home` vs

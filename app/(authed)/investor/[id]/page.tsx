@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInvestorProfile } from "@/lib/queries/investor-profile";
 import { InvestorProfileView } from "./InvestorProfileView";
+import { BreadcrumbsOverride } from "../../Breadcrumbs";
 
 /**
  * Investor profile — full drill-down page reached from double-clicking a
@@ -22,6 +23,10 @@ export default async function InvestorProfilePage(props: {
 
   return (
     <section className="section" style={{ scrollMarginTop: 64 }}>
+      {/* Swap the final breadcrumb (default: raw firm id) for the firm's
+          human-readable name. Layout-level <Breadcrumbs /> picks this up
+          through BreadcrumbsProvider context. */}
+      <BreadcrumbsOverride label={profile.firm_name ?? "Unnamed firm"} />
       <div className="section-head">
         <div>
           <h2 className="section-title">
