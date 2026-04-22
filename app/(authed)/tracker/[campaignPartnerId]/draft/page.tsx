@@ -102,7 +102,17 @@ export default async function DraftPage({
               To
             </span>
             <span className="text-text">
-              {draft.toDisplay}
+              {data.primary_partner?.id != null ? (
+                <Link
+                  href={`/partner/${data.primary_partner.id}`}
+                  className="partner-link"
+                  aria-label={`Open partner profile for ${draft.toDisplay}`}
+                >
+                  {draft.toDisplay}
+                </Link>
+              ) : (
+                draft.toDisplay
+              )}
               {draft.toEmail ? (
                 <span className="ml-1 text-text-dim">
                   &lt;{draft.toEmail}&gt;

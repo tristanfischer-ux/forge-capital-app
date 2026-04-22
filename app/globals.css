@@ -666,3 +666,21 @@ button {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* Partner-name links (2026-04-22) — every place a partner name renders
+   becomes a Link to /partner/[id]. Shared helper: inherits the
+   surrounding colour/weight so the existing V4 chip / cell / headline
+   typography is preserved, reveals a dashed underline only on hover
+   so the affordance is visible without shifting layout. */
+.partner-link,
+.tag-chip-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dashed transparent;
+  transition: border-bottom-color 0.1s ease, color 0.1s ease;
+}
+.partner-link:hover,
+.tag-chip-link:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}

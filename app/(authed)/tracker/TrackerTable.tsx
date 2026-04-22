@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import Link from "next/link";
 import type { TrackerRow } from "@/lib/queries/tracker";
 import { StatusBadge } from "./StatusBadge";
 import { TrackerRowDrawer } from "./TrackerRowDrawer";
@@ -246,7 +247,18 @@ export function TrackerTable({
                   <td>
                     <div className="firm-c">{row.firm_name ?? "—"}</div>
                     <div className="contact-c">
-                      {row.partner_name ?? "—"}
+                      {row.partner_id != null && row.partner_name ? (
+                        <Link
+                          href={`/partner/${row.partner_id}`}
+                          className="partner-link"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Open partner profile for ${row.partner_name}`}
+                        >
+                          {row.partner_name}
+                        </Link>
+                      ) : (
+                        row.partner_name ?? "—"
+                      )}
                       {row.partner_title ? (
                         <>
                           {" · "}

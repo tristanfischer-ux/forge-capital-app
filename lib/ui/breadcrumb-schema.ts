@@ -63,6 +63,18 @@ export const DYNAMIC_TRAILS: DynamicTrailMatcher[] = [
     ],
   },
   {
+    // /partner/[id] → Home · Find a Match · Partner
+    // Rarely reached directly; the usual pathway is match → investor
+    // profile → partner. Default label is "Partner"; pages override
+    // via <BreadcrumbsOverride> with the partner's real name.
+    match: /^\/partner\/(?<id>[^/]+)$/,
+    build: () => [
+      { label: "Home", href: "/home" },
+      { label: "Find a Match", href: "/match" },
+      { label: "Partner" },
+    ],
+  },
+  {
     // /tracker/[campaignPartnerId]/draft → Home · Tracker · Draft email
     match: /^\/tracker\/(?<cpid>[^/]+)\/draft$/,
     build: () => [

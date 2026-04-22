@@ -1787,7 +1787,18 @@ function ResultTagRow({ row }: { row: MatchResultRow }) {
       {row.primary_partner?.name ? (
         <span className="tag-chip">
           <span>↳</span>
-          {row.primary_partner.name}
+          {row.primary_partner.id != null ? (
+            <Link
+              href={`/partner/${row.primary_partner.id}`}
+              className="tag-chip-link"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Open partner profile for ${row.primary_partner.name}`}
+            >
+              {row.primary_partner.name}
+            </Link>
+          ) : (
+            row.primary_partner.name
+          )}
           {row.primary_partner.title ? ` · ${row.primary_partner.title}` : ""}
         </span>
       ) : null}

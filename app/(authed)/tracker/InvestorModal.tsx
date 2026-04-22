@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { InvestorModalData, InvestorModalPartner } from "@/lib/queries/investorModal";
 import { TierBadge } from "./TierBadge";
 import { StatusBadge } from "./StatusBadge";
@@ -207,7 +208,17 @@ function InvestorModalContent({
         {primary_partner ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
             <span className="font-semibold text-text">
-              {primary_partner.name ?? "Unnamed partner"}
+              {primary_partner.id != null && primary_partner.name ? (
+                <Link
+                  href={`/partner/${primary_partner.id}`}
+                  className="partner-link"
+                  aria-label={`Open partner profile for ${primary_partner.name}`}
+                >
+                  {primary_partner.name}
+                </Link>
+              ) : (
+                primary_partner.name ?? "Unnamed partner"
+              )}
             </span>
             {primary_partner.title ? (
               <span className="text-text-dim">· {primary_partner.title}</span>
@@ -464,7 +475,17 @@ function TeamCard({ partner }: { partner: InvestorModalPartner }) {
   return (
     <div className="rounded-lg border border-border bg-surface-alt p-3 text-[12px]">
       <div className="text-[13px] font-semibold text-text">
-        {partner.name ?? "Unnamed partner"}
+        {partner.id != null && partner.name ? (
+          <Link
+            href={`/partner/${partner.id}`}
+            className="partner-link"
+            aria-label={`Open partner profile for ${partner.name}`}
+          >
+            {partner.name}
+          </Link>
+        ) : (
+          partner.name ?? "Unnamed partner"
+        )}
       </div>
       {partner.title ? (
         <div className="mt-0.5 text-[11px] text-text-dim">{partner.title}</div>

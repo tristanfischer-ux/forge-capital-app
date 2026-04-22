@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type {
   InvestorProfileData,
   InvestorProfilePartner,
@@ -238,7 +239,17 @@ function PartnerCard({ partner }: { partner: InvestorProfilePartner }) {
         }}
       >
         <div style={{ fontWeight: 600, fontSize: 13 }}>
-          {partner.name ?? "Unnamed partner"}
+          {partner.id != null && partner.name ? (
+            <Link
+              href={`/partner/${partner.id}`}
+              className="partner-link"
+              aria-label={`Open partner profile for ${partner.name}`}
+            >
+              {partner.name}
+            </Link>
+          ) : (
+            partner.name ?? "Unnamed partner"
+          )}
           {partner.is_primary_contact ? (
             <span
               className="tag-chip tag-approved"

@@ -28,6 +28,8 @@ export interface TrackerRow {
   email_tier: EmailTier;
   days_since_last_contact: number | null;
   firm_name: string | null;
+  /** partners_mirror.id — used for deep-linking the FIRM · CONTACT name to /partner/[id]. */
+  partner_id: number | null;
   partner_name: string | null;
   partner_title: string | null;
   /** Two-sentence summary derived from `investors_mirror.thesis_summary`. */
@@ -54,6 +56,7 @@ interface TrackerJoinRow {
   status_label: string | null;
   last_contact_at: string | null;
   partners_mirror: {
+    id: number | null;
     name: string | null;
     title: string | null;
     email_tier: string | null;
@@ -303,6 +306,7 @@ export async function getTrackerRows(
       status_label,
       last_contact_at,
       partners_mirror:partner_id (
+        id,
         name,
         title,
         email_tier,
@@ -373,6 +377,7 @@ export async function getTrackerRows(
       email_tier: (partner?.email_tier ?? null) as EmailTier,
       days_since_last_contact: daysSince,
       firm_name: investor?.firm_name ?? null,
+      partner_id: partner?.id ?? null,
       partner_name: partner?.name ?? null,
       partner_title: partner?.title ?? null,
       company_summary: deriveCompanySummary(investor?.thesis_summary ?? null),
