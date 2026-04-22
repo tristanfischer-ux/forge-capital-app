@@ -10,6 +10,7 @@ import type {
   GetMatchScoreResult,
 } from "@/lib/queries/match-score-types";
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
+import { embedQueryText } from "@/lib/embeddings/replicate";
 
 /**
  * Match-scoring query for §3 "Find a Match" — V4 lines 913–1147.
@@ -590,11 +591,61 @@ export async function getMatchScore(
     });
   }
 
-  // Step 2: pick a candidate pool. V1 pulls `candidatePool` rows ordered by
-  // synthesized_at desc (freshest first). Real ranking happens in Node. We
-  // also exclude firms already on the CURRENT campaign (the V4 default:
-  // "already-contacted hidden") unless the caller asks otherwise.
+  // Step 2: pick a candidate pool. Two strategies, chosen at runtime:
+  //
+  // HYBRID (when REPLICATE_API_TOKEN is present AND investor rows have
+  // embeddings populated): embed the founder's pitch via Replicate-hosted
+  // nomic-embed-text, then use the `match_investors_by_embedding` RPC to
+  // pull the top `candidatePool` investors by cosine similarity. Those
+  // become the pool the lexical reranker chews through. Matches the
+  // quality of Forge Capital's static dashboard (same 768-dim model).
+  //
+  // LEXICAL (fallback): pull `candidatePool` rows by `synthesized_at`
+  // freshness. The legacy V1 behaviour — still scores correctly, just
+  // with a less-relevant candidate set. Kicks in when there's no
+  // Replicate token, no embedded rows, or the Replicate call errors.
+  //
+  // Either way, we also exclude firms already on the CURRENT campaign
+  // (the V4 default "already-contacted hidden") unless the caller
+  // opts out via `hideContacted=false`.
   const existingIds = Array.from(currentByInvestor.keys());
+  const excludeIds = hideContacted ? existingIds.slice(0, 2000) : [];
+
+  // Try the embedding route first. Fail silently to lexical on any error.
+  let annIds: number[] | null = null;
+  let embedInfo: { dims: number; latencyMs: number } | null = null;
+  const embedResult = await embedQueryText(heroText);
+  if (embedResult.ok) {
+    embedInfo = { dims: embedResult.dims, latencyMs: embedResult.latencyMs };
+    const { data: annRows, error: annErr } = await supabase.rpc(
+      "match_investors_by_embedding",
+      {
+        query_embedding: embedResult.vector,
+        match_count: Math.min(candidatePool, 2000),
+      },
+    );
+    if (annErr) {
+      console.warn(
+        "[match-score] ANN RPC failed, falling back to lexical:",
+        annErr.message,
+      );
+    } else {
+      const rows = (annRows ?? []) as Array<{ id: number }>;
+      annIds = rows
+        .map((r) => r.id)
+        .filter((id) => !excludeIds.includes(id))
+        .slice(0, candidatePool);
+    }
+  } else if (embedResult.kind !== "no_token") {
+    // no_token is expected in dev without the key — don't spam the logs.
+    console.warn(
+      "[match-score] Replicate embedding failed, falling back to lexical:",
+      embedResult.error,
+    );
+  }
+
+  const usingHybrid = annIds !== null && annIds.length > 0;
+
   let candidatesQuery = supabase
     .from("investors_mirror")
     .select(
@@ -609,17 +660,22 @@ export async function getMatchScore(
       )
       `,
     )
-    .eq("actively_deploying", true)
-    // Order by freshness — rows synthesised today rank higher in the pool.
-    .order("synthesized_at", { ascending: false, nullsFirst: false })
-    .order("id", { ascending: true })
-    .limit(candidatePool);
+    .eq("actively_deploying", true);
 
-  if (hideContacted && existingIds.length > 0) {
-    // Exclude investors already on the current campaign from the pool so
-    // they don't displace fresh matches. The "show all" toggle turns this off.
-    const idList = existingIds.slice(0, 2000).join(",");
-    candidatesQuery = candidatesQuery.not("id", "in", `(${idList})`);
+  if (usingHybrid) {
+    // Fetch exactly the semantically-similar ids. Order is lost on the
+    // `.in()` PostgREST roundtrip — we re-sort by the ANN rank below.
+    candidatesQuery = candidatesQuery.in("id", annIds!);
+  } else {
+    // Legacy lexical pool — ordered by freshness, limited to candidatePool.
+    candidatesQuery = candidatesQuery
+      .order("synthesized_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: true })
+      .limit(candidatePool);
+    if (excludeIds.length > 0) {
+      const idList = excludeIds.join(",");
+      candidatesQuery = candidatesQuery.not("id", "in", `(${idList})`);
+    }
   }
 
   const { data: poolData, error: poolErr } = await candidatesQuery;
@@ -635,7 +691,29 @@ export async function getMatchScore(
       suggestedArchetype: suggested,
     };
   }
-  const candidates = (poolData ?? []) as unknown as CandidateRow[];
+  let candidates = (poolData ?? []) as unknown as CandidateRow[];
+
+  // When hybrid retrieval is active, preserve ANN rank by sorting the
+  // fetched rows against the original annIds order — PostgREST's .in()
+  // doesn't honour input order.
+  if (usingHybrid && annIds) {
+    const rankById = new Map(annIds.map((id, i) => [id, i]));
+    candidates = [...candidates].sort(
+      (a, b) =>
+        (rankById.get(a.id) ?? Number.POSITIVE_INFINITY) -
+        (rankById.get(b.id) ?? Number.POSITIVE_INFINITY),
+    );
+  }
+
+  if (embedInfo && usingHybrid) {
+    console.log(
+      `[match-score] hybrid pool=${candidates.length} embed=${embedInfo.dims}d ${embedInfo.latencyMs}ms`,
+    );
+  } else if (embedInfo) {
+    console.log(
+      `[match-score] lexical pool=${candidates.length} (embed succeeded but ANN returned 0 ids)`,
+    );
+  }
 
   // Step 2b: load manual email overrides for any partner in the pool.
   // Overrides are user-provided addresses (migration 013). They bump the
