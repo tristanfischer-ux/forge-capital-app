@@ -87,9 +87,11 @@ export interface WeeklySummary {
   campaignIntent: "investor" | "customer" | "supplier";
   /** Calendar week number of this year (1-53). */
   weekNumber: number;
-  /** N of 16. Uses week-of-campaign (diff against created_at) when possible. */
+  /** N of (weekCountTarget). Uses week_started_at (migration 012), falls
+   *  back to created_at. Null if both are unset. */
   weekOfCampaign: number | null;
-  /** Honest placeholder until campaigns.counterpart_* columns land. */
+  /** Total weeks for the subject line "Week N of M". Default 16. */
+  weekCountTarget: number;
   counterpartName: string | null;
   counterpartEmail: string | null;
   generatedAt: string;
@@ -209,7 +211,9 @@ async function getWeeklySummaryForCampaign(
   // vs "Buyer emails sent" label.
   const { data: campaignData, error: campaignErr } = await supabase
     .from("campaigns")
-    .select("id, name, campaign_intent, created_at")
+    .select(
+      "id, name, campaign_intent, created_at, counterpart_name, counterpart_email, week_started_at, week_count_target",
+    )
     .eq("id", campaignId)
     .single();
 
@@ -480,14 +484,26 @@ async function getWeeklySummaryForCampaign(
   }
 
   // -------- Campaign clock --------
+  // Migration 012 added `week_started_at` + `week_count_target`. Prefer
+  // those when set; fall back to `created_at` so existing campaigns
+  // still render something reasonable.
   const weekNumber = isoWeekNumber(now);
   let weekOfCampaign: number | null = null;
-  if (campaign.created_at) {
-    const diff = now.getTime() - new Date(campaign.created_at).getTime();
+  const campaignAny = campaign as {
+    week_started_at?: string | null;
+    created_at?: string | null;
+    counterpart_name?: string | null;
+    counterpart_email?: string | null;
+    week_count_target?: number | null;
+  };
+  const clockStart = campaignAny.week_started_at ?? campaignAny.created_at ?? null;
+  if (clockStart) {
+    const diff = now.getTime() - new Date(clockStart).getTime();
     if (diff >= 0) {
       weekOfCampaign = Math.floor(diff / MS_PER_WEEK) + 1;
     }
   }
+  const weekCountTarget = campaignAny.week_count_target ?? 16;
 
   return {
     campaignId: campaign.id,
@@ -495,11 +511,9 @@ async function getWeeklySummaryForCampaign(
     campaignIntent: intent,
     weekNumber,
     weekOfCampaign,
-    // V1 has no campaigns.counterpart_name / counterpart_email column.
-    // Rather than invent, we emit null and let the page render an
-    // honest "TBD — wires to campaigns table in a later phase" chip.
-    counterpartName: null,
-    counterpartEmail: null,
+    weekCountTarget,
+    counterpartName: campaignAny.counterpart_name ?? null,
+    counterpartEmail: campaignAny.counterpart_email ?? null,
     generatedAt: now.toISOString(),
     tiles,
     pipelinePoints,

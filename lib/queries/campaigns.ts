@@ -14,6 +14,13 @@ export interface CampaignSummary {
   partner_count: number;
   /** Timestamp the campaign row was created. Drives "week N of 16" clock. */
   created_at: string | null;
+  /** Editable per-campaign metadata. Nullable — UI shows an honest
+   *  empty state + "Edit campaign" affordance when missing. */
+  counterpart_name: string | null;
+  counterpart_email: string | null;
+  counterpart_role: string | null;
+  week_started_at: string | null;
+  week_count_target: number | null;
 }
 
 /**
@@ -32,7 +39,9 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
   const [campaignsResult, partnersResult] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, name, campaign_intent, status, created_at")
+      .select(
+        "id, name, campaign_intent, status, created_at, counterpart_name, counterpart_email, counterpart_role, week_started_at, week_count_target",
+      )
       .neq("status", "archived")
       .order("name", { ascending: true }),
     supabase.from("campaign_partners").select("campaign_id"),
@@ -59,6 +68,11 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
     campaign_intent: string;
     status: string;
     created_at: string | null;
+    counterpart_name: string | null;
+    counterpart_email: string | null;
+    counterpart_role: string | null;
+    week_started_at: string | null;
+    week_count_target: number | null;
   }
   const campaignRows = (campaignsResult.data ?? []) as unknown as CampaignJoinRow[];
   return campaignRows.map((row) => ({
@@ -68,7 +82,50 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
     status: row.status,
     partner_count: counts.get(row.id) ?? 0,
     created_at: row.created_at ?? null,
+    counterpart_name: row.counterpart_name,
+    counterpart_email: row.counterpart_email,
+    counterpart_role: row.counterpart_role,
+    week_started_at: row.week_started_at,
+    week_count_target: row.week_count_target,
   }));
+}
+
+/** Returns the counterpart_name if set, else a fallback. Callers pass
+ *  a variant — "title" for headings ("Andrew Murphy"), "phrase" for
+ *  mid-sentence use ("your counterpart"), or "possessive" for things
+ *  like "Stephan's reply" → "your counterpart's reply". Used
+ *  everywhere the V4 mockup hardcoded "Stephan". */
+export function counterpartLabel(
+  campaign: Pick<CampaignSummary, "counterpart_name">,
+  variant: "title" | "phrase" | "possessive" = "phrase",
+): string {
+  const name = campaign.counterpart_name?.trim();
+  if (name) {
+    if (variant === "possessive") {
+      // "Andrew" → "Andrew's"; "Mary Ellis" → "Mary Ellis's"
+      return name.endsWith("s") ? `${name}'` : `${name}'s`;
+    }
+    return name;
+  }
+  if (variant === "title") return "Counterpart TBD";
+  if (variant === "possessive") return "the counterpart's";
+  return "the counterpart";
+}
+
+/** Compute "Week N of M" from the campaign's week_started_at clock.
+ *  Returns null if week_started_at isn't set — UI falls back to an
+ *  honest "Week 1 · starting" or just the campaign name. */
+export function computeCampaignWeek(
+  campaign: Pick<CampaignSummary, "week_started_at" | "week_count_target">,
+): { current: number; total: number } | null {
+  if (!campaign.week_started_at) return null;
+  const start = new Date(campaign.week_started_at);
+  if (Number.isNaN(start.getTime())) return null;
+  const elapsedMs = Date.now() - start.getTime();
+  const weeksElapsed = Math.floor(elapsedMs / (7 * 24 * 60 * 60 * 1000));
+  const current = Math.max(1, weeksElapsed + 1);
+  const total = campaign.week_count_target ?? 16;
+  return { current, total };
 }
 
 /**

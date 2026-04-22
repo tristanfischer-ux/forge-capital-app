@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
+  counterpartLabel,
   type CampaignSummary,
 } from "@/lib/queries/campaigns";
 import {
@@ -87,6 +88,15 @@ export default async function ApprovalPage({
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId) ?? null;
   const campaignName = activeCampaign?.name ?? meta?.campaign_name ?? null;
+  const counterpartName = activeCampaign
+    ? counterpartLabel(activeCampaign, "title")
+    : "Counterpart TBD";
+  const counterpartPhrase = activeCampaign
+    ? counterpartLabel(activeCampaign, "phrase")
+    : "the counterpart";
+  const counterpartPossessive = activeCampaign
+    ? counterpartLabel(activeCampaign, "possessive")
+    : "the counterpart's";
 
   return (
     <section id="approval" className="section" style={{ marginTop: 0 }}>
@@ -103,41 +113,42 @@ export default async function ApprovalPage({
             ) : null}
           </div>
           <div className="section-sub">
-            Left: what Stephan sees (names + synthesis, <b>no emails</b>).
-            Right: what you see when approvals come back. One click ingests
-            them all into the tracker.
+            Above: what {counterpartName} sees (names + synthesis,{" "}
+            <b>no emails</b>). Below: what you see when approvals come back.
+            One click ingests them all into the tracker.{" "}
+            <b>Nothing is sent without your review.</b>
           </div>
         </div>
-        {/* V4 `.section-link` — customer-view switch lands in Phase 6. */}
-        <span
-          className="section-link"
-          title="Customer (Chris Kirk) view lands in a later phase."
-          style={{ cursor: "not-allowed", opacity: 0.7 }}
-        >
-          Switch to customer (Chris Kirk) view &rarr;
-        </span>
       </div>
 
-      <div className="approval-grid">
+      {/* Walk-callout moved to the TOP so instructions come before the
+          artefact, not after. */}
+      <div className="walk-callout" style={{ marginBottom: 14 }}>
+        <span className="wc-num">2</span>
+        <b>How the two-way artefact works.</b> The outgoing sheet below is
+        plain Google Sheets &mdash; {counterpartName} doesn&rsquo;t log in
+        anywhere. They reply by email with annotations. Our parser pulls
+        the ok / flag / reject decisions into the incoming panel. You read
+        any flagged rows and hit <b>Ingest</b> — only then do approved
+        partners move forward. Nothing sends automatically.
+      </div>
+
+      {/* Stacked layout — outgoing on top, incoming below. They're
+          different workflows (what goes out vs. what comes back), so
+          reading them top-to-bottom reflects the real sequence. */}
+      <div className="approval-col-stack" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <OutgoingColumn
           campaignId={campaignId}
           rows={pending}
+          counterpartName={counterpartName}
+          counterpartPossessive={counterpartPossessive}
         />
         <IncomingColumn
           rows={incoming.rows}
           stats={incoming.stats}
+          counterpartName={counterpartName}
+          counterpartPossessive={counterpartPossessive}
         />
-      </div>
-
-      {/* V4 `.walk-callout` — V4 line 1293, copy verbatim. */}
-      <div className="walk-callout">
-        <span className="wc-num">2</span>
-        <b>This is the two-way artefact in action.</b> The outgoing sheet is
-        plain Google Sheets &mdash; Stephan doesn&rsquo;t log in anywhere. He
-        replies on email with his annotations. Our parser pulls his ok / flag
-        / reject into the incoming panel. One click ingests it; 13 partners
-        start drafts automatically (next stop: email verification). Total
-        human touch: Tristan reads the 2 flagged rows and hits <b>Ingest</b>.
       </div>
     </section>
   );
@@ -159,13 +170,26 @@ export default async function ApprovalPage({
 function OutgoingColumn({
   campaignId,
   rows,
+  counterpartName,
+  counterpartPossessive,
 }: {
   campaignId: string;
   rows: OutgoingApprovalRow[];
+  counterpartName: string;
+  counterpartPossessive: string;
 }) {
   const count = rows.length;
-  const v4Title = "260421 Outreach Summary for Stephan TF v12";
-  const v4SentStrip = "Sent Mon 21 Apr 09:12 BST as a Google Sheet link";
+  // Filename is honest about what it represents — no more hardcoded
+  // demo "Stephan TF v12". Date = today's ISO; counterpart initial
+  // stripped cleanly. If no counterpart, honest blank.
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const sheetTitle =
+    counterpartName === "Counterpart TBD"
+      ? `Outreach summary · ${today} (counterpart not set)`
+      : `Outreach summary for ${counterpartName} · ${today}`;
+  const sentStrip = rows.length === 0
+    ? "Nothing to send yet — shortlist from §3 Find-a-match first."
+    : "Preview only — nothing is sent automatically.";
 
   return (
     <div className="approval-col">
@@ -175,22 +199,17 @@ function OutgoingColumn({
           &rarr;
         </span>
         <div>
-          <div className="ach-title">Outgoing &mdash; what Stephan sees</div>
+          <div className="ach-title">
+            Outgoing &mdash; what {counterpartName} will see
+          </div>
         </div>
-        {/* V4 line 1166: the timestamp is a V1 placeholder — real send
-            time will be written by the Phase-6 Gmail send hook. */}
-        <span
-          className="ach-sub"
-          title="Timestamp placeholder — real Sent time is written by the Gmail send hook in Phase 6."
-        >
-          {v4SentStrip}
-        </span>
+        <span className="ach-sub">{sentStrip}</span>
       </div>
 
       {/* V4 lines 1168-1176 — sheet title strip with pending chip. */}
       <div className="sheet-head-strip">
         <div className="sh-left">
-          <span className="sh-title">{v4Title}</span>
+          <span className="sh-title">{sheetTitle}</span>
           <span className="sh-meta">
             {" · "}
             {count} new row{count === 1 ? "" : "s"}
@@ -249,9 +268,9 @@ function OutgoingColumn({
         }}
       >
         <b style={{ color: "var(--text)" }}>Evidence of approval</b> is
-        captured by Stephan&rsquo;s reply email to this sheet &mdash; his ok
-        / not-for-me annotations are parsed back automatically. We never ask
-        him to log in anywhere.
+        captured by {counterpartPossessive} reply email to this sheet &mdash;
+        ok / not-for-me annotations are parsed back automatically. We never
+        ask them to log in anywhere.
       </div>
     </div>
   );
@@ -326,9 +345,13 @@ function OutgoingEmptyRow() {
 function IncomingColumn({
   rows,
   stats,
+  counterpartName,
+  counterpartPossessive,
 }: {
   rows: IncomingApprovalRow[];
   stats: IncomingApprovalStats;
+  counterpartName: string;
+  counterpartPossessive: string;
 }) {
   const total = stats.approved + stats.flag + stats.rejected;
   const hasRealData = total > 0;
@@ -349,17 +372,21 @@ function IncomingColumn({
         >
           {hasRealData
             ? "Latest reply parsed"
-            : "Stephan replied Tue 12 Apr 09:14 BST"}
+            : `No replies parsed yet from ${counterpartName}`}
         </span>
       </div>
 
       {/* V4 lines 1227-1235 — green sheet-head strip. */}
       <div className="sheet-head-strip green">
         <div className="sh-left">
-          <span className="sh-title">Batch 1 &middot; reply parsed</span>
+          <span className="sh-title">
+            {hasRealData ? "Latest batch · reply parsed" : "Awaiting first reply"}
+          </span>
           <span className="sh-meta">
             {" · "}
-            {hasRealData ? `${total} rows reconciled` : "20 rows reconciled"}
+            {hasRealData
+              ? `${total} row${total === 1 ? "" : "s"} reconciled`
+              : "0 rows reconciled"}
           </span>
         </div>
         <div className="sh-right">
@@ -367,7 +394,7 @@ function IncomingColumn({
             <span className="dot" aria-hidden="true" />
             {hasRealData
               ? "Email reply logged"
-              : "Email reply logged 2026-04-12 09:14 BST"}
+              : "Reply-parser run on incoming email once configured"}
           </span>
         </div>
       </div>
@@ -382,11 +409,11 @@ function IncomingColumn({
           fontSize: 13,
         }}
       >
-        <StatCell value={hasRealData ? stats.approved : 13} label="Approved" colour="var(--green)" />
+        <StatCell value={stats.approved} label="Approved" colour="var(--green)" />
         <div style={{ width: 1, alignSelf: "stretch", background: "var(--border-soft)" }} />
-        <StatCell value={hasRealData ? stats.flag : 2} label="Flag for me" colour="var(--amber)" />
+        <StatCell value={stats.flag} label="Flag for me" colour="var(--amber)" />
         <div style={{ width: 1, alignSelf: "stretch", background: "var(--border-soft)" }} />
-        <StatCell value={hasRealData ? stats.rejected : 5} label="Rejected" colour="var(--red)" />
+        <StatCell value={stats.rejected} label="Rejected" colour="var(--red)" />
         <div style={{ flex: 1 }} />
         <div
           style={{
@@ -394,11 +421,11 @@ function IncomingColumn({
             fontSize: 11,
             lineHeight: 1.5,
             textAlign: "right",
-            maxWidth: 160,
+            maxWidth: 200,
           }}
         >
-          Reply parser read Stephan&rsquo;s inline &ldquo;ok&rdquo; / &ldquo;not
-          for us&rdquo; / &ldquo;tell me more&rdquo; annotations.
+          Reply parser reads {counterpartPossessive} inline{" "}
+          &ldquo;ok&rdquo; / &ldquo;not for us&rdquo; / &ldquo;tell me more&rdquo; annotations.
         </div>
       </div>
 
@@ -509,81 +536,29 @@ function IncomingRepliesTable({
     );
   }
 
+  // Honest empty state — no fake demo rows. The reply parser
+  // (`research/16-parse-approval-replies.py`) writes into this table
+  // when real replies land; until then, we say so plainly.
   return (
-    <>
-      <div
-        style={{
-          padding: "6px 16px 0 16px",
-          fontSize: 10,
-          color: "var(--text-faint)",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-        }}
-        title="V1 placeholder — real rows will appear once the Phase-6 Gmail reply parser writes approver_note / approved_by."
-      >
-        &mdash; example from V4 &mdash;
+    <div
+      style={{
+        padding: "32px 22px",
+        textAlign: "center",
+        color: "var(--text-dim)",
+        fontSize: 13,
+        lineHeight: 1.55,
+      }}
+    >
+      <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
+        No replies parsed yet.
       </div>
-      <table className="sheet">
-        <thead>
-          <tr>
-            <th style={{ width: "36%" }}>Firm</th>
-            <th>Stephan&rsquo;s reply (verbatim)</th>
-            <th style={{ width: "16%" }}>Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <div className="firm-c">Regeneration.VC</div>
-              <div className="contact-c">Andy Ruben</div>
-            </td>
-            <td className="comment-af">
-              &ldquo;ok &mdash; Tern framing is spot on&rdquo;
-            </td>
-            <td>
-              <span className="approve-y">&#10003; Approved</span>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <div className="firm-c">Sandbrook Capital</div>
-              <div className="contact-c">Chris Hunt</div>
-            </td>
-            <td className="comment-af">
-              &ldquo;ok, lead with capex delta not round size&rdquo;
-            </td>
-            <td>
-              <span className="approve-y">&#10003; Approved</span>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <div className="firm-c">Deep Tech Seed Fund</div>
-              <div className="contact-c">Pearse Coyle</div>
-            </td>
-            <td className="comment-af">
-              &ldquo;flag &mdash; already on FishFrom. call me before you
-              send&rdquo;
-            </td>
-            <td>
-              <span style={{ color: "var(--amber)", fontWeight: 700 }}>
-                &#9888; Flag
-              </span>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <div className="firm-c">Parkwalk Advisors</div>
-              <div className="contact-c">Anne Dobree</div>
-            </td>
-            <td className="comment-af">&ldquo;skip. not a spin-out&rdquo;</td>
-            <td>
-              <span className="approve-no">&#10007; Reject</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </>
+      <div>
+        Once your counterpart replies to the outgoing sheet above, the parser
+        in <code>research/16-parse-approval-replies.py</code> extracts the
+        ok / flag / reject decisions and lands them here. Until then this
+        panel is empty on purpose.
+      </div>
+    </div>
   );
 }
 

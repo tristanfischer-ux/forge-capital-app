@@ -5,7 +5,6 @@ import {
   resolveCurrentCampaignId,
 } from "@/lib/queries/campaigns";
 import { CampaignDropdown } from "./CampaignDropdown";
-import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { WalkTourStrip } from "./WalkTourStrip";
 
@@ -34,32 +33,35 @@ export default async function AuthedLayout({
 }) {
   const campaigns = await listActiveCampaigns();
 
-  // Resolve which campaign the sidebar should render for. Layouts don't
-  // receive searchParams in Next 16, so we read an `fc_active_campaign`
-  // cookie written by CampaignDropdown on navigation and fall back to
-  // the first active campaign. Page-level `?c=<uuid>` still wins for
-  // the main content — this only affects which campaign's health rail
-  // shows on the right.
+  // Resolve the active campaign for the top-bar switcher. Layouts don't
+  // receive searchParams in Next 16, so we read `fc_active_campaign`
+  // from the cookie written by CampaignDropdown on navigation. Page-level
+  // `?c=<uuid>` still wins for the main content.
   const cookieStore = await cookies();
   const cookieCampaign = cookieStore.get("fc_active_campaign")?.value;
-  const sidebarCampaignId = resolveCurrentCampaignId(campaigns, cookieCampaign);
-  const sidebarCampaign =
-    campaigns.find((c) => c.id === sidebarCampaignId) ?? null;
+  const activeCampaignId = resolveCurrentCampaignId(campaigns, cookieCampaign);
   const totalActive = campaigns.length;
 
   return (
     <>
       <TopBar
         campaigns={campaigns}
-        activeCampaignId={sidebarCampaignId}
+        activeCampaignId={activeCampaignId}
         totalActive={totalActive}
       />
-      <div className="layout">
+      {/* Sidebar deleted 2026-04-22: Tristan flagged the four panels
+          (Drafts ready / Pipeline health / Rhythm / Tracker health) as
+          wasted space and demo-data-leaky (Stephan references). Content
+          now fills full width. The sidebarCampaign resolver stays
+          because Sidebar.tsx may return in a different shape later. */}
+      <div
+        className="layout"
+        style={{ gridTemplateColumns: "minmax(0, 1fr)" }}
+      >
         <main className="main">
           <WalkTourStrip />
           {children}
         </main>
-        {sidebarCampaign ? <Sidebar campaign={sidebarCampaign} /> : null}
       </div>
     </>
   );

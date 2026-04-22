@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
+import { EditCampaignPanel } from "./campaigns/EditCampaignPanel";
 
 /**
  * Campaign switcher — 1:1 port of V4 `.campaign-switcher` +
@@ -43,6 +44,7 @@ export function CampaignDropdown({
   totalActive: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   // Outside-click + Escape close. Only wired when open to avoid listener
@@ -112,6 +114,47 @@ export function CampaignDropdown({
         </span>
         <span className="caret">&#9662;</span>
       </div>
+
+      {/* Pencil button — opens the edit panel for the active campaign.
+          Separate from the main switcher click so Tristan can type
+          the real counterpart name himself (no more hardcoded "Stephan"). */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditing(true);
+          setOpen(false);
+        }}
+        title={`Edit ${active.name}`}
+        aria-label={`Edit ${active.name}`}
+        style={{
+          position: "absolute",
+          top: -2,
+          right: -10,
+          width: 22,
+          height: 22,
+          border: "1px solid var(--border)",
+          borderRadius: "50%",
+          background: "var(--surface)",
+          color: "var(--text-dim)",
+          fontSize: 11,
+          cursor: "pointer",
+          lineHeight: 1,
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        ✎
+      </button>
+
+      {editing ? (
+        <EditCampaignPanel
+          campaign={active}
+          onClose={() => setEditing(false)}
+        />
+      ) : null}
 
       {/* V4 line 747-836: .camp-dropdown (floating panel). V4 uses
           `.open` class; we mount conditionally instead — same visual

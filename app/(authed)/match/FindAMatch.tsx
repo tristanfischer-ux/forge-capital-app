@@ -100,13 +100,26 @@ export function FindAMatch({
     | null
   >(null);
 
-  // Load persisted hero text per campaign on mount.
+  // Hero text must follow the active campaign. Previous bug: switching
+  // from SkySails to FishFrom left the SkySails pitch text in the
+  // textarea because we only loaded from localStorage when something
+  // was stored — never cleared. Now we always set the text when
+  // campaignId changes: stored value if present, else the default.
   useEffect(() => {
     const key = `fc_hero_text_${campaignId}`;
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-    if (stored && stored.trim().length > 0) {
-      setHeroText(stored);
-    }
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(key)
+        : null;
+    setHeroText(
+      stored && stored.trim().length > 0 ? stored : DEFAULT_HERO_TEXT,
+    );
+    // Reset the scored data set — previously-scored rows are from the
+    // old campaign's text, not the new one, and rendering stale rows
+    // under a new campaign name is the class of "seeing the same
+    // matches" bug Tristan flagged.
+    setSelected(new Set());
+    setLookalikeData(null);
   }, [campaignId]);
 
   // Persist hero text (debounced at 500ms).
@@ -350,6 +363,24 @@ export function FindAMatch({
 
       {toast ? <ToastRow toast={toast} onDismiss={() => setToast(null)} /> : null}
 
+      {/* Instructions BEFORE the results, not after. The guidance used
+          to sit below the cards, which meant you'd scroll through 10
+          rows before learning how to use them. Copy is campaign-generic
+          — the old V4 mockup named Stephan and hardcoded the sheet
+          filename; both dropped in favour of a verb-driven explanation. */}
+      {archetype === "investor" ? (
+        <div className="walk-callout" style={{ marginBottom: 10 }}>
+          <span className="wc-num">1</span>
+          <b>How to shortlist:</b> tick firms (click anywhere on a card
+          or use the checkbox), or hit <b>Select all visible</b> on the
+          batch bar. When you&rsquo;re happy with the list, click{" "}
+          <b>Shortlist to approval sheet →</b> — we write them to the
+          tracker at <b>+0 Pending approval</b>, ready for the{" "}
+          <a href="#approval">approval section</a>. Nothing leaves the
+          app until you review and send yourself.
+        </div>
+      ) : null}
+
       {/* V4 `.results-head` (lines 988-998). */}
       <ResultsHead
         tab={tab}
@@ -396,20 +427,8 @@ export function FindAMatch({
         </>
       )}
 
-      {/* V4 `.walk-callout` (line 1142) — V4 markup has the <span.wc-num>
-          and the text as direct children of the div, no wrapping span. */}
       {tab !== "lookalike" && rows.length > 0 && archetype === "investor" ? (
         <>
-          <div className="walk-callout">
-            <span className="wc-num">1</span>
-            <b>Batch action: tick the top 5 cards, hit “Shortlist to approval sheet”.</b>{" "}
-            That one click writes a new{" "}
-            <code>260421 Outreach Summary for Stephan TF v12</code>{" "}
-            sheet, updates the tracker to <b>+0 Pending approval</b>, and emails
-            Stephan a preview link. Approvals come back as a reply; the{" "}
-            <a href="#approval">approval section</a> below ingests them. Zero
-            babysitting.
-          </div>
           <p
             style={{
               textAlign: "center",

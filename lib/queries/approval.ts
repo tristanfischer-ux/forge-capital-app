@@ -59,6 +59,8 @@ export interface IncomingApprovalStats {
 export interface ApprovalCampaignMeta {
   campaign_id: string;
   campaign_name: string | null;
+  /** Campaign's approver display name (migration 012). Null if not yet set. */
+  counterpart_name: string | null;
   /** Count of +0 rows waiting in the outgoing sheet. */
   pending_count: number;
 }
@@ -271,7 +273,7 @@ export async function getApprovalCampaignMeta(
   const [campaignResult, countResult] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, name")
+      .select("id, name, counterpart_name")
       .eq("id", campaignId)
       .maybeSingle(),
     supabase
@@ -290,6 +292,7 @@ export async function getApprovalCampaignMeta(
   return {
     campaign_id: campaignResult.data.id as string,
     campaign_name: (campaignResult.data.name ?? null) as string | null,
+    counterpart_name: ((campaignResult.data as { counterpart_name?: string | null }).counterpart_name ?? null),
     pending_count: countResult.count ?? 0,
   };
 }

@@ -137,6 +137,7 @@ export default async function TrackerPage({
           <TrackerTable
             rows={rows}
             campaignName={activeCampaign?.name}
+            counterpartName={activeCampaign?.counterpart_name ?? undefined}
           />
           <TrackerHealthCallout />
         </>

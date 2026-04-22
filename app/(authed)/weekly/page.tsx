@@ -100,12 +100,13 @@ export default async function WeeklyPage({
         ? "supplier pipeline update"
         : "fundraise update";
 
-  // "Week N of 16" if we have campaign week; otherwise "Week N" of the
-  // calendar year. V4's copy shows both ("Week 17 · SkySails Power …"
-  // is calendar week; callouts use "Week 17 of 16" in sister pages).
+  // Week heading: "Week N of M" where M is per-campaign from
+  // week_count_target (migration 012). Omit the "of M" when the
+  // campaign has no week_started_at or target — falls back to the
+  // calendar week so the user sees an honest number.
   const weekHeading =
     summary.weekOfCampaign !== null
-      ? `Week ${summary.weekOfCampaign} of 16 · ${summary.campaignName} · ${intentLabel}`
+      ? `Week ${summary.weekOfCampaign} of ${summary.weekCountTarget} · ${summary.campaignName} · ${intentLabel}`
       : `Week ${summary.weekNumber} · ${summary.campaignName} · ${intentLabel}`;
 
   const generatedHuman = formatGeneratedLabel(summary.generatedAt);
@@ -119,10 +120,12 @@ export default async function WeeklyPage({
             <span className="new-tag">NEW CHARTS</span>
           </div>
           <div className="section-sub">
-            Generated Friday 17:00 automatically.{" "}
-            <b>Review, click Send, it&rsquo;s done.</b> Charts render inline;
-            no attachments required. One template shape, two audiences
-            (investor and customer).
+            The weekly composer runs Fri 17:00 BST and writes a draft —{" "}
+            <b>nothing is sent without your review.</b> Once Gmail is
+            connected (done), drafts land in your Drafts folder; until then
+            they&rsquo;re saved as <code>.txt</code> files under{" "}
+            <code>~/.forge-capital/weekly-drafts/</code>. Charts render
+            inline. One template shape varies by campaign intent.
           </div>
         </div>
         <span

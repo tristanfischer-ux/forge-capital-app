@@ -106,9 +106,13 @@ function formatRelativeSync(rows: TrackerRow[]): string {
 export function TrackerTable({
   rows,
   campaignName,
+  counterpartName,
 }: {
   rows: TrackerRow[];
   campaignName?: string;
+  /** Counterpart display name for the "(X view)" subtitle. Empty string
+   *  or undefined omits the parenthetical — no more hardcoded Stephan. */
+  counterpartName?: string;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -148,8 +152,8 @@ export function TrackerTable({
         <div className="sh-left">
           <span className="sh-title">
             {campaignName
-              ? `${campaignName} · master tracker (Stephan view)`
-              : "Master tracker (Stephan view)"}
+              ? `${campaignName} · master tracker${counterpartName ? ` (${counterpartName} view)` : ""}`
+              : `Master tracker${counterpartName ? ` (${counterpartName} view)` : ""}`}
           </span>
           <span className="sh-meta">
             · {rows.length} {rowLabel} · last synced {syncedLabel}
