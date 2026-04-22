@@ -77,6 +77,9 @@ interface PendingJoinRow {
       firm_name: string | null;
       hq_location: string | null;
       synthesis_data: unknown;
+      investment_pattern: string | null;
+      connection_brief: string | null;
+      team_expertise: string | null;
     } | null;
   } | null;
 }
@@ -149,7 +152,10 @@ export async function getPendingApproval(
         investors_mirror:investor_id (
           firm_name,
           hq_location,
-          synthesis_data
+          synthesis_data,
+          investment_pattern,
+          connection_brief,
+          team_expertise
         )
       )
       `,
@@ -173,7 +179,7 @@ export async function getPendingApproval(
       hq_location: investor?.hq_location ?? null,
       partner_name: partner?.name ?? null,
       partner_title: partner?.title ?? null,
-      why_them: deriveWhyThem(investor?.synthesis_data ?? null),
+      why_them: deriveWhyThem(investor),
       created_at: row.created_at,
     };
   });

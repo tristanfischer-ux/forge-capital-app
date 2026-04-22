@@ -421,6 +421,9 @@ interface CandidateRow {
   fund_size_usd: string | null;
   thesis_summary: string | null;
   synthesis_data: unknown;
+  investment_pattern: string | null;
+  connection_brief: string | null;
+  team_expertise: string | null;
   synthesized_at: string | null;
   last_enriched: string | null;
   chrome_verified: boolean | null;
@@ -598,7 +601,8 @@ export async function getMatchScore(
       `
       id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
       cheque_min_usd, cheque_max_usd, fund_size_usd,
-      thesis_summary, synthesis_data, synthesized_at, last_enriched,
+      thesis_summary, synthesis_data, investment_pattern, connection_brief,
+      team_expertise, synthesized_at, last_enriched,
       chrome_verified, last_synced_at,
       partners_mirror:partners_mirror!partners_mirror_investor_id_fkey (
         id, name, title, email_tier, is_primary_contact, email
@@ -715,7 +719,7 @@ export async function getMatchScore(
       on_current_campaign: current,
       on_other_campaign: other ? { ...other, firm_name: inv.firm_name ?? "This firm" } : null,
       near_miss: nm,
-      why_them: deriveWhyThem(inv.synthesis_data),
+      why_them: deriveWhyThem(inv),
     });
   }
 

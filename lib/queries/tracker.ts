@@ -53,6 +53,9 @@ interface TrackerJoinRow {
       firm_name: string | null;
       thesis_summary: string | null;
       synthesis_data: unknown;
+      investment_pattern: string | null;
+      connection_brief: string | null;
+      team_expertise: string | null;
     } | null;
   } | null;
 }
@@ -82,25 +85,64 @@ export function deriveCompanySummary(thesisSummary: string | null): string | nul
 }
 
 /**
- * Pulls a why-them synthesis paragraph out of the investors_mirror
- * `synthesis_data` jsonb. The shape of that column is owned by the
- * Forge Capital pipeline (`research/17-unified-pipeline.py`) and the
- * relevant field names we know about are `why_them`, `connection`, and
- * `intelligent_synthesis`. Probe each in turn; if none match or the
- * jsonb is not an object, return null rather than inventing copy.
- *
- * Exported so the match-list surface can render the same paragraph that
- * the tracker row drawer renders (V4-FEEDBACK-ROUND-2.md: "one source
- * of truth, two places it renders").
+ * Source shape accepted by `deriveWhyThem`. Matches the columns on
+ * `investors_mirror` that carry human-readable synthesis prose.
  */
-export function deriveWhyThem(synthesisData: unknown): string | null {
-  if (!synthesisData || typeof synthesisData !== "object") return null;
-  const rec = synthesisData as Record<string, unknown>;
-  const candidateKeys = ["why_them", "connection", "intelligent_synthesis"];
-  for (const key of candidateKeys) {
-    const v = rec[key];
+export interface InvestorSynthesisSource {
+  connection_brief?: string | null;
+  investment_pattern?: string | null;
+  team_expertise?: string | null;
+  synthesis_data?: unknown;
+}
+
+/**
+ * Returns the best available "why them" paragraph for an investor.
+ *
+ * The Forge Capital pipeline (`research/17-unified-pipeline.py`) writes
+ * THREE prose columns alongside a `structured_signals` jsonb:
+ *
+ *   - `investment_pattern` — 2-4 sentences on what they actually invest in
+ *   - `connection_brief`   — 3-5 sentences on visibility / reachability
+ *   - `team_expertise`     — 2-4 sentences on what the team knows
+ *
+ * For the approval sheet the counterpart reads, `investment_pattern` is
+ * the most useful (answers "is this investor a fit for this company").
+ * We fall through to the others so a row with any one populated still
+ * shows real content instead of "synthesis pending".
+ *
+ * `synthesis_data` is probed last as a legacy fallback — the jsonb holds
+ * `structured_signals` (sectors, stage hints) rather than prose, so it
+ * rarely contains a string that reads as a why-them. Kept for rows
+ * written by older pipeline variants.
+ *
+ * Exported so the match-list surface and the tracker drawer render the
+ * same paragraph (V4-FEEDBACK-ROUND-2.md: "one source of truth, two
+ * places it renders").
+ */
+export function deriveWhyThem(
+  source: InvestorSynthesisSource | unknown,
+): string | null {
+  if (!source || typeof source !== "object") return null;
+  const rec = source as InvestorSynthesisSource & Record<string, unknown>;
+
+  const prose = [
+    rec.investment_pattern,
+    rec.connection_brief,
+    rec.team_expertise,
+  ];
+  for (const v of prose) {
     if (typeof v === "string" && v.trim().length > 0) return v.trim();
   }
+
+  const sd = rec.synthesis_data;
+  if (sd && typeof sd === "object") {
+    const jsonbRec = sd as Record<string, unknown>;
+    for (const key of ["why_them", "connection", "intelligent_synthesis"]) {
+      const v = jsonbRec[key];
+      if (typeof v === "string" && v.trim().length > 0) return v.trim();
+    }
+  }
+
   return null;
 }
 
@@ -132,7 +174,10 @@ export async function getTrackerRows(
         investors_mirror:investor_id (
           firm_name,
           thesis_summary,
-          synthesis_data
+          synthesis_data,
+          investment_pattern,
+          connection_brief,
+          team_expertise
         )
       )
       `,
@@ -175,7 +220,7 @@ export async function getTrackerRows(
       partner_name: partner?.name ?? null,
       partner_title: partner?.title ?? null,
       company_summary: deriveCompanySummary(investor?.thesis_summary ?? null),
-      partner_why_them: deriveWhyThem(investor?.synthesis_data),
+      partner_why_them: deriveWhyThem(investor),
     };
   });
 }

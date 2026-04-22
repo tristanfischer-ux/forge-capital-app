@@ -69,6 +69,61 @@ export interface FindAMatchProps {
 }
 
 type Tab = "best" | "thesis" | "near_miss" | "lookalike";
+type SortBy = "match" | "alphabetical" | "approval" | "recent_contact";
+
+// Approval-status ranking: lower number sorts first. Any positive status
+// code (+1, +2, ...) means the counterpart greenlit the row — those come
+// first; then pending (+0); then rejected/archived; then rows that have
+// never touched this campaign. Rows currently on this campaign have a
+// non-null `on_current_campaign`; we read its status_code there.
+const APPROVAL_RANK: Record<string, number> = {
+  "+12": 0, "+11": 0, "+10": 0, "+9": 0, "+8": 0, "+7": 0,
+  "+6": 0, "+5": 0, "+4": 0, "+3": 0, "+2": 0, "+1": 0,
+  "+0": 1,
+  "-3": 2,
+};
+
+function approvalRank(
+  row: GetMatchScoreResult["rows"][number],
+): number {
+  const code = row.on_current_campaign?.code ?? null;
+  if (code && APPROVAL_RANK[code] !== undefined) return APPROVAL_RANK[code];
+  if (code) return 3; // any other status code — still on the campaign
+  return 4; // not on the campaign at all
+}
+
+function sortRows(
+  rows: GetMatchScoreResult["rows"],
+  by: SortBy,
+): GetMatchScoreResult["rows"] {
+  if (by === "match") return rows; // server already ranked by score/tab
+  const out = [...rows];
+  if (by === "alphabetical") {
+    out.sort((a, b) =>
+      (a.firm_name ?? "").localeCompare(b.firm_name ?? "", "en-GB", {
+        sensitivity: "base",
+      }),
+    );
+  } else if (by === "approval") {
+    out.sort((a, b) => {
+      const ra = approvalRank(a);
+      const rb = approvalRank(b);
+      if (ra !== rb) return ra - rb;
+      return b.match - a.match; // tie-break by match score
+    });
+  } else if (by === "recent_contact") {
+    out.sort((a, b) => {
+      const da = a.last_contact_days;
+      const db = b.last_contact_days;
+      // never-contacted rows sink to the bottom
+      if (da === null && db === null) return b.match - a.match;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db; // smaller days-ago = more recent = first
+    });
+  }
+  return out;
+}
 
 interface PoolCounts {
   investor: number;
@@ -86,6 +141,11 @@ export function FindAMatch({
   const [archetype, setArchetype] = useState<Archetype>(initialArchetype);
   const [data, setData] = useState<GetMatchScoreResult>(initialData);
   const [tab, setTab] = useState<Tab>("best");
+  // Secondary order applied client-side over the tab-filtered rows. The
+  // tab chooses WHICH rows (best / thesis-only / near-miss / lookalike);
+  // sortBy chooses HOW they're ordered within that set. "match" is the
+  // default — keep the server's ranking untouched.
+  const [sortBy, setSortBy] = useState<SortBy>("match");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [isShortlisting, startShortlistTransition] = useTransition();
@@ -265,7 +325,7 @@ export function FindAMatch({
     }
   };
 
-  const rows = data.rows;
+  const rows = useMemo(() => sortRows(data.rows, sortBy), [data.rows, sortBy]);
   const topN = Math.min(10, rows.length);
   const showAutoSuggest = liveSuggest.signals.length > 0;
   const autoSuggestDiffers = liveSuggest.suggested !== archetype;
@@ -374,6 +434,8 @@ export function FindAMatch({
       <ResultsHead
         tab={tab}
         onTab={onChangeTab}
+        sortBy={sortBy}
+        onSortBy={setSortBy}
         totalScored={tab === "lookalike"
           ? (lookalikeData?.totalScored ?? 0)
           : data.totalScored}
@@ -775,6 +837,8 @@ function ToastRow({
 function ResultsHead({
   tab,
   onTab,
+  sortBy,
+  onSortBy,
   totalScored,
   archetypePoolSize,
   archetype,
@@ -784,6 +848,8 @@ function ResultsHead({
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
+  sortBy: SortBy;
+  onSortBy: (s: SortBy) => void;
   totalScored: number;
   archetypePoolSize: number;
   archetype: Archetype;
@@ -834,7 +900,10 @@ function ResultsHead({
           )}
         </div>
       </div>
-      <div className="results-sort">
+      <div
+        className="results-sort"
+        style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
+      >
         <button className={tab === "best" ? "active" : ""} onClick={() => onTab("best")}>
           Best match
         </button>
@@ -851,6 +920,43 @@ function ResultsHead({
         >
           Lookalikes
         </button>
+
+        {/* Secondary sort — applied client-side over the tab-filtered rows.
+            Hidden on the Lookalike tab (that mode has its own anchor-based
+            ordering that a column sort would defeat). */}
+        {tab !== "lookalike" ? (
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "var(--text-dim)",
+              marginLeft: 6,
+            }}
+            title="Re-order the matched investors without changing which rows are scored"
+          >
+            <span>Order by</span>
+            <select
+              value={sortBy}
+              onChange={(e) => onSortBy(e.target.value as SortBy)}
+              style={{
+                padding: "5px 8px",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                fontSize: 12,
+                background: "var(--surface)",
+                color: "var(--text)",
+                cursor: "pointer",
+              }}
+            >
+              <option value="match">Match score</option>
+              <option value="alphabetical">Alphabetical (A → Z)</option>
+              <option value="approval">Approval status</option>
+              <option value="recent_contact">Most recently contacted</option>
+            </select>
+          </label>
+        ) : null}
       </div>
     </div>
   );
@@ -1520,22 +1626,34 @@ function PitchInput({
         </div>
       ) : null}
 
-      {/* Upload + find-matches buttons stack (above textarea right side). */}
+      {/* Find matches — bottom-right, primary. V4 positions it via .hero-btn. */}
+      <button
+        type="button"
+        className="hero-btn"
+        onClick={onFindMatches}
+        disabled={isPending || extracting}
+      >
+        {isPending ? "Matching…" : "Find matches"}{" "}
+        <span className="kbd">⌘↵</span>
+      </button>
+
+      {/* Upload deck + status line — sit BELOW the textarea so they never
+          collide with Find matches and never overlap typed content. The
+          textarea itself still accepts drops thanks to onDragOver/onDrop
+          on .hero-input-wrap. */}
       <div
         style={{
-          position: "absolute",
-          right: 12,
-          bottom: 12,
           display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          alignItems: "flex-end",
+          alignItems: "center",
+          gap: 12,
+          marginTop: 8,
+          flexWrap: "wrap",
         }}
       >
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          title="Upload a pitch deck, business plan, PDF, DOCX, or PPTX. We'll extract the text for matching."
+          title="Upload a pitch deck, business plan, PDF, DOCX, or PPTX — or just drag it onto the textarea. We'll extract the text for matching."
           disabled={extracting || isPending}
           style={{
             padding: "6px 12px",
@@ -1546,10 +1664,14 @@ function PitchInput({
             color: "var(--text-dim)",
             borderRadius: 8,
             cursor: extracting || isPending ? "not-allowed" : "pointer",
+            whiteSpace: "nowrap",
           }}
         >
-          📎 Upload deck
+          📎 Upload deck (PDF / PPTX / DOCX)
         </button>
+        <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+          or drag a file onto the box above
+        </span>
         <input
           ref={fileInputRef}
           type="file"
@@ -1557,15 +1679,6 @@ function PitchInput({
           style={{ display: "none" }}
           onChange={onFileChange}
         />
-        <button
-          type="button"
-          className="hero-btn"
-          onClick={onFindMatches}
-          disabled={isPending || extracting}
-        >
-          {isPending ? "Matching…" : "Find matches"}{" "}
-          <span className="kbd">⌘↵</span>
-        </button>
       </div>
 
       {/* Status line below the textarea. */}
