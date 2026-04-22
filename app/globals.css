@@ -80,3 +80,311 @@ a {
 button {
   font-family: inherit;
 }
+
+/* -----------------------------------------------------------------------------
+   Enhancements — post-port additions (NOT in V4).
+   Single click on a .result-card expands the drill-down inline;
+   double-click navigates to the full /investor/[id] profile page.
+   Everything below uses V4 tokens (--accent, --border, --surface-alt, etc.)
+   so the visual weight sits inside the same design system.
+   ----------------------------------------------------------------------------- */
+.result-card.rc-expanded {
+  border-color: var(--accent);
+  box-shadow: 0 3px 12px rgba(79, 70, 229, 0.1);
+}
+
+.rc-expand {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: default;
+}
+
+.rc-expand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rc-expand-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+
+.rc-expand-block p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+  margin: 0;
+}
+
+.rc-expand-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.rc-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rc-meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rc-meta-value {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.rc-expand-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rc-expand-actions .batch-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.rc-expand-actions .batch-btn:hover {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+.rc-expand-actions .batch-btn.rc-expand-resolve {
+  background: transparent;
+  color: var(--amber);
+  border-color: #fcd34d;
+}
+
+.rc-expand-actions .batch-btn.rc-expand-resolve:hover {
+  background: var(--amber-light);
+}
+
+/* -----------------------------------------------------------------------------
+   Email-hunt modal (#69) — manual override + Hunter queue.
+   Styled as a slim centered dialog using the same token set.
+   ----------------------------------------------------------------------------- */
+.email-hunt-dialog {
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  width: min(560px, 92vw);
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.email-hunt-dialog::backdrop {
+  background: rgba(17, 24, 39, 0.45);
+}
+
+.email-hunt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.email-hunt-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.email-hunt-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.email-hunt-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.email-hunt-close:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.email-hunt-body {
+  padding: 16px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(90vh - 160px);
+  overflow-y: auto;
+}
+
+.email-hunt-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.email-hunt-tab {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.email-hunt-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.email-hunt-partner-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface-alt);
+}
+
+.email-hunt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.email-hunt-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.email-hunt-input,
+.email-hunt-select {
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.email-hunt-input:focus,
+.email-hunt-select:focus {
+  outline: 2px solid var(--accent-light);
+  border-color: var(--accent);
+}
+
+.email-hunt-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+
+.email-hunt-btn {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.email-hunt-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+}
+
+.email-hunt-btn.primary:hover:not(:disabled) {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+.email-hunt-btn.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.email-hunt-btn.secondary:hover {
+  background: var(--surface);
+}
+
+.email-hunt-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.email-hunt-msg {
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.email-hunt-msg.ok {
+  background: var(--green-light);
+  color: var(--green);
+  border: 1px solid #bbf7d0;
+}
+
+.email-hunt-msg.err {
+  background: var(--red-light);
+  color: var(--red);
+  border: 1px solid #fecaca;
+}
+
+.email-hunt-msg.info {
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid #d7d5fc;
+}

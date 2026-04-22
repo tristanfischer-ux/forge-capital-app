@@ -637,6 +637,41 @@ export async function getMatchScore(
   }
   const candidates = (poolData ?? []) as unknown as CandidateRow[];
 
+  // Step 2b: load manual email overrides for any partner in the pool.
+  // Overrides are user-provided addresses (migration 013). They bump the
+  // effective tier so the "0 verified emails · cannot advance" chip
+  // clears as soon as the user saves one from the Resolve-email modal.
+  const allPartnerIds = new Set<number>();
+  for (const inv of candidates) {
+    for (const p of inv.partners_mirror ?? []) allPartnerIds.add(p.id);
+  }
+  const overrideTierByPartner = new Map<number, string>();
+  if (allPartnerIds.size > 0) {
+    // RLS scopes this to the current user's overrides automatically,
+    // so we skip the .in() filter — an IN list with thousands of ids
+    // blows the PostgREST URL length limit (27kB 400 bad request).
+    // Per-user override counts are expected to be small.
+    const { data: overrides, error: ovErr } = await supabase
+      .from("partner_email_overrides")
+      .select("partner_id, email_tier");
+    if (ovErr) {
+      console.error(
+        "[match-score] partner_email_overrides query failed:",
+        ovErr.message,
+      );
+    }
+    for (const row of (overrides ?? []) as Array<{
+      partner_id: number;
+      email_tier: string;
+    }>) {
+      if (allPartnerIds.has(row.partner_id)) {
+        overrideTierByPartner.set(row.partner_id, row.email_tier);
+      }
+    }
+  }
+  const effectiveTier = (partnerId: number, mirrorTier: string | null) =>
+    overrideTierByPartner.get(partnerId) ?? mirrorTier ?? null;
+
   // Step 3: compute signals from heroText and score every candidate.
   const heroTokens = tokenise(heroText);
   const wantedStages = detectStages(heroText);
@@ -648,9 +683,10 @@ export async function getMatchScore(
     const partners = inv.partners_mirror ?? [];
     const primary =
       partners.find((p) => p.is_primary_contact === true) ?? partners[0] ?? null;
-    const verifiedCount = partners.filter(
-      (p) => p.email_tier === "corresponded" || p.email_tier === "hunter_verified",
-    ).length;
+    const verifiedCount = partners.filter((p) => {
+      const tier = effectiveTier(p.id, p.email_tier);
+      return tier === "corresponded" || tier === "hunter_verified";
+    }).length;
 
     const dims = scoreDims(
       {
@@ -710,7 +746,8 @@ export async function getMatchScore(
             id: primary.id,
             name: primary.name,
             title: primary.title,
-            email_tier: (primary.email_tier ?? null) as EmailTier,
+            email_tier: (effectiveTier(primary.id, primary.email_tier) ??
+              null) as EmailTier,
           }
         : null,
       partner_count: partners.length,

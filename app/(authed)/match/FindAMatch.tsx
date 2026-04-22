@@ -12,6 +12,7 @@ import type {
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
 import { findMatches, findLookalikes, shortlistSelected } from "./match-v4-actions";
 import { DEFAULT_HERO_TEXT } from "./match-constants";
+import { EmailHuntModal } from "./EmailHuntModal";
 import {
   MIN_LOOKALIKE_ANCHORS,
   type LookalikeAnchor,
@@ -147,6 +148,10 @@ export function FindAMatch({
   // default — keep the server's ranking untouched.
   const [sortBy, setSortBy] = useState<SortBy>("match");
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Single-click expands a result card inline; double-click navigates to
+  // the full `/investor/[id]` profile. At most one card is expanded at a
+  // time — click a second card and the first collapses.
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isShortlisting, startShortlistTransition] = useTransition();
   // Lookalike result is held separately from the hero-text match data
@@ -297,6 +302,17 @@ export function FindAMatch({
     });
   }, []);
 
+  const toggleExpand = useCallback((investorId: number) => {
+    setExpandedId((prev) => (prev === investorId ? null : investorId));
+  }, []);
+
+  const openProfile = useCallback(
+    (investorId: number) => {
+      router.push(`/investor/${investorId}`);
+    },
+    [router],
+  );
+
   const onShortlist = useCallback(() => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
@@ -420,11 +436,13 @@ export function FindAMatch({
       {archetype === "investor" ? (
         <div className="walk-callout" style={{ marginBottom: 10 }}>
           <span className="wc-num">1</span>
-          <b>How to shortlist:</b> tick firms (click anywhere on a card
-          or use the checkbox), or hit <b>Select all visible</b> on the
-          batch bar. When you&rsquo;re happy with the list, click{" "}
-          <b>Shortlist to approval sheet →</b> — we write them to the
-          tracker at <b>+0 Pending approval</b>, ready for the{" "}
+          <b>How to shortlist:</b> click a card once to expand and read
+          the thesis/synthesis, double-click to open the full profile,
+          or tick the checkbox to select. Hit <b>Select all visible</b>{" "}
+          on the batch bar to grab the whole page. When you&rsquo;re
+          happy with the list, click <b>Shortlist to approval sheet →</b>
+          {" "}— we write them to the tracker at{" "}
+          <b>+0 Pending approval</b>, ready for the{" "}
           <a href="#approval">approval section</a>. Nothing leaves the
           app until you review and send yourself.
         </div>
@@ -455,6 +473,9 @@ export function FindAMatch({
           campaignName={campaignName}
           selected={selected}
           onToggle={toggleSelect}
+          expandedId={expandedId}
+          onExpand={toggleExpand}
+          onOpenProfile={openProfile}
         />
       ) : (
         <>
@@ -470,7 +491,10 @@ export function FindAMatch({
                   key={row.investor_id}
                   row={row}
                   checked={selected.has(row.investor_id)}
+                  expanded={expandedId === row.investor_id}
                   onToggle={() => toggleSelect(row.investor_id)}
+                  onExpand={() => toggleExpand(row.investor_id)}
+                  onOpenProfile={() => openProfile(row.investor_id)}
                 />
               ))}
             </>
@@ -495,6 +519,12 @@ export function FindAMatch({
           </p>
         </>
       ) : null}
+
+      {/* Email-hunt modal (#69). Lives at the section root so it stays
+          mounted while any result card is open. Listens globally for the
+          `fc:resolve-email` custom event dispatched from the result
+          card's "Resolve email →" chip and the drill-down panel CTA. */}
+      <EmailHuntModal />
     </section>
   );
 }
@@ -969,28 +999,38 @@ function ResultsHead({
 function ResultCard({
   row,
   checked,
+  expanded,
   onToggle,
+  onExpand,
+  onOpenProfile,
 }: {
   row: MatchResultRow;
   checked: boolean;
+  expanded: boolean;
   onToggle: () => void;
+  onExpand: () => void;
+  onOpenProfile: () => void;
 }) {
+  const { onClick, onDoubleClick, onKeyDown } = useExpandNavigateHandlers({
+    onExpand,
+    onOpenProfile,
+  });
   return (
     <div
-      className={`result-card${checked ? " checked" : ""}`}
+      className={`result-card${checked ? " checked" : ""}${expanded ? " rc-expanded" : ""}`}
       data-card={row.investor_id}
       role="button"
       tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
       style={{ cursor: "pointer" }}
     >
-      <div className="rc-chk-col">
+      <div
+        className="rc-chk-col"
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
         <span
           className={`rc-chk${checked ? " on" : ""}`}
           onClick={(e) => {
@@ -1003,6 +1043,7 @@ function ResultCard({
           onKeyDown={(e) => {
             if (e.key === " " || e.key === "Enter") {
               e.preventDefault();
+              e.stopPropagation();
               onToggle();
             }
           }}
@@ -1010,7 +1051,7 @@ function ResultCard({
           {checked ? "✓" : ""}
         </span>
       </div>
-      <div className="rc-body" onClick={onToggle}>
+      <div className="rc-body">
         <div className="result-top">
           <div className="result-headline">
             <div className="result-name">
@@ -1052,9 +1093,217 @@ function ResultCard({
         <div className="result-tags">
           <ResultTagRow row={row} />
         </div>
+
+        {expanded ? (
+          <ResultCardDrillDown row={row} onOpenProfile={onOpenProfile} />
+        ) : null}
       </div>
     </div>
   );
+}
+
+/* ========================================================================= */
+/* Click handlers — expand on single click, navigate on double-click         */
+/* ========================================================================= */
+/**
+ * Per-card handlers that disambiguate a single click (expand the inline
+ * drill-down) from a double click (navigate to the full profile page).
+ *
+ * `onClick` runs on every click; we wait ~220ms before actually calling
+ * `onExpand` so that a rapid second click can cancel the timer and let
+ * `onDoubleClick` take over. Without the timer, a double-click would
+ * visibly flash-open-then-close the drill-down before navigating, which
+ * felt janky in manual testing.
+ *
+ * 220ms is the standard double-click window on macOS (Safari reports
+ * ~500ms but most users double-click inside ~250ms).
+ */
+function useExpandNavigateHandlers({
+  onExpand,
+  onOpenProfile,
+}: {
+  onExpand: () => void;
+  onOpenProfile: () => void;
+}) {
+  const timer = useRef<number | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }, []);
+
+  const onClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Ignore clicks that originated on a child with its own handler.
+      if (e.defaultPrevented) return;
+      clearTimer();
+      timer.current = window.setTimeout(() => {
+        onExpand();
+        timer.current = null;
+      }, 220);
+    },
+    [onExpand, clearTimer],
+  );
+
+  const onDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      clearTimer();
+      onOpenProfile();
+    },
+    [onOpenProfile, clearTimer],
+  );
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        onOpenProfile();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        onExpand();
+      }
+    },
+    [onExpand, onOpenProfile],
+  );
+
+  return { onClick, onDoubleClick, onKeyDown };
+}
+
+/* ========================================================================= */
+/* RESULT CARD — expanded drill-down panel                                   */
+/* ========================================================================= */
+
+function ResultCardDrillDown({
+  row,
+  onOpenProfile,
+}: {
+  row: MatchResultRow;
+  onOpenProfile: () => void;
+}) {
+  const hasWhyThem = Boolean(row.why_them);
+  const hasThesis = Boolean(row.thesis_summary);
+  const needsEmail = row.verified_email_count === 0;
+  return (
+    <div
+      className="rc-expand"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      {hasWhyThem ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Why them</div>
+          <p>{row.why_them}</p>
+        </div>
+      ) : null}
+      {hasThesis ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Thesis</div>
+          <p>{row.thesis_summary}</p>
+        </div>
+      ) : null}
+      <div className="rc-expand-grid">
+        <MetaCell
+          label="Stage"
+          value={row.stage_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="Geo"
+          value={row.geo_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="Cheque"
+          value={
+            row.cheque_min_raw || row.cheque_max_raw ? (
+              <>
+                {row.cheque_min_raw
+                  ? formatRawAmount(row.cheque_min_raw)
+                  : "—"}
+                {" – "}
+                {row.cheque_max_raw
+                  ? formatRawAmount(row.cheque_max_raw)
+                  : "—"}
+              </>
+            ) : (
+              <Faint>not on file</Faint>
+            )
+          }
+        />
+        <MetaCell
+          label="Primary partner"
+          value={
+            row.primary_partner?.name ? (
+              <>
+                {row.primary_partner.name}
+                {row.primary_partner.title ? (
+                  <span style={{ color: "var(--text-dim)" }}>
+                    {" · "}
+                    {row.primary_partner.title}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <Faint>no primary on file</Faint>
+            )
+          }
+        />
+      </div>
+      <div className="rc-expand-actions">
+        <button
+          type="button"
+          className="batch-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProfile();
+          }}
+        >
+          Open full profile →
+        </button>
+        {needsEmail ? (
+          <button
+            type="button"
+            className="batch-btn rc-expand-resolve"
+            data-resolve-email={row.investor_id}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Dispatched to the email-hunt modal via a bubbling custom
+              // event — the modal is mounted higher in the tree and
+              // listens for it. Keeps the drill-down decoupled from
+              // modal state.
+              window.dispatchEvent(
+                new CustomEvent("fc:resolve-email", {
+                  detail: { investorId: row.investor_id },
+                }),
+              );
+            }}
+          >
+            Resolve email →
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MetaCell({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rc-meta-cell">
+      <div className="rc-meta-label">{label}</div>
+      <div className="rc-meta-value">{value}</div>
+    </div>
+  );
+}
+
+function Faint({ children }: { children: React.ReactNode }) {
+  return <i style={{ color: "var(--text-faint)" }}>{children}</i>;
 }
 
 function TagChips({ row }: { row: MatchResultRow }) {
@@ -1128,7 +1377,31 @@ function ResultTagRow({ row }: { row: MatchResultRow }) {
         </span>
       ) : null}
       {row.verified_email_count === 0 ? (
-        <span className="tag-chip tag-warn">
+        <span
+          className="tag-chip tag-warn"
+          role="button"
+          tabIndex={0}
+          style={{ cursor: "pointer" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent("fc:resolve-email", {
+                detail: { investorId: row.investor_id },
+              }),
+            );
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent("fc:resolve-email", {
+                  detail: { investorId: row.investor_id },
+                }),
+              );
+            }
+          }}
+        >
           <span>⚠</span>Resolve email →
         </span>
       ) : null}
@@ -1273,12 +1546,18 @@ function LookalikePanel({
   campaignName,
   selected,
   onToggle,
+  expandedId,
+  onExpand,
+  onOpenProfile,
 }: {
   data: LookalikeResult | null;
   isPending: boolean;
   campaignName: string;
   selected: Set<number>;
   onToggle: (investorId: number) => void;
+  expandedId: number | null;
+  onExpand: (investorId: number) => void;
+  onOpenProfile: (investorId: number) => void;
 }) {
   if (data === null && isPending) {
     return (
@@ -1379,7 +1658,10 @@ function LookalikePanel({
               key={row.investor_id}
               row={row}
               checked={selected.has(row.investor_id)}
+              expanded={expandedId === row.investor_id}
               onToggle={() => onToggle(row.investor_id)}
+              onExpand={() => onExpand(row.investor_id)}
+              onOpenProfile={() => onOpenProfile(row.investor_id)}
             />
           ))}
         </>
@@ -1407,28 +1689,38 @@ function AnchorChip({ anchor }: { anchor: LookalikeAnchor }) {
 function LookalikeCard({
   row,
   checked,
+  expanded,
   onToggle,
+  onExpand,
+  onOpenProfile,
 }: {
   row: LookalikeRow;
   checked: boolean;
+  expanded: boolean;
   onToggle: () => void;
+  onExpand: () => void;
+  onOpenProfile: () => void;
 }) {
+  const { onClick, onDoubleClick, onKeyDown } = useExpandNavigateHandlers({
+    onExpand,
+    onOpenProfile,
+  });
   return (
     <div
-      className={`result-card${checked ? " checked" : ""}`}
+      className={`result-card${checked ? " checked" : ""}${expanded ? " rc-expanded" : ""}`}
       data-card={row.investor_id}
       role="button"
       tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
       style={{ cursor: "pointer" }}
     >
-      <div className="rc-chk-col">
+      <div
+        className="rc-chk-col"
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
         <span
           className={`rc-chk${checked ? " on" : ""}`}
           onClick={(e) => {
@@ -1441,6 +1733,7 @@ function LookalikeCard({
           onKeyDown={(e) => {
             if (e.key === " " || e.key === "Enter") {
               e.preventDefault();
+              e.stopPropagation();
               onToggle();
             }
           }}
@@ -1489,6 +1782,71 @@ function LookalikeCard({
               : row.thesis_summary}
           </div>
         ) : null}
+        {expanded ? (
+          <LookalikeDrillDown row={row} onOpenProfile={onOpenProfile} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function LookalikeDrillDown({
+  row,
+  onOpenProfile,
+}: {
+  row: LookalikeRow;
+  onOpenProfile: () => void;
+}) {
+  return (
+    <div
+      className="rc-expand"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      {row.matched_anchors.length > 0 ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Looks like</div>
+          <p>
+            {row.matched_anchors.join(", ")} — the respondents this
+            investor most overlaps with.
+          </p>
+        </div>
+      ) : null}
+      {row.thesis_summary ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Thesis</div>
+          <p>{row.thesis_summary}</p>
+        </div>
+      ) : null}
+      <div className="rc-expand-grid">
+        <MetaCell
+          label="Stage"
+          value={row.stage_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="Geo"
+          value={row.geo_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="Sector"
+          value={row.sector_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="HQ"
+          value={row.hq_location ?? <Faint>not on file</Faint>}
+        />
+      </div>
+      <div className="rc-expand-actions">
+        <button
+          type="button"
+          className="batch-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProfile();
+          }}
+        >
+          Open full profile →
+        </button>
       </div>
     </div>
   );
