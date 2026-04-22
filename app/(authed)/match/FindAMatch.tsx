@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   Archetype,
@@ -263,13 +264,20 @@ export function FindAMatch({
       <section className="hero">
         <div className="hero-title">
           What are you working on?{" "}
-          <span className="accent">Tell us in plain language.</span>
+          <span className="accent">Pick an archetype, then tell us about it.</span>
         </div>
         <div className="hero-sub">
-          Drop a business plan, deck, product sheet, or RFQ — or just type. We
-          match into the right pool for the archetype you pick below. The
-          auto-suggest reads your text live.
+          Choose whether you&rsquo;re raising, selling, or sourcing — that
+          determines the pool we match against. Then drop a business plan,
+          deck, product sheet, or RFQ (or just type) below. Auto-suggest
+          reads your text live.
         </div>
+
+        <ArchetypeRow
+          archetype={archetype}
+          onPick={onPickArchetype}
+          pools={{ investor: data.archetypePoolSize }}
+        />
 
         <div className="hero-input-wrap">
           <textarea
@@ -290,12 +298,6 @@ export function FindAMatch({
             <span className="kbd">⌘↵</span>
           </button>
         </div>
-
-        <ArchetypeRow
-          archetype={archetype}
-          onPick={onPickArchetype}
-          pools={{ investor: data.archetypePoolSize }}
-        />
 
         {showAutoSuggest ? (
           <AutoSuggestBanner
@@ -323,13 +325,27 @@ export function FindAMatch({
         />
       ) : null}
 
-      {/* V4 `.batch-bar` (lines 973-986). Sticky below topbar. */}
+      {/* V4 `.batch-bar` (lines 973-986). Sticky below topbar.
+          `visibleIds` drives Select-all; depends on which tab is
+          active so we don't try to select rows from the other mode. */}
       <BatchBar
         selected={selected.size}
-        total={topN}
+        total={
+          tab === "lookalike"
+            ? (lookalikeData?.rows.length ?? 0)
+            : topN
+        }
         armed={selected.size > 0}
         disabled={selected.size === 0 || isShortlisting}
         onShortlist={onShortlist}
+        onSelectAll={() => {
+          const ids =
+            tab === "lookalike"
+              ? (lookalikeData?.rows ?? []).map((r) => r.investor_id)
+              : rows.map((r) => r.investor_id);
+          setSelected(new Set(ids));
+        }}
+        onClearAll={() => setSelected(new Set())}
       />
 
       {toast ? <ToastRow toast={toast} onDismiss={() => setToast(null)} /> : null}
@@ -585,6 +601,10 @@ function ConflictBanner({
         conflict.days_since !== null ? ` (${conflict.days_since}d)` : ""
       }`
     : "in the last 14 days";
+  // Deep-link into the OTHER campaign's tracker, pre-selected. The
+  // campaign switcher reads ?c=<id> so this instantly switches the
+  // user's active campaign to the conflict's origin.
+  const href = `/tracker?c=${encodeURIComponent(conflict.other_campaign_id)}`;
   return (
     <section className="conflict-banner">
       <div className="cb-icon">!</div>
@@ -595,7 +615,9 @@ function ConflictBanner({
           ? ` Adding them to ${currentCampaignName} risks a double-ask from ${conflict.primary_contact_name} in the same 14-day window.`
           : ` Adding them to ${currentCampaignName} risks a double-ask in the same 14-day window.`}
       </div>
-      <div className="cb-link">Review conflict →</div>
+      <Link href={href} className="cb-link">
+        Review conflict →
+      </Link>
     </section>
   );
 }
@@ -610,33 +632,64 @@ function BatchBar({
   armed,
   disabled,
   onShortlist,
+  onSelectAll,
+  onClearAll,
 }: {
   selected: number;
   total: number;
   armed: boolean;
   disabled: boolean;
   onShortlist: () => void;
+  onSelectAll: () => void;
+  onClearAll: () => void;
 }) {
+  const allSelected = selected > 0 && selected === total;
   return (
     <div className={`batch-bar${armed ? " armed" : ""}`}>
-      <div className="bb-sel">
+      <div
+        className="bb-sel"
+        onClick={allSelected ? onClearAll : onSelectAll}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            (allSelected ? onClearAll : onSelectAll)();
+          }
+        }}
+        style={{ cursor: total > 0 ? "pointer" : "default" }}
+        title={allSelected ? "Clear selection" : "Select all visible"}
+      >
         <span className={`bb-chk${armed ? " on" : ""}`}>{armed ? "✓" : ""}</span>
         <span className="bb-label">Selected</span>
         <span className="bb-count">{selected}</span>
         <span className="bb-label">of {total}</span>
       </div>
       <span style={{ color: "var(--text-faint)" }}>&middot;</span>
+      <button
+        type="button"
+        onClick={allSelected ? onClearAll : onSelectAll}
+        disabled={total === 0}
+        style={{
+          background: "none",
+          border: "none",
+          padding: 0,
+          color: "var(--accent)",
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: total === 0 ? "not-allowed" : "pointer",
+          textDecoration: "underline",
+          textUnderlineOffset: 2,
+        }}
+      >
+        {allSelected ? "Clear all" : "Select all visible"}
+      </button>
+      <span style={{ color: "var(--text-faint)" }}>&middot;</span>
       <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
         Match score &ge; <b style={{ color: "var(--text)" }}>70%</b>{" "}
         &middot; already-contacted hidden
       </span>
       <span className="bb-spacer" />
-      <button className="bb-btn" disabled title="Coming in a later section">
-        Add to shortlist
-      </button>
-      <button className="bb-btn" disabled title="Coming in a later section">
-        Export to CSV
-      </button>
       <button
         className="bb-btn primary"
         onClick={onShortlist}
@@ -812,6 +865,16 @@ function ResultCard({
     <div
       className={`result-card${checked ? " checked" : ""}`}
       data-card={row.investor_id}
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      style={{ cursor: "pointer" }}
     >
       <div className="rc-chk-col">
         <span
@@ -1240,6 +1303,16 @@ function LookalikeCard({
     <div
       className={`result-card${checked ? " checked" : ""}`}
       data-card={row.investor_id}
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      style={{ cursor: "pointer" }}
     >
       <div className="rc-chk-col">
         <span

@@ -29,6 +29,9 @@ export interface NearMiss {
 
 export interface ConflictRow {
   firm_name: string;
+  /** UUID of the other campaign — used by the "Review conflict →" link
+   *  to deep-link into that campaign's tracker view. */
+  other_campaign_id: string;
   other_campaign_name: string;
   other_status_code: string | null;
   other_status_label: string | null;

@@ -302,7 +302,20 @@ function dimAverage(d: ScoreDims): number {
   return Math.round((d.thesis + d.stage + d.geo + d.cheque + d.activity + d.data) / 6);
 }
 
-function pickNearMiss(row: Partial<MatchResultRow> & { dims: ScoreDims; firm_name: string | null; stage_focus: string | null }): NearMiss | null {
+function pickNearMiss(
+  row: Partial<MatchResultRow> & {
+    dims: ScoreDims;
+    firm_name: string | null;
+    stage_focus: string | null;
+    geo_focus?: string | null;
+    sector_focus?: string | null;
+    thesis_summary?: string | null;
+    cheque_min_raw?: string | null;
+    cheque_max_raw?: string | null;
+  },
+  pitchTokens?: Set<string>,
+  pitchStages?: string[],
+): NearMiss | null {
   const d = row.dims;
   const entries: Array<[keyof ScoreDims, number]> = [
     ["thesis", d.thesis],
@@ -320,37 +333,72 @@ function pickNearMiss(row: Partial<MatchResultRow> & { dims: ScoreDims; firm_nam
   if (avg - weakVal < 18) return null;
 
   const firm = row.firm_name ?? "this firm";
-  const stage = (row.stage_focus ?? "").toLowerCase();
+  const stage = (row.stage_focus ?? "").toLowerCase().trim();
+  const geo = (row.geo_focus ?? "").trim();
+  const sector = (row.sector_focus ?? "").trim();
+
   switch (weakKey) {
-    case "stage":
+    case "stage": {
+      // Name both sides explicitly so Tristan can judge.
+      const firmStages = stage || "a stage we couldn't parse";
+      const pitchStageList = pitchStages && pitchStages.length > 0
+        ? pitchStages.join(" / ")
+        : "the stage your pitch implies";
       return {
         headline: "Near-miss: weak stage fit.",
-        body: `${firm} focuses on ${stage || "an earlier/later stage"} — doesn't line up with the raise you described. Thesis alignment is still the strongest — worth a sidebar conversation for follow-on, not lead.`,
+        body: `${firm} focuses on ${firmStages}; your pitch reads as ${pitchStageList}. Good for follow-on, not lead.`,
       };
-    case "geo":
+    }
+    case "geo": {
+      const firmGeo = geo || "geographies we couldn't parse from their profile";
       return {
         headline: "Near-miss: weak geo fit.",
-        body: `${firm} doesn't deploy into the geographies your pitch calls out. Check for a recent sister-fund or LP introduction before cold outreach.`,
+        body: `${firm} deploys into ${firmGeo}. Check for a recent sister-fund or LP introduction before cold outreach.`,
       };
-    case "thesis":
+    }
+    case "thesis": {
+      // Surface the pitch tokens NOT present in the firm's thesis.
+      const firmBlurb = (row.thesis_summary ?? "") + " " + sector;
+      const firmTokens = new Set(
+        firmBlurb.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length >= 4),
+      );
+      const missing = pitchTokens
+        ? Array.from(pitchTokens).filter((t) => !firmTokens.has(t)).slice(0, 4)
+        : [];
+      const firmSectors = sector
+        ? `their stated focus is ${sector.split(",").slice(0, 3).join(", ")}`
+        : "we don't have a parsed sector list for them";
+      const missingFrag =
+        missing.length > 0
+          ? `Your pitch emphasises ${missing.join(", ")} — those don't appear in ${firm}'s public remit. `
+          : "";
       return {
         headline: "Near-miss: weak thesis overlap.",
-        body: `${firm}'s remit doesn't obviously match the pitch text. Ask yourself if a team member has written on an adjacent theme before approaching cold.`,
+        body: `${missingFrag}${firm}: ${firmSectors}. Ask if a team member has written on an adjacent theme before approaching cold.`,
       };
-    case "cheque":
+    }
+    case "cheque": {
+      const minR = (row.cheque_min_raw ?? "").trim();
+      const maxR = (row.cheque_max_raw ?? "").trim();
+      const firmRange =
+        minR || maxR ? [minR, maxR].filter(Boolean).join("–") : "an unknown range";
       return {
         headline: "Near-miss: cheque size off.",
-        body: `${firm}'s typical cheque doesn't line up with the round size you've set. Consider them for a follow-on slot rather than the lead.`,
+        body: `${firm}'s typical cheque (${firmRange}) doesn't line up with the round size you described. Consider them for a follow-on slot rather than the lead.`,
       };
+    }
     case "activity":
       return {
         headline: "Near-miss: stale profile.",
-        body: `${firm} hasn't refreshed its public thesis recently. Confirm they're still deploying before investing time in an outreach.`,
+        body: `${firm} hasn't refreshed its public thesis recently — last signal from us is old. Confirm they're still deploying before investing time in outreach.`,
       };
     case "data":
       return {
         headline: "Near-miss: thin data on file.",
-        body: `We only have partial profile data for ${firm}. Do a manual pass on their website before outreach.`,
+        body: `We only have partial profile data for ${firm} — thesis, sector, or stage fields are empty. Do a manual website pass before outreach.`,
       };
     default:
       return null;
@@ -530,6 +578,7 @@ export async function getMatchScore(
       : null;
     otherByInvestor.set(invId, {
       firm_name: "", // filled after we resolve the investor
+      other_campaign_id: (camp as { id: string }).id,
       other_campaign_name: (camp as { name: string }).name,
       other_status_code: row.status_code,
       other_status_label: row.status_label,
@@ -621,11 +670,20 @@ export async function getMatchScore(
     const match = dimAverage(dims);
     if (match < minMatch) continue;
 
-    const nm = pickNearMiss({
-      dims,
-      firm_name: inv.firm_name,
-      stage_focus: inv.stage_focus,
-    });
+    const nm = pickNearMiss(
+      {
+        dims,
+        firm_name: inv.firm_name,
+        stage_focus: inv.stage_focus,
+        geo_focus: inv.geo_focus,
+        sector_focus: inv.sector_focus,
+        thesis_summary: inv.thesis_summary,
+        cheque_min_raw: inv.cheque_min_usd,
+        cheque_max_raw: inv.cheque_max_usd,
+      },
+      heroTokens,
+      wantedStages,
+    );
 
     const other = otherByInvestor.get(inv.id) ?? null;
     const current = currentByInvestor.get(inv.id) ?? null;
