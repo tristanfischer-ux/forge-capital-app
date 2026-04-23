@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 /**
- * One-off send script for the Wren Aerospace audit walkthrough.
+ * Audit re-send 2026-04-23 — fixes two bugs from the first send:
  *
- * Builds the same draft body the /tracker/[id]/draft page composes,
- * then sends it via Gmail API (uses the existing gmail.compose scope
- * which Google's docs explicitly include the send capability under).
+ * 1. Subject line garbled in Mac Mail. Cause: UTF-8 middle-dot char (·)
+ *    was put in the Subject header without RFC 2047 encoded-word
+ *    wrapping; mail clients read its UTF-8 bytes as Latin-1 → mojibake
+ *    (Ã,Â·). Fix: use plain ASCII subject only.
  *
- * Reads credentials + tokens from .env.local + Supabase via service-role
- * key — same pattern as scripts/gmail-sync.mjs.
+ * 2. Body tone was generic. Tristan: tone should be "who I am, what
+ *    the company is, an understanding of what the investor does based
+ *    on the semantic search". Fix: call Haiku with the investor's
+ *    actual synthesis prose (investment_pattern + thesis_summary +
+ *    team_expertise) as context, ask for an email matching that
+ *    structure.
  *
- * Usage:
- *   node scripts/send-test-email.mjs
- *
- * Hard-coded for the Wren audit: Seraphim row id, override email already
- * set in partner_email_overrides. Not a general-purpose tool.
+ * Usage: node scripts/send-test-email.mjs
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -45,8 +46,9 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-if (!SUPABASE_URL || !SERVICE_KEY || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
+if (!SUPABASE_URL || !SERVICE_KEY || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !ANTHROPIC_API_KEY) {
   console.error("[send] missing env");
   process.exit(2);
 }
@@ -68,87 +70,130 @@ async function refreshAccessToken(tokenRow) {
     body: params.toString(),
   });
   if (!res.ok) throw new Error(`token refresh ${res.status}: ${await res.text()}`);
-  const body = await res.json();
-  return body.access_token;
+  return (await res.json()).access_token;
 }
 
-function base64UrlEncode(str) {
-  return Buffer.from(str, "utf8")
+function base64UrlEncode(bytes) {
+  return Buffer.from(bytes)
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
-(async () => {
-  // 1. Get the Gmail OAuth token row.
-  const { data: tokens, error: tokenErr } = await sb
-    .from("gmail_tokens")
-    .select("user_id, access_token, refresh_token, expires_at, scope")
-    .limit(1);
-  if (tokenErr || !tokens || tokens.length === 0) {
-    console.error("[send] no gmail_tokens row:", tokenErr?.message);
-    process.exit(1);
-  }
-  const tokenRow = tokens[0];
-  console.log(
-    `[send] using token for user ${tokenRow.user_id.slice(0, 8)}… scope=${tokenRow.scope?.replace(/https:\/\/www\.googleapis\.com\/auth\//g, "")}`,
-  );
-
-  // 2. Refresh access token.
-  const accessToken = await refreshAccessToken(tokenRow);
-  console.log("[send] access token refreshed");
-
-  // 3. Compose the Wren message — concise pitch matching the draft page.
-  const to = "tristan.fischer@mac.com";
-  const subject = "Wren Aerospace · HAPS / stratospheric drone · audit-test from Forge Capital";
-  const body = [
-    "Lewis,",
+async function haikuComposeBody({ apiKey, investor, founderName, companyOneLine, raise }) {
+  const system =
+    "You write founder-to-investor introduction emails. Voice: Tristan Fischer's — first-person, British spelling, specific over abstract, NO acronyms (spell every term out, including 'high-altitude platform stations' not 'HAPS'), NO 'AI-powered' / 'Smart' / 'Intelligent' marketing verbs. Concise: 4 short paragraphs. Sign 'Tristan — Founder, Fractional Forge'. Output ONLY the email body — no subject, no salutation prefix beyond the actual greeting line, no boilerplate.";
+  const user = [
+    "Compose an investor introduction email with this exact structure:",
     "",
-    "Following the Seraphim Space team's recent SpaceTech investment commentary, I wanted to introduce Wren Aerospace.",
+    "Paragraph 1 — Who I am: Tristan, Fractional Forge, helping the founder team raise their round. Mention I am writing on behalf of the company.",
     "",
-    "Wren is a Dutch-incorporated, ESA BIC Noordwijk-incubated startup developing the Wren Flyer — a hydrogen-solar hybrid high-altitude platform station (HAPS) operating at 20 km. Targets include mobile / satellite operators, defence agencies, emergency responders, and Earth-observation buyers; the dual-use angle makes it directly relevant to your fund's stated thesis.",
+    "Paragraph 2 — The company in one sentence: " + companyOneLine,
     "",
-    "We are raising €1.5M-€3M Pre-Seed/Seed; co-funded by the EU and validated by ESA's incubator. We would value 20 minutes to show you the platform and discuss whether Seraphim Space is the right fit alongside an aerospace-focused angel syndicate.",
+    "Paragraph 3 — Why this investor specifically. Reference 1-2 specific things from their thesis below — the SAR/Earth observation focus, the stage range, named portfolio companies, etc. This paragraph is the demonstration of homework. Do NOT name the partner directly here; this paragraph is about the FIRM.",
     "",
-    "Tristan Fischer",
-    "Founder, Fractional Forge",
+    "Paragraph 4 — The ask: 20 minutes to walk through the platform; we are raising " + raise + ". One clear next step.",
     "",
-    "[AUDIT-WREN] This is an automated audit-walkthrough message generated by the Forge Capital app on 2026-04-23. Replying to it tests the Gmail inbound sync.",
+    "INVESTOR FIRM: " + investor.firm_name,
+    "INVESTOR THESIS: " + (investor.thesis_summary ?? ""),
+    "INVESTOR INVESTMENT PATTERN: " + (investor.investment_pattern ?? ""),
+    "INVESTOR TEAM: " + (investor.team_expertise ?? ""),
+    "",
+    "FOUNDER WRITING THE EMAIL: " + founderName,
+    "",
+    "Greet the contact (Lewis Jones, Investment Principal at Seraphim) by first name in the opening salutation.",
+    "",
+    "Output the email body only.",
   ].join("\n");
 
-  const rawMessage = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    "Content-Type: text/plain; charset=utf-8",
-    "MIME-Version: 1.0",
-    "",
-    body,
-  ].join("\r\n");
-  const encoded = base64UrlEncode(rawMessage);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5",
+      max_tokens: 700,
+      system,
+      messages: [{ role: "user", content: [{ type: "text", text: user }] }],
+    }),
+  });
+  if (!res.ok) throw new Error(`haiku ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const body = await res.json();
+  const text = body.content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  return text;
+}
 
-  // 4. Send via Gmail API.
+(async () => {
+  const { data: tokens } = await sb.from("gmail_tokens").select("user_id, refresh_token, scope").limit(1);
+  if (!tokens || tokens.length === 0) {
+    console.error("[send] no gmail_tokens");
+    process.exit(1);
+  }
+  const accessToken = await refreshAccessToken(tokens[0]);
+  console.log("[send] token refreshed");
+
+  // Pull Seraphim's actual synthesis from Supabase.
+  const { data: investorRows, error: invErr } = await sb
+    .from("investors_mirror")
+    .select("firm_name, thesis_summary, investment_pattern, team_expertise")
+    .eq("id", 2359)
+    .limit(1);
+  if (invErr || !investorRows || investorRows.length === 0) {
+    console.error("[send] investor lookup failed");
+    process.exit(1);
+  }
+  const investor = investorRows[0];
+  console.log("[send] composing body via Haiku for " + investor.firm_name);
+
+  const composedBody = await haikuComposeBody({
+    apiKey: ANTHROPIC_API_KEY,
+    investor,
+    founderName: "Tristan Fischer (introducing Wren Aerospace's CEO)",
+    companyOneLine:
+      "Wren Aerospace is a Dutch startup, incubated at the European Space Agency Business Incubation Centre in Noordwijk, building the Wren Flyer — a hydrogen-and-solar hybrid aircraft that operates at 20 kilometres altitude in the stratosphere to provide persistent connectivity, Earth observation and emergency communications.",
+    raise: "between 1.5 and 3 million euros at Pre-Seed / Seed",
+  });
+
+  console.log("[send] body composed (" + composedBody.length + " chars)");
+
+  // Plain ASCII subject — no middle-dots, no en-dashes. Safe for any client.
+  const to = "tristan.fischer@mac.com";
+  const subject = "Wren Aerospace - stratospheric drone introduction (audit-test from Forge Capital)";
+
+  const rawHeaders = [
+    "To: " + to,
+    "Subject: " + subject,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "MIME-Version: 1.0",
+  ];
+  const rawMessage = rawHeaders.join("\r\n") + "\r\n\r\n" + composedBody;
+  const encoded = base64UrlEncode(Buffer.from(rawMessage, "utf8"));
+
   const sendRes = await fetch(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
       body: JSON.stringify({ raw: encoded }),
     },
   );
   if (!sendRes.ok) {
-    const errBody = await sendRes.text();
-    console.error(`[send] FAILED ${sendRes.status}: ${errBody.slice(0, 500)}`);
+    console.error("[send] FAILED " + sendRes.status + ": " + (await sendRes.text()).slice(0, 500));
     process.exit(1);
   }
   const sendBody = await sendRes.json();
-  console.log(
-    `[send] OK — gmail message id ${sendBody.id} thread ${sendBody.threadId}`,
-  );
-  console.log(`[send] sent to ${to}`);
+  console.log("[send] OK — gmail message id " + sendBody.id);
+  console.log("[send] sent to " + to);
+  console.log("\n--- composed body ---\n" + composedBody + "\n---\n");
 })().catch((err) => {
   console.error("[send] fatal:", err);
   process.exit(1);

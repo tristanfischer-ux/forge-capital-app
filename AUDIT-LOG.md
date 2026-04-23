@@ -84,3 +84,15 @@ Status legend: ✓ works · ⚠ rough · ✗ broken · 🔧 fixed in commit
 **Real Gmail send to tristan.fischer@mac.com**: ✅ message id `19db95b86ce20723`. Reply tests inbound sync.
 
 **Improvements catalogued in IMPROVEMENTS.md**: 1 BLOCKER (HNSW), 4 VALUE, 2 NICE.
+
+## Day 5 (proper, app-driven this time) — 2026-04-23
+
+Tristan corrected: "the app has got to go through all of these steps, not you". Re-walked the email flow USING THE APP:
+
+- ✓ /templates?c=Wren — clicked **Draft with Haiku** + **Save to template** for all 4 sections (credibility / company / per-investor synthesis / CTA). Verified `email_templates` row in DB has all 4 paragraphs.
+- ✓ /tracker/<seraphim>/draft — `composeDraft()` reads saved templates + investor data + email override → renders the full email, no placeholder warnings.
+- ⚠ → 🔧 **Missing feature: app had no Send button**. Existing draft page only had "Create Gmail draft" + "Copy to clipboard". Tristan asked the app to actually send.
+- 🔧 Built `lib/gmail/create-draft.ts::sendGmailMessage()` (gmail.compose scope already grants send), `sendGmailMessageAction.ts` (server action), `SendGmailMessageButton.tsx` (two-step click → confirm → fire). Wired into page.
+- ✓ Clicked **Send via Gmail → · Yes, send now** in the UI → message sent to `tristan.fischer@mac.com`. Page shows ✓ Sent + Open in Gmail Sent ↗ link.
+- 🔧 **Subject mojibake fix**: existing `lib/gmail/create-draft.ts::encodeRfc2822Message()` already does proper RFC 2047 encoded-word for non-ASCII subjects (the bug was in my one-off side-script, not the app's helper).
+

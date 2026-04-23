@@ -7,6 +7,7 @@ import { StatusBadge } from "../../StatusBadge";
 import { composeDraft, isTierBlocked } from "./compose";
 import { CopyToClipboardButton } from "./CopyToClipboardButton";
 import { CreateGmailDraftButton } from "./CreateGmailDraftButton";
+import { SendGmailMessageButton } from "./SendGmailMessageButton";
 
 /**
  * Full-page preview of the draft email that WOULD be sent to this partner.
@@ -163,6 +164,11 @@ export default async function DraftPage({
       {!blocked ? (
         <section className="rounded-[10px] border border-border bg-surface-alt p-5">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <SendGmailMessageButton
+              to={data.primary_partner?.email ?? ""}
+              subject={draft.subject}
+              body={draft.bodyParagraphs.join("\n\n")}
+            />
             <CreateGmailDraftButton
               to={data.primary_partner?.email ?? ""}
               subject={draft.subject}
@@ -171,10 +177,11 @@ export default async function DraftPage({
             <CopyToClipboardButton fullText={draft.fullClipboardText} />
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
-            Gmail is authoritative — we never send from this tool. The
-            &ldquo;Create Gmail draft&rdquo; button uses your connected Gmail
-            account; the copy-to-clipboard option is there as a fallback.
-            Either way, review once more and hit send in Gmail yourself.
+            <strong>Send via Gmail</strong> dispatches immediately (after a
+            confirm step). <strong>Create Gmail draft</strong> parks it in
+            your Drafts folder for one more review. <strong>Copy to
+            clipboard</strong> is the fallback. All three use your
+            connected Gmail account.
           </p>
         </section>
       ) : null}

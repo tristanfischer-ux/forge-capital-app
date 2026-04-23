@@ -26,3 +26,10 @@ Tagged [BLOCKER] / [VALUE] / [NICE].
 - [VALUE] **No "send via app" button** — Gmail draft is created, but actually sending requires the user to leave the app, find the draft in Gmail, click send. Add a "Send draft now" button on /tracker/[id]/draft that calls `gmail.users.messages.send` (the existing gmail.compose scope already includes send capability — verified live during the audit).
 - [NICE] **Placeholder text in `partner_email_hunt_requests` queue UI** — pipeline page shows "1 partner queued for Hunter" but doesn't say WHICH or for which campaign. Add a click-through to a queue list.
 - [VALUE] **Cron-cascade dashboard at /pipeline doesn't show overnight outcomes vs expected** — "Latest 38h ago" for Gmail sync is a confusing relative time when the cron runs every 15min. Show "next run: in 7 min" alongside "last run: 38h ago" and you can see at a glance whether there's drift.
+
+## DAY 6 — Tristan's new asks 2026-04-23
+
+- [VALUE] **Inbound reply sentiment classification + logged** — when Gmail-sync ingests an inbound `contact_events` row, fire a Haiku call to classify the reply as positive / neutral / negative (e.g. +6 Reply received / +7 Meeting offered / -1 Declined / -3 Disqualified). Auto-update `campaign_partners.status_code` + log the classification + confidence on the contact_event. UI: a coloured badge on each event in the tracker drawer.
+- [VALUE] **Weekly summary email to the founder being raised for** — composes the existing /weekly view's stats (replies received / meetings scheduled / declines / queue depth / next 5 follow-ups) into an email and sends every Sunday evening to `campaigns.counterpart_email` (or a new `founder_email` column if we want to separate the founder from the counterpart approver). Could reuse the existing weekly-draft cron pattern that already runs Friday 17:00 BST.
+
+Both belong in BACKLOG as Level-5 / Level-6 work — capturing them there too so they don't slip.

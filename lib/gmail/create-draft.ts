@@ -100,3 +100,47 @@ export async function createGmailDraft(input: CreateDraftInput): Promise<CreateD
   }
   return (await res.json()) as CreateDraftResult;
 }
+
+export interface SendMessageResult {
+  id: string;
+  threadId: string;
+  labelIds?: string[];
+}
+
+/**
+ * Send an email immediately via Gmail API. Distinct from `createGmailDraft`
+ * — that one parks a draft in the user's Drafts folder, whereas this one
+ * dispatches the message. Tristan asked for this 2026-04-23 during the
+ * Wren audit because the app needed an end-to-end path that doesn't
+ * require leaving for Gmail.
+ *
+ * The button calling this MUST gate it behind an explicit confirm —
+ * V4-FEEDBACK-ROUND-2.md "No auto-send anywhere" was about preventing
+ * accidental sends; an explicit, inspected, human-clicked send is fine.
+ *
+ * Uses the same `gmail.compose` scope already granted; Google's docs
+ * include send capability under that scope.
+ */
+export async function sendGmailMessage(
+  input: CreateDraftInput,
+): Promise<SendMessageResult> {
+  const accessToken = await getAccessTokenForCurrentUser();
+  const raw = encodeRfc2822Message(input.to, input.subject, input.body);
+  const res = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ raw }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(
+      `Gmail send failed: HTTP ${res.status} ${await res.text()}`,
+    );
+  }
+  return (await res.json()) as SendMessageResult;
+}

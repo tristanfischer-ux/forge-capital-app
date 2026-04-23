@@ -214,3 +214,46 @@ On `/portfolio/[slug]`:
 - ✅ Review "Go to Tracker" wired.
 - ✅ Approval return drop-zone + Haiku parser.
 - ✅ AI drafter in templates (per-section Haiku).
+
+## Level 5 — Inbound reply sentiment classification (Tristan ask 2026-04-23)
+
+When Gmail sync ingests an inbound `contact_events` row, classify the
+reply (positive / neutral / negative) via Haiku, store the verdict +
+confidence on the row, optionally auto-flip the `campaign_partners`
+status (e.g. "looks great" → +7 Meeting offered; "not for us" → -1
+Declined). UI: coloured badge on each event in the tracker drawer
++ aggregate counts on the weekly view.
+
+Build steps (~2 hours):
+1. Migration `020_contact_events_classification.sql` adds
+   `sentiment text check (in 'positive','neutral','negative','bounce')`,
+   `auto_status_suggestion text`, `classifier_confidence numeric`,
+   `classified_at timestamptz` to `contact_events`.
+2. Extend `scripts/gmail-sync.mjs` so each fresh inbound row goes
+   through a Haiku classifier before insert. Cap input at message
+   subject + first 1500 chars.
+3. New server action `applyAutoStatusSuggestion(contactEventId)` that
+   bumps the campaign_partners status if the user accepts the
+   suggestion. Toast + undo.
+4. Tracker drawer: render the sentiment badge + a "Apply suggestion"
+   inline button when classifier_confidence > 0.7.
+
+## Level 6 — Weekly summary email to the founder (Tristan ask 2026-04-23)
+
+Compose the /weekly view stats into an email and send every Sunday
+evening to the founder of the campaign being raised for.
+
+Build steps (~3 hours):
+1. Decide schema: campaigns table either gets a `founder_email` column
+   OR we reuse `counterpart_email` if the same person. Default: add
+   `founder_email` so it's explicit.
+2. Migration `021_campaigns_founder_email.sql`.
+3. New script `scripts/weekly-founder-digest.mjs` parallel to
+   gmail-sync: iterates active campaigns, builds the digest text +
+   PNG (use a serverside chart lib OR just inline ASCII / Markdown
+   tables), sends via Gmail API to `founder_email`.
+4. New launchd plist `com.forgecapital.weekly-founder-digest` Sunday
+   18:00 BST.
+5. UI: optional "Preview this week's digest" button on /weekly that
+   renders the same body inline so the founder can spot-check before
+   the cron sends.
