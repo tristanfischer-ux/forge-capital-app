@@ -3,6 +3,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
 import { labelFor, STATUS_CODES } from "@/lib/status-codes";
+import { isSelfManaged } from "@/lib/queries/self-managed";
 
 /**
  * Weekly founder digest — BACKLOG.md Level 6.
@@ -139,6 +140,7 @@ interface CampaignRow {
   name: string;
   campaign_intent: string;
   status: string;
+  counterpart_email: string | null;
 }
 
 interface PartnerJoinRow {
@@ -184,13 +186,42 @@ export async function generateWeeklyDigest(input: {
 
   const { data: campaignData, error: campaignErr } = await supabase
     .from("campaigns")
-    .select("id, name, campaign_intent, status")
+    .select("id, name, campaign_intent, status, counterpart_email")
     .eq("id", campaignId)
     .single();
   if (campaignErr || !campaignData) {
     return { ok: false, error: `campaign fetch failed: ${campaignErr?.message ?? "not found"}` };
   }
   const campaign = campaignData as unknown as CampaignRow;
+
+  // Self-managed campaigns (no external counterpart) have no "company
+  // side" to hand over to — suppress handover bullet in HEADLINE.
+  // campaign_intent drives noun plural choice throughout body copy
+  // (investors / customers / suppliers). 2026-04-23 Fischer Farms
+  // Customer case flagged the vocabulary gap.
+  const selfManaged = isSelfManaged(campaign);
+  const nounPlural =
+    (
+      {
+        investor: "investors",
+        customer: "customers",
+        supplier: "suppliers",
+      } as const
+    )[campaign.campaign_intent as "investor" | "customer" | "supplier"] ??
+    "partners";
+  const replyNoun =
+    (
+      {
+        investor: "investor replies",
+        customer: "customer replies",
+        supplier: "supplier replies",
+      } as const
+    )[campaign.campaign_intent as "investor" | "customer" | "supplier"] ??
+    "replies";
+  // nounPlural is declared for any future "investors surfaced / customers
+  // contacted" phrasing the digest may grow; replyNoun is used in the
+  // HEADLINE section. Silence unused-var lint for nounPlural.
+  void nounPlural;
 
   // Pull every partner row for the campaign.
   const { data: partnersData, error: partnersErr } = await supabase
@@ -406,7 +437,7 @@ export async function generateWeeklyDigest(input: {
   lines.push("HEADLINE");
   lines.push(`* ${stats.sent} first-contacts sent`);
   lines.push(
-    `* ${stats.replies} replies received (${repliesPositive} positive, ${repliesNegative} negative, ${repliesNeutral} neutral)`,
+    `* ${stats.replies} ${replyNoun} received (${repliesPositive} positive, ${repliesNegative} negative, ${repliesNeutral} neutral)`,
   );
 
   if (meetingsByPartner.size === 0) {
@@ -423,13 +454,18 @@ export async function generateWeeklyDigest(input: {
     );
   }
 
-  if (handoverPartners.length === 0) {
-    lines.push(`* 0 handed over to the company`);
-  } else {
-    const firms = handoverPartners.map((p) => firmFor(p)).join(", ");
-    lines.push(
-      `* ${handoverPartners.length} handed over to the company: ${firms}`,
-    );
+  // Handover bullet is only meaningful for multi-party campaigns where
+  // a counterpart owns warm replies. In self-managed campaigns there is
+  // no "company" to hand over to, so the line is omitted entirely.
+  if (!selfManaged) {
+    if (handoverPartners.length === 0) {
+      lines.push(`* 0 handed over to the company`);
+    } else {
+      const firms = handoverPartners.map((p) => firmFor(p)).join(", ");
+      lines.push(
+        `* ${handoverPartners.length} handed over to the company: ${firms}`,
+      );
+    }
   }
 
   if (declinePartners.length > 0) {

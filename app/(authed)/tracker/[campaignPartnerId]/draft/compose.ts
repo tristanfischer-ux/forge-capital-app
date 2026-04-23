@@ -505,14 +505,19 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
   // Low-confidence escape-hatch per runbook §5 Rule 10. When the
   // per-investor synthesis stumbled (thesisTooLongToHedge, or unresolved
   // {{FIRM_THESIS}} placeholder), prepend an "if I have misread the fit
-  // here, I would welcome the correction" sentence so the reader can
-  // correct Tristan without feeling spammed.
+  // here ..." sentence so the reader can correct Tristan without feeling
+  // spammed. Voice routes via campaign_intent — the investor phrasing
+  // ("I would welcome the correction") reads as VC-voice and is wrong
+  // for a customer or supplier recipient. 2026-04-23 Fischer Farms
+  // Customer case.
   const lowConfidence =
     thesisTooLongToHedge || unresolvedPlaceholders.length > 0;
   if (lowConfidence) {
-    paragraphs.push(
-      "If I have misread the fit here, I would welcome the correction.",
-    );
+    const escapeHatch =
+      data.campaign?.campaign_intent === "investor"
+        ? "If I have misread the fit here, I would welcome the correction."
+        : "If I have misread the fit here — happy to hear it.";
+    paragraphs.push(escapeHatch);
   }
 
   // Rule 10 §6 — the 20-minute ask with 3-5 specific slots.
