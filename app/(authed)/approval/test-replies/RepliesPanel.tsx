@@ -392,7 +392,9 @@ function ReplyRow({ row }: { row: TestReplyRow }) {
         ? "var(--red)"
         : state.kind === "idle" && state.sentiment === "neutral"
           ? "var(--amber)"
-          : "var(--text-dim)";
+          : state.kind === "idle" && state.sentiment === "handover"
+            ? "var(--accent-dark)"
+            : "var(--text-dim)";
 
   return (
     <li className="rounded-[8px] border border-border bg-surface-alt p-4">
@@ -513,7 +515,9 @@ function ReplyRow({ row }: { row: TestReplyRow }) {
                         ? "+7"
                         : state.sentiment === "negative"
                           ? "-1"
-                          : "+5"
+                          : state.sentiment === "handover"
+                            ? "+6.5"
+                            : "+5"
                     })`}
               </button>
               {!row.partnerEmail ? (

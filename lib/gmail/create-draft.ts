@@ -1,6 +1,6 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { refreshAccessToken } from "./oauth";
-import { checkMx } from "@/lib/email/check-mx";
+import { verifyDeliverability } from "@/lib/email/verify-deliverability";
 
 /**
  * Create a Gmail draft on behalf of the signed-in user using their stored
@@ -125,16 +125,17 @@ export interface SendMessageResult {
 export async function sendGmailMessage(
   input: CreateDraftInput,
 ): Promise<SendMessageResult> {
-  // MX pre-flight — every outbound through this function is checked
-  // against live DNS. Prevents hard-bounces from typo domains and
-  // stale contact cards (e.g. acquired firms whose domain redirected
-  // without preserving MX). Fails fast with an explicit reason so the
-  // caller can surface it per-row rather than us hitting Gmail's rate
-  // limit on dead addresses.
-  const mx = await checkMx(input.to);
-  if (!mx.deliverable) {
+  // Rule 13 deliverability pre-flight — every outbound through this
+  // function is verified. When HUNTER_API_KEY is set, runs Hunter's
+  // SMTP probe (real mailbox check, not just DNS). Falls back to MX
+  // check if Hunter unavailable. Only "deliverable" / "valid" passes;
+  // "risky" / "accept_all" / "unknown" are excluded — these were the
+  // pattern-synthesised addresses that bounced in v6 (29% bounce
+  // rate, per Kite Power CLAUDE.md Rule 13).
+  const verification = await verifyDeliverability(input.to);
+  if (!verification.deliverable) {
     throw new Error(
-      `MX check failed for ${input.to}: ${mx.reason}`,
+      `Deliverability check failed for ${input.to}: ${verification.reason}`,
     );
   }
 

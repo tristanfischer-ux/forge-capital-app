@@ -42,7 +42,7 @@ export interface TestReplyRow {
   replyInternalDate: number | null;
   replyMessageId: string | null;
   /** Already-computed classification cached on the partner row (null on first read). */
-  cachedSentiment: "positive" | "negative" | "neutral" | null;
+  cachedSentiment: Sentiment | null;
   /** Already-computed Opus-drafted response (null on first read). */
   cachedDraftResponse: string | null;
   /** Current tracker status — so the UI can show the transition to the user. */
@@ -162,7 +162,7 @@ export interface ClassifyResponseInput {
   campaignPartnerId: string;
   replyBody: string;
 }
-export type Sentiment = "positive" | "negative" | "neutral";
+export type Sentiment = "positive" | "negative" | "neutral" | "handover";
 
 export type ClassifyResponseResult =
   | {
@@ -194,11 +194,16 @@ export async function classifyAndDraftResponse(
 
   const system = [
     "You are a senior fundraising-operations analyst supporting Tristan Fischer. You read an investor's reply to a cold outreach email and do TWO things:",
-    "  1. Classify sentiment as 'positive' | 'negative' | 'neutral'. Use these definitions:",
-    "     - positive: expresses any interest — 'happy to meet', 'interested', 'send me the deck', 'book a call', even cautious interest like 'we could look at this'.",
-    "     - negative: explicit no — 'not for us', 'out of thesis', 'we pass', 'unfortunately no', or an obvious decline.",
-    "     - neutral: neither — asks a question, redirects to a colleague, says 'now is not the right time but maybe later', or anything ambiguous.",
-    "  2. Draft a short response Tristan can send back: 2-4 sentences, same first-person British voice he uses in first-contacts. NEVER flatter ('congratulations', 'great to see', etc.). If positive: thank briefly, propose 3 specific 30-minute slots over the next 10 working days in BST, offer to send the deck ahead. If negative: thank, acknowledge, leave the door open for future, do not argue. If neutral: answer any question if one was asked, otherwise gently probe for more info.",
+    "  1. Classify sentiment as 'positive' | 'negative' | 'neutral' | 'handover'. Use these definitions:",
+    "     - positive: expresses any interest — 'happy to meet', 'interested', 'send me the deck', 'book a call', even cautious interest like 'we could look at this'. Tristan auto-responds with calendar slots (transition to +7 Meeting offered).",
+    "     - negative: explicit no — 'not for us', 'out of thesis', 'we pass', 'unfortunately no', or an obvious decline (transition to -1 Declined).",
+    "     - neutral: neither — asks a factual question, redirects to a colleague, says 'now is not the right time but maybe later' (transition to +5 Follow-up sent).",
+    "     - handover: the reply is warm enough that Tristan should pass the dialogue to the company side (Stephan Wrage for SkySails, Andrew Robertson for FishFrom, Andreas Cser for Panatere). Use this when the investor asks specifics the company CEO would need to answer, OR requests a meeting with the CEO directly, OR has moved past 'interested in principle' to 'let's get the detail'. Tristan does not auto-respond — he sends a handover email to the company contact and the row goes to +6.5 Handover to company (his terminal state per Rule 8).",
+    "  2. Draft a short response in Tristan's first-person British voice. NEVER flatter ('congratulations', 'great to see', etc.).",
+    "     - positive: thank briefly, propose 3 specific 30-minute slots over the next 10 working days in BST, offer to send the deck ahead.",
+    "     - negative: thank, acknowledge, leave the door open for future, do not argue.",
+    "     - neutral: answer any question if one was asked, otherwise gently probe for more info.",
+    "     - handover: draft text TO THE COMPANY CONTACT (not the investor), introducing the investor and the context of the reply. Frame: 'Hi <company-contact>, <investor-firm> replied to my cold email with the following — looks warm enough to hand over. <verbatim or paraphrased reply>. Happy to pass the thread to you so you can take it from here.'",
     "Output ONLY a JSON object: {\"sentiment\": \"<bucket>\", \"reasons\": [\"<short bullet>\", ...], \"draft_response\": \"<paragraph>\"} — no prose, no markdown fence. British spelling. Never invent facts outside the provided context. NO bracketed placeholders like [X] / [name].",
   ].join("\n");
 
@@ -247,7 +252,8 @@ export async function classifyAndDraftResponse(
     const sentiment =
       parsed.sentiment === "positive" ||
       parsed.sentiment === "negative" ||
-      parsed.sentiment === "neutral"
+      parsed.sentiment === "neutral" ||
+      parsed.sentiment === "handover"
         ? (parsed.sentiment as Sentiment)
         : null;
     const draftResponse =
@@ -661,19 +667,25 @@ export async function sendResponseAndUpdateStatus(
     return { ok: false, error: `Gmail send failed: ${msg}` };
   }
 
-  // Status transition.
+  // Status transition per Rule 8. +6.5 is Tristan's terminal state —
+  // once he hands over to the company (Stephan/Andrew/Andreas), he
+  // stops driving the row.
   const newStatusCode =
     sentiment === "positive"
       ? "+7"
       : sentiment === "negative"
         ? "-1"
-        : "+5";
+        : sentiment === "handover"
+          ? "+6.5"
+          : "+5";
   const newStatusLabel =
     sentiment === "positive"
       ? "Meeting offered"
       : sentiment === "negative"
         ? "Declined"
-        : "Follow-up sent";
+        : sentiment === "handover"
+          ? "Handover to company"
+          : "Follow-up sent";
 
   await supabase
     .from("campaign_partners")
