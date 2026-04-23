@@ -186,6 +186,7 @@ export default async function TrackerPage({
             rows={rows}
             campaignName={activeCampaign?.name}
             counterpartName={activeCampaign?.counterpart_name ?? undefined}
+            counterpartEmail={activeCampaign?.counterpart_email ?? null}
           />
 
           {/* UX audit 2026-04-23 item #7: the status-distribution strip

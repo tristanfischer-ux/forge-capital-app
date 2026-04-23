@@ -140,12 +140,18 @@ export function TrackerTable({
   rows,
   campaignName,
   counterpartName,
+  counterpartEmail,
 }: {
   rows: TrackerRow[];
   campaignName?: string;
   /** Counterpart display name for the "(X view)" subtitle. Empty string
    *  or undefined omits the parenthetical — no more hardcoded Stephan. */
   counterpartName?: string;
+  /** Counterpart email — drives the self-managed check that hides
+   *  +6.5 from the drawer's status dropdown. Passed through to each
+   *  TrackerRowDrawer so multi-party (FishFrom) keeps +6.5 visible
+   *  while self-managed campaigns drop it. Null = self-managed. */
+  counterpartEmail?: string | null;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -290,6 +296,7 @@ export function TrackerTable({
                         campaignPartnerId={row.id}
                         currentStatusCode={row.status_code}
                         firmName={row.firm_name}
+                        campaignCounterpartEmail={counterpartEmail ?? null}
                       />
                     </td>
                   </tr>

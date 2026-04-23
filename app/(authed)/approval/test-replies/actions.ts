@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getGmailThread } from "@/lib/gmail/read-thread";
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
 import { getInvestorModalData } from "@/lib/queries/investorModal";
+import { isSelfManaged } from "@/lib/queries/self-managed";
 
 /**
  * Reply-ingestion + response-drafting surface actions.
@@ -187,12 +188,31 @@ export async function classifyAndDraftResponse(
   const data = await getInvestorModalData(campaignPartnerId);
   if (!data) return { ok: false, error: "Partner not found." };
 
+  // Fetch counterpart_email off the campaign row — InvestorModalData's
+  // campaign shape doesn't include it. This is what drives the
+  // self-managed branch (no external company-side to hand over to).
+  let campaignRow: {
+    id: string;
+    counterpart_email: string | null;
+    counterpart_name: string | null;
+  } | null = null;
+  if (data.campaign?.id) {
+    const supabase = await createServerClient();
+    const { data: campRow } = await supabase
+      .from("campaigns")
+      .select("id, counterpart_email, counterpart_name")
+      .eq("id", data.campaign.id)
+      .maybeSingle();
+    campaignRow = (campRow as typeof campaignRow) ?? null;
+  }
+  const selfManaged = isSelfManaged(campaignRow);
+
   const firmName = data.investor.firm_name ?? "the firm";
   const firstName =
     (data.primary_partner?.name ?? "").trim().split(/\s+/)[0] || "there";
   const founderBio = data.campaign?.company_description ?? "";
 
-  const system = [
+  const systemLines = [
     "You are a senior fundraising-operations analyst supporting Tristan Fischer. You read an investor's reply to a cold outreach email and do TWO things:",
     "  1. Classify sentiment as 'positive' | 'negative' | 'neutral' | 'handover'. Use these definitions:",
     "     - positive: expresses any interest — 'happy to meet', 'interested', 'send me the deck', 'book a call', even cautious interest like 'we could look at this'. Tristan auto-responds with calendar slots (transition to +7 Meeting offered).",
@@ -205,7 +225,17 @@ export async function classifyAndDraftResponse(
     "     - neutral: answer any question if one was asked, otherwise gently probe for more info.",
     "     - handover: draft text TO THE COMPANY CONTACT (not the investor), introducing the investor and the context of the reply. Frame: 'Hi <company-contact>, <investor-firm> replied to my cold email with the following — looks warm enough to hand over. <verbatim or paraphrased reply>. Happy to pass the thread to you so you can take it from here.'",
     "Output ONLY a JSON object: {\"sentiment\": \"<bucket>\", \"reasons\": [\"<short bullet>\", ...], \"draft_response\": \"<paragraph>\"} — no prose, no markdown fence. British spelling. Never invent facts outside the provided context. NO bracketed placeholders like [X] / [name].",
-  ].join("\n");
+  ];
+  if (selfManaged) {
+    // Bias Opus upstream: no external company side exists to hand over
+    // to, so the handover bucket + handover-voice draft would both be
+    // wasted output. Re-point handover-worthy replies at positive so
+    // warm interest receives calendar slots.
+    systemLines.push(
+      "This campaign is self-managed — the founder does not hand dialogue over to a separate company side. If you would have picked `handover`, pick `positive` instead.",
+    );
+  }
+  const system = systemLines.join("\n");
 
   const userPrompt = [
     `INVESTOR FIRM: ${firmName}`,
@@ -276,18 +306,26 @@ export async function classifyAndDraftResponse(
       };
     }
 
+    // Defensive remap: Opus may still return `handover` on a self-managed
+    // campaign (the bias sentence is guidance, not a hard gate). On
+    // self-managed campaigns, treat it as `positive` — the status + the
+    // drafted-response voice both need to route to the meeting-offer
+    // branch, never to a +6.5 handover message nobody receives.
+    const effective: Sentiment =
+      selfManaged && sentiment === "handover" ? "positive" : sentiment;
+
     // Cache sentiment + draft on the campaign_partners row so the UI can
     // reload without re-hitting Opus.
     const supabase = await createServerClient();
     await supabase
       .from("campaign_partners")
       .update({
-        reply_sentiment: sentiment,
+        reply_sentiment: effective,
         drafted_response: draftResponse,
       })
       .eq("id", campaignPartnerId);
 
-    return { ok: true, sentiment, reasons, draftResponse };
+    return { ok: true, sentiment: effective, reasons, draftResponse };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `Opus call failed: ${msg}` };
@@ -659,6 +697,38 @@ export async function sendResponseAndUpdateStatus(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
+  // Resolve the campaign so we can check counterpart_email. On a
+  // self-managed campaign (no external company side) handover is
+  // meaningless — reroute the row onto the positive branch so it
+  // lands at +7 Meeting offered instead of +6.5.
+  let selfManaged = false;
+  {
+    const { data: cpRow } = await supabase
+      .from("campaign_partners")
+      .select("campaign_id")
+      .eq("id", campaignPartnerId)
+      .maybeSingle();
+    const campaignId = (cpRow as { campaign_id: string | null } | null)
+      ?.campaign_id;
+    if (campaignId) {
+      const { data: campRow } = await supabase
+        .from("campaigns")
+        .select("counterpart_email, counterpart_name")
+        .eq("id", campaignId)
+        .maybeSingle();
+      selfManaged = isSelfManaged(
+        (campRow as {
+          counterpart_email: string | null;
+          counterpart_name: string | null;
+        } | null) ?? null,
+      );
+    } else {
+      // No campaign row found — treat as self-managed (permissive,
+      // matches lib/queries/self-managed.ts isSelfManaged default).
+      selfManaged = true;
+    }
+  }
+
   let sent;
   try {
     sent = await sendGmailMessage({ to: toEmail, subject, body });
@@ -667,23 +737,29 @@ export async function sendResponseAndUpdateStatus(
     return { ok: false, error: `Gmail send failed: ${msg}` };
   }
 
-  // Status transition per Rule 8. +6.5 is Tristan's terminal state —
-  // once he hands over to the company (Stephan/Andrew/Andreas), he
-  // stops driving the row.
+  // Status transition per Rule 8. +6.5 is Tristan's terminal state on
+  // multi-party campaigns (FishFrom) — once he hands over to the
+  // company (Stephan/Andrew/Andreas), he stops driving the row.
+  //
+  // Self-managed campaigns (SkySails, Panatere, ForgeOS, Fischer Farms
+  // Customer) have no company side: handover rides the positive branch
+  // to +7 so warm replies get calendar slots instead of a dead-end.
+  const effectiveSentiment: Sentiment =
+    selfManaged && sentiment === "handover" ? "positive" : sentiment;
   const newStatusCode =
-    sentiment === "positive"
+    effectiveSentiment === "positive"
       ? "+7"
-      : sentiment === "negative"
+      : effectiveSentiment === "negative"
         ? "-1"
-        : sentiment === "handover"
+        : effectiveSentiment === "handover"
           ? "+6.5"
           : "+5";
   const newStatusLabel =
-    sentiment === "positive"
+    effectiveSentiment === "positive"
       ? "Meeting offered"
-      : sentiment === "negative"
+      : effectiveSentiment === "negative"
         ? "Declined"
-        : sentiment === "handover"
+        : effectiveSentiment === "handover"
           ? "Handover to company"
           : "Follow-up sent";
 
@@ -701,12 +777,12 @@ export async function sendResponseAndUpdateStatus(
   await supabase.from("contact_events").insert([
     {
       campaign_partner_id: campaignPartnerId,
-      event_type: `inbound_reply_${sentiment}`,
+      event_type: `inbound_reply_${effectiveSentiment}`,
       event_at: new Date().toISOString(),
       direction: "inbound",
       channel: "gmail",
       gmail_thread_id: gmailThreadId,
-      summary: `[TEST REPLY] ${sentiment}`,
+      summary: `[TEST REPLY] ${effectiveSentiment}`,
     },
     {
       campaign_partner_id: campaignPartnerId,

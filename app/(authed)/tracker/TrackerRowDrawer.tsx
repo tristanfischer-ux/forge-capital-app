@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { STATUS_CODES } from "@/lib/status-codes";
+import { statusCodesVisibleFor } from "@/lib/queries/self-managed";
 import { fetchContactEvents, updateCampaignPartnerStatus } from "./actions";
 import type { ContactEventRow } from "@/lib/queries/campaignPartner";
 
@@ -26,6 +27,17 @@ export interface TrackerRowDrawerProps {
   campaignPartnerId: string;
   currentStatusCode: string | null;
   firmName: string | null;
+  /**
+   * Campaign counterpart email — drives the self-managed check that
+   * hides +6.5 from the status dropdown. Multi-party campaigns
+   * (FishFrom) keep +6.5 visible; self-managed campaigns (SkySails,
+   * Panatere, ForgeOS, Fischer Farms Customer) drop it since there's
+   * no external company side to hand over to.
+   *
+   * Plumbed from TrackerTable to avoid a second DB round-trip on
+   * drawer-open. Pass null when no counterpart is configured.
+   */
+  campaignCounterpartEmail: string | null;
 }
 
 function formatEventDate(iso: string): string {
@@ -42,8 +54,12 @@ export function TrackerRowDrawer({
   campaignPartnerId,
   currentStatusCode,
   firmName,
+  campaignCounterpartEmail,
 }: TrackerRowDrawerProps) {
   const [statusCode, setStatusCode] = useState<string>(currentStatusCode ?? "");
+  const isCodeVisible = statusCodesVisibleFor({
+    counterpart_email: campaignCounterpartEmail,
+  });
   const [commentary, setCommentary] = useState<string>("");
   const [events, setEvents] = useState<ContactEventRow[]>([]);
   const [eventsLoaded, setEventsLoaded] = useState(false);
@@ -112,7 +128,7 @@ export function TrackerRowDrawer({
                 disabled={isPending}
               >
                 <option value="">— not set —</option>
-                {STATUS_CODES.map((s) => (
+                {STATUS_CODES.filter((s) => isCodeVisible(s.code)).map((s) => (
                   <option key={s.code} value={s.code}>
                     {s.code} · {s.label}
                   </option>
