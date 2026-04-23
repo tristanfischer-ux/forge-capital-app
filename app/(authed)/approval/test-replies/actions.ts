@@ -301,6 +301,345 @@ export type SendResponseResult =
   | { ok: true; threadId: string; newStatusCode: string }
   | { ok: false; error: string };
 
+/* ============================================================ */
+/* Spreadsheet-style approval flow                                */
+/* ============================================================ */
+
+/**
+ * Generate a plain-text "response sheet" of every inbound reply with
+ * its Opus-classified sentiment + drafted response, email it to the
+ * founder's review inbox. They reply with `y / no / edit` per row; the
+ * paste parser below ingests their reply and dispatches the approved
+ * responses in one go.
+ *
+ * This replaces the per-row click UX that Tristan flagged 2026-04-23
+ * as clunky: "going through one email after another investor after
+ * another like that with pressing okay is probably not as good as
+ * them receiving a spreadsheet".
+ */
+export interface EmailSheetInput {
+  campaignId: string;
+  toEmail: string;
+}
+
+export type EmailSheetResult =
+  | { ok: true; rowCount: number; threadId: string }
+  | { ok: false; error: string };
+
+export async function emailResponseSheet(
+  input: EmailSheetInput,
+): Promise<EmailSheetResult> {
+  const { campaignId, toEmail } = input;
+  if (!campaignId) return { ok: false, error: "campaignId required." };
+  if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
+    return { ok: false, error: "Invalid toEmail." };
+  }
+
+  // Reuse the existing loader — it fetches every test_send thread and
+  // picks the most recent inbound message.
+  const loaded = await loadTestReplies({ campaignId });
+  if (!loaded.ok) return { ok: false, error: loaded.error };
+
+  const rowsWithReply = loaded.rows.filter((r) => r.replyBody);
+  if (rowsWithReply.length === 0) {
+    return {
+      ok: false,
+      error: "No inbound replies on this campaign yet — nothing to sheet.",
+    };
+  }
+
+  // Classify + draft for any row that doesn't already have a cached
+  // classification. This is where the expensive work lives — up to N
+  // sequential Opus calls. Re-uses the same Opus prompt as the per-row
+  // UI path.
+  for (const row of rowsWithReply) {
+    if (!row.cachedSentiment || !row.cachedDraftResponse) {
+      if (!row.replyBody) continue;
+      await classifyAndDraftResponse({
+        campaignPartnerId: row.campaignPartnerId,
+        replyBody: row.replyBody,
+      });
+    }
+  }
+
+  // Re-load so we have the latest cached values.
+  const reloaded = await loadTestReplies({ campaignId });
+  if (!reloaded.ok) return { ok: false, error: reloaded.error };
+  const finalRows = reloaded.rows.filter((r) => r.replyBody);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const subject = `[APPROVAL] ${finalRows.length} responses awaiting your approval · ${today}`;
+
+  const lines: string[] = [];
+  lines.push(
+    `Hi,`,
+    ``,
+    `${finalRows.length} investor replies have come in. For each row below, choose one of:`,
+    ``,
+    `  y        — send the drafted response as-is`,
+    `  no       — skip this one, I'll handle manually`,
+    `  edit: <your rewrite>  — paste a replacement response on the row`,
+    ``,
+    `Reply to this email with your annotations. The app parses your reply and dispatches the approved responses + updates the tracker (positive → +7 Meeting offered, negative → -1 Declined, neutral → +5 Follow-up sent).`,
+    ``,
+    `— Tristan`,
+    ``,
+    `===============`,
+    ``,
+  );
+
+  finalRows.forEach((r, i) => {
+    const num = i + 1;
+    const sentiment = (r.cachedSentiment ?? "unclassified").toUpperCase();
+    lines.push(`${num}. ${r.firmName ?? "—"}${r.partnerName ? ` · ${r.partnerName}` : ""}`);
+    if (r.replyFrom) lines.push(`   FROM: ${r.replyFrom}`);
+    lines.push(``);
+    lines.push(`   THEIR REPLY:`);
+    const snippet = (r.replyBody ?? "").replace(/\n{2,}/g, "\n").slice(0, 700);
+    snippet.split("\n").forEach((l) => lines.push(`   > ${l}`));
+    lines.push(``);
+    lines.push(`   OPUS READ: ${sentiment}`);
+    lines.push(``);
+    lines.push(`   PROPOSED RESPONSE:`);
+    (r.cachedDraftResponse ?? "(no draft yet)")
+      .split("\n")
+      .forEach((l) => lines.push(`   | ${l}`));
+    lines.push(``);
+    lines.push(`   DECISION: ___  (y / no / edit: <your rewrite>)`);
+    lines.push(``);
+    lines.push(`   ---`);
+    lines.push(``);
+  });
+
+  try {
+    const sent = await sendGmailMessage({
+      to: toEmail,
+      subject,
+      body: lines.join("\n"),
+    });
+    return {
+      ok: true,
+      rowCount: finalRows.length,
+      threadId: sent.threadId,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Gmail send failed: ${msg}` };
+  }
+}
+
+/* --------------------------------------------------- */
+
+/**
+ * Parse Tristan's approved response sheet and dispatch each approved
+ * row's response via Gmail + transition the tracker status.
+ *
+ * The parser uses Opus — Tristan's annotations are free-form prose on
+ * the same email thread, not structured markup. Opus reads the
+ * original sheet contents (we re-generate it fresh to avoid stale
+ * state) alongside his reply text and produces a JSON per-row:
+ *   {index: N, decision: "send" | "skip" | "edit", edited_text?: "..."}
+ *
+ * Then for each "send" or "edit" row we call sendGmailMessage +
+ * update the campaign_partners row status using the cached
+ * sentiment bucket.
+ */
+export interface DispatchSheetInput {
+  campaignId: string;
+  approvedText: string;
+}
+
+export interface DispatchRowOutcome {
+  campaignPartnerId: string;
+  firmName: string | null;
+  decision: "send" | "edit" | "skip" | "unparsed";
+  ok: boolean;
+  detail: string;
+}
+
+export type DispatchSheetResult =
+  | {
+      ok: true;
+      sent: number;
+      skipped: number;
+      failed: number;
+      rows: DispatchRowOutcome[];
+    }
+  | { ok: false; error: string };
+
+export async function dispatchApprovedResponses(
+  input: DispatchSheetInput,
+): Promise<DispatchSheetResult> {
+  const { campaignId, approvedText } = input;
+  if (!campaignId) return { ok: false, error: "campaignId required." };
+  if (!approvedText?.trim())
+    return { ok: false, error: "Paste the approval reply text first." };
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY not set." };
+
+  const loaded = await loadTestReplies({ campaignId });
+  if (!loaded.ok) return { ok: false, error: loaded.error };
+  const rows = loaded.rows.filter((r) => r.replyBody);
+  if (rows.length === 0) {
+    return { ok: false, error: "No inbound replies to dispatch against." };
+  }
+
+  // Build a compact index → firm/draft map so Opus can cross-reference
+  // the approver's reply to the correct row.
+  const indexed = rows.map((r, i) => ({
+    index: i + 1,
+    campaignPartnerId: r.campaignPartnerId,
+    firmName: r.firmName,
+    partnerName: r.partnerName,
+    partnerEmail: r.partnerEmail,
+    sentiment: r.cachedSentiment,
+    draft: r.cachedDraftResponse,
+    gmailThreadId: r.gmailThreadId,
+    outboundSubject: r.outboundSubject,
+  }));
+
+  const system = [
+    "You read a founder's free-form approval reply to a numbered response sheet and extract per-row decisions. Output ONLY a JSON array of objects, one per row you can identify in their reply, shape:",
+    "  {\"index\": <1-based row number>, \"decision\": \"send\" | \"skip\" | \"edit\", \"edited_text\": \"<replacement response if decision=edit, else omit>\"}",
+    "Rules:",
+    "  - If a row number is mentioned with 'y', 'yes', 'ok', 'send', 'approved' → decision=send.",
+    "  - If 'no', 'skip', 'not now', 'hold' → decision=skip.",
+    "  - If the founder pasted a replacement paragraph or said 'use this instead' → decision=edit and edited_text = the replacement.",
+    "  - If the founder acknowledged a row without decision → omit it (the caller treats omissions as 'hold').",
+    "  - NEVER invent rows. NEVER guess decisions when the text is ambiguous — omit.",
+    "  - British spelling.",
+    "Output ONLY the JSON array, no prose, no markdown fence.",
+  ].join("\n");
+
+  const userPrompt = [
+    "THE SHEET (numbered rows the founder was deciding on):",
+    "---",
+    indexed
+      .map(
+        (r) =>
+          `${r.index}. ${r.firmName ?? "—"}${r.partnerName ? ` · ${r.partnerName}` : ""} [sentiment: ${r.sentiment ?? "unclassified"}]`,
+      )
+      .join("\n"),
+    "---",
+    "",
+    "THE FOUNDER'S REPLY (parse this for decisions):",
+    "---",
+    approvedText.trim().slice(0, 20_000),
+    "---",
+  ].join("\n");
+
+  let decisions: Array<{
+    index: number;
+    decision: "send" | "skip" | "edit";
+    edited_text?: string;
+  }>;
+  try {
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: OPUS_MODEL,
+      max_tokens: 3000,
+      system,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+    const textBlock = response.content.find((b) => b.type === "text");
+    const raw = textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+    decisions = JSON.parse(cleaned) as typeof decisions;
+    if (!Array.isArray(decisions)) {
+      return { ok: false, error: "Opus parser did not return an array." };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Opus parse failed: ${msg}` };
+  }
+
+  const outcomes: DispatchRowOutcome[] = [];
+
+  for (const dec of decisions) {
+    const row = indexed.find((r) => r.index === dec.index);
+    if (!row) continue;
+
+    if (dec.decision === "skip") {
+      outcomes.push({
+        campaignPartnerId: row.campaignPartnerId,
+        firmName: row.firmName,
+        decision: "skip",
+        ok: true,
+        detail: "Skipped per approver.",
+      });
+      continue;
+    }
+
+    const body =
+      dec.decision === "edit" && dec.edited_text ? dec.edited_text : row.draft;
+    if (!body) {
+      outcomes.push({
+        campaignPartnerId: row.campaignPartnerId,
+        firmName: row.firmName,
+        decision: dec.decision,
+        ok: false,
+        detail: "No response text available to dispatch.",
+      });
+      continue;
+    }
+    if (!row.partnerEmail) {
+      outcomes.push({
+        campaignPartnerId: row.campaignPartnerId,
+        firmName: row.firmName,
+        decision: dec.decision,
+        ok: false,
+        detail: "No partner email on file.",
+      });
+      continue;
+    }
+    if (!row.sentiment) {
+      outcomes.push({
+        campaignPartnerId: row.campaignPartnerId,
+        firmName: row.firmName,
+        decision: dec.decision,
+        ok: false,
+        detail: "No sentiment classification cached — re-classify first.",
+      });
+      continue;
+    }
+
+    const outcome = await sendResponseAndUpdateStatus({
+      campaignPartnerId: row.campaignPartnerId,
+      toEmail: row.partnerEmail,
+      subject: row.outboundSubject?.startsWith("[TEST]")
+        ? `Re: ${row.outboundSubject}`
+        : `Re: ${row.outboundSubject ?? "our outreach"}`,
+      body,
+      sentiment: row.sentiment,
+      gmailThreadId: row.gmailThreadId,
+    });
+
+    outcomes.push({
+      campaignPartnerId: row.campaignPartnerId,
+      firmName: row.firmName,
+      decision: dec.decision,
+      ok: outcome.ok,
+      detail: outcome.ok
+        ? `Sent → ${outcome.newStatusCode}`
+        : outcome.error,
+    });
+  }
+
+  revalidatePath("/approval/test-replies");
+  revalidatePath("/tracker");
+
+  const sent = outcomes.filter((o) => o.ok && o.decision !== "skip").length;
+  const skipped = outcomes.filter((o) => o.decision === "skip").length;
+  const failed = outcomes.filter((o) => !o.ok).length;
+  return { ok: true, sent, skipped, failed, rows: outcomes };
+}
+
+/* ============================================================ */
+
 export async function sendResponseAndUpdateStatus(
   input: SendResponseInput,
 ): Promise<SendResponseResult> {

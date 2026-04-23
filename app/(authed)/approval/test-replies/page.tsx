@@ -91,6 +91,7 @@ export default async function TestRepliesPage({
         <RepliesPanel
           rows={result.rows}
           userEmail={result.userEmail}
+          campaignId={campaignId}
         />
       ) : (
         <div className="rounded-[10px] border border-red bg-red-light p-5 text-[13px] text-red">

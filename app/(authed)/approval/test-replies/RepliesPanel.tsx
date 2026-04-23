@@ -5,13 +5,17 @@ import { useRouter } from "next/navigation";
 import {
   classifyAndDraftResponse,
   sendResponseAndUpdateStatus,
+  emailResponseSheet,
+  dispatchApprovedResponses,
   type Sentiment,
   type TestReplyRow,
+  type DispatchRowOutcome,
 } from "./actions";
 
 export function RepliesPanel(props: {
   rows: TestReplyRow[];
   userEmail: string | null;
+  campaignId: string;
 }) {
   const rowsWithReply = props.rows.filter((r) => r.replyBody);
   const rowsWithoutReply = props.rows.filter((r) => !r.replyBody);
@@ -31,6 +35,11 @@ export function RepliesPanel(props: {
 
   return (
     <div className="space-y-5">
+      <SpreadsheetApprovalCard
+        campaignId={props.campaignId}
+        hasReplies={rowsWithReply.length > 0}
+      />
+
       <section className="rounded-[10px] border border-border bg-surface p-5 shadow-[var(--shadow)]">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <h2 className="text-[14px] font-semibold text-text">
@@ -85,6 +94,226 @@ export function RepliesPanel(props: {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Spreadsheet-style approval card — replaces the per-row click UX
+ * that Tristan flagged 2026-04-23 as clunky. Two-step flow:
+ *
+ *   Step 1 — "Email response sheet to me"
+ *       Fires emailResponseSheet which composes a numbered list of
+ *       every inbound reply with Opus-classified sentiment + drafted
+ *       response, then dispatches it as a plain-text email to
+ *       tristan.fischer@mac.com. Founder reviews on phone, replies
+ *       with y / no / edit per row.
+ *
+ *   Step 2 — paste founder's reply + Dispatch approved
+ *       dispatchApprovedResponses uses Opus to parse per-row decisions
+ *       out of the free-form reply, then dispatches each approved
+ *       response via Gmail + transitions the tracker status.
+ */
+function SpreadsheetApprovalCard(props: {
+  campaignId: string;
+  hasReplies: boolean;
+}) {
+  const [toEmail, setToEmail] = useState("tristan.fischer@mac.com");
+  const [approvedText, setApprovedText] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [emailState, setEmailState] = useState<
+    | { kind: "idle" }
+    | { kind: "sent"; rowCount: number; threadId: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const [dispatchState, setDispatchState] = useState<
+    | { kind: "idle" }
+    | {
+        kind: "done";
+        sent: number;
+        skipped: number;
+        failed: number;
+        rows: DispatchRowOutcome[];
+      }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  function onEmailSheet() {
+    if (isPending) return;
+    setEmailState({ kind: "idle" });
+    startTransition(async () => {
+      const out = await emailResponseSheet({
+        campaignId: props.campaignId,
+        toEmail: toEmail.trim(),
+      });
+      if (out.ok) {
+        setEmailState({
+          kind: "sent",
+          rowCount: out.rowCount,
+          threadId: out.threadId,
+        });
+      } else {
+        setEmailState({ kind: "error", message: out.error });
+      }
+    });
+  }
+
+  function onDispatch() {
+    if (isPending) return;
+    setDispatchState({ kind: "idle" });
+    startTransition(async () => {
+      const out = await dispatchApprovedResponses({
+        campaignId: props.campaignId,
+        approvedText: approvedText.trim(),
+      });
+      if (out.ok) {
+        setDispatchState({
+          kind: "done",
+          sent: out.sent,
+          skipped: out.skipped,
+          failed: out.failed,
+          rows: out.rows,
+        });
+      } else {
+        setDispatchState({ kind: "error", message: out.error });
+      }
+    });
+  }
+
+  return (
+    <section className="rounded-[10px] border border-accent bg-accent-softer p-5 shadow-[var(--shadow)]">
+      <h2 className="mb-2 text-[14px] font-semibold text-text">
+        Spreadsheet-style approval
+      </h2>
+      <p className="mb-4 text-[12px] leading-relaxed text-text-dim">
+        Instead of clicking Send on each row below, receive a single
+        email with every reply + sentiment + drafted response as a
+        numbered list. Approve from your phone by replying with{" "}
+        <code>y / no / edit</code> per row. Paste your reply here, the
+        app parses it and dispatches all approved responses in one shot.
+      </p>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+        <label className="block">
+          <span className="block text-[10px] font-medium uppercase tracking-wide text-text-dim">
+            Step 1 — email the sheet to
+          </span>
+          <input
+            type="email"
+            value={toEmail}
+            onChange={(e) => setToEmail(e.target.value)}
+            disabled={isPending || !props.hasReplies}
+            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="button"
+            className="btn primary w-full md:w-auto"
+            onClick={onEmailSheet}
+            disabled={isPending || !props.hasReplies || !toEmail.includes("@")}
+            style={{
+              padding: "8px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              background: "var(--accent)",
+              borderColor: "var(--accent)",
+              color: "#fff",
+            }}
+          >
+            {isPending && emailState.kind === "idle"
+              ? "Generating sheet…"
+              : "Email response sheet →"}
+          </button>
+        </div>
+      </div>
+
+      {emailState.kind === "sent" ? (
+        <div className="mt-2 text-[11px] text-[var(--green)]">
+          ✓ Sent {emailState.rowCount} rows to {toEmail}.{" "}
+          <a
+            href={`https://mail.google.com/mail/u/0/#sent/${emailState.threadId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            open in Gmail ↗
+          </a>
+        </div>
+      ) : null}
+      {emailState.kind === "error" ? (
+        <div className="mt-2 text-[11px] text-[var(--red)]">
+          {emailState.message}
+        </div>
+      ) : null}
+
+      {/* Step 2 — paste reply */}
+      <div className="mt-5 border-t border-accent pt-4">
+        <span className="block text-[10px] font-medium uppercase tracking-wide text-text-dim">
+          Step 2 — paste your approved-sheet reply
+        </span>
+        <textarea
+          value={approvedText}
+          onChange={(e) => setApprovedText(e.target.value)}
+          disabled={isPending}
+          rows={8}
+          placeholder="Paste your reply email here. Any row marked 'y' will be dispatched; 'no' rows skipped; 'edit: …' rows use your replacement text."
+          className="mt-1 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-[13px] leading-relaxed text-text outline-none focus:border-accent"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="btn primary"
+            onClick={onDispatch}
+            disabled={isPending || !approvedText.trim()}
+            style={{
+              padding: "8px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              background: "var(--green)",
+              borderColor: "var(--green)",
+              color: "#fff",
+            }}
+          >
+            {isPending && dispatchState.kind === "idle"
+              ? "Parsing + dispatching…"
+              : "Dispatch approved responses →"}
+          </button>
+        </div>
+
+        {dispatchState.kind === "error" ? (
+          <div className="mt-3 rounded-md border border-red bg-red-light px-3 py-2 text-[12px] text-red">
+            {dispatchState.message}
+          </div>
+        ) : null}
+
+        {dispatchState.kind === "done" ? (
+          <div className="mt-3 rounded-md border border-green bg-green-light p-3">
+            <div className="text-[13px] font-semibold text-green">
+              ✓ Dispatched {dispatchState.sent} · Skipped{" "}
+              {dispatchState.skipped} · Failed {dispatchState.failed}
+            </div>
+            <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-[11px]">
+              {dispatchState.rows.map((r) => (
+                <li key={r.campaignPartnerId}>
+                  <span
+                    style={{
+                      color: r.ok ? "var(--green)" : "var(--red)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {r.ok ? "✓" : "✗"}{" "}
+                  </span>
+                  <b>{r.firmName ?? "—"}</b>{" "}
+                  <span className="text-text-dim">
+                    · {r.decision} · {r.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
