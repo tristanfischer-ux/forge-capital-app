@@ -20,3 +20,9 @@ Tagged [BLOCKER] / [VALUE] / [NICE].
 - [VALUE] **Templates: brand-new campaign should auto-seed Haiku-drafted defaults** instead of rendering 3 missing-paragraph warnings on the very first draft. Today the founder must manually visit /templates and click "Draft with Haiku" 3 times before they can compose a single email. One-click "Set up templates for this campaign" on the draft page when the templates row is missing.
 - [NICE] **Email override didn't show provenance on the draft page**. Once override fix lands, render a tiny "(via override)" or similar so the user knows this isn't the pipeline's verified email — small but useful trust signal.
 
+
+## DAY 6-8
+
+- [VALUE] **No "send via app" button** — Gmail draft is created, but actually sending requires the user to leave the app, find the draft in Gmail, click send. Add a "Send draft now" button on /tracker/[id]/draft that calls `gmail.users.messages.send` (the existing gmail.compose scope already includes send capability — verified live during the audit).
+- [NICE] **Placeholder text in `partner_email_hunt_requests` queue UI** — pipeline page shows "1 partner queued for Hunter" but doesn't say WHICH or for which campaign. Add a click-through to a queue list.
+- [VALUE] **Cron-cascade dashboard at /pipeline doesn't show overnight outcomes vs expected** — "Latest 38h ago" for Gmail sync is a confusing relative time when the cron runs every 15min. Show "next run: in 7 min" alongside "last run: 38h ago" and you can see at a glance whether there's drift.
