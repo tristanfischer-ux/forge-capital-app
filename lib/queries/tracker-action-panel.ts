@@ -92,7 +92,7 @@ interface AttentionJoinRow {
   id: string;
   status_code: string | null;
   last_contact_at: string | null;
-  updated_at: string | null;
+  created_at: string | null;
   partners_mirror: {
     id: number | null;
     name: string | null;
@@ -133,7 +133,7 @@ export async function getTrackerActionPanel(
       id,
       status_code,
       last_contact_at,
-      updated_at,
+      created_at,
       partners_mirror:partner_id (
         id,
         name,
@@ -235,10 +235,12 @@ export async function getTrackerActionPanel(
       if (!row.status_code) continue;
       const threshold = ATTENTION_THRESHOLDS[row.status_code];
       if (!threshold) continue;
-      // Use last_contact_at as the idle clock; fall back to updated_at
+      // Use last_contact_at as the idle clock; fall back to created_at
       // when the sync hasn't stamped last_contact_at (belt-and-braces —
       // the Gmail daemon is the canonical writer for last_contact_at).
-      const anchorIso = row.last_contact_at ?? row.updated_at ?? null;
+      // Note: campaign_partners has no updated_at column; created_at is
+      // the only other timestamp available for the idle-days calc.
+      const anchorIso = row.last_contact_at ?? row.created_at ?? null;
       if (!anchorIso) continue;
       const anchor = Date.parse(anchorIso);
       if (Number.isNaN(anchor)) continue;
