@@ -13,6 +13,9 @@ export interface ContactEventRow {
   event_type: string | null;
   event_at: string;
   summary: string | null;
+  /** Gmail thread id when this event was produced by a Gmail send/reply.
+   *  Enables the commentary log to deep-link into Gmail. */
+  gmail_thread_id: string | null;
 }
 
 /**
@@ -27,7 +30,7 @@ export async function getContactEvents(
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("contact_events")
-    .select("id, direction, channel, event_type, event_at, summary")
+    .select("id, direction, channel, event_type, event_at, summary, gmail_thread_id")
     .eq("campaign_partner_id", campaignPartnerId)
     .order("event_at", { ascending: false })
     .limit(limit);

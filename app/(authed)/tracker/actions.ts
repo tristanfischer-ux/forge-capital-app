@@ -92,7 +92,7 @@ export async function fetchContactEvents(
 
   const { data, error } = await supabase
     .from("contact_events")
-    .select("id, direction, channel, event_type, event_at, summary")
+    .select("id, direction, channel, event_type, event_at, summary, gmail_thread_id")
     .eq("campaign_partner_id", campaignPartnerId)
     .order("event_at", { ascending: false })
     .limit(50);

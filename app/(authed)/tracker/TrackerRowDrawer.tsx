@@ -184,27 +184,66 @@ export function TrackerRowDrawer({
             </div>
           ) : (
             <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
-              {events.map((ev) => (
-                <li
-                  key={ev.id}
-                  className="rounded-sm border border-border-soft bg-surface px-3 py-2 text-[11px] leading-relaxed text-text"
-                >
-                  <div className="flex items-center gap-2 text-[10px] text-text-dim">
-                    <span className="font-semibold">{formatEventDate(ev.event_at)}</span>
-                    {ev.channel ? (
-                      <span className="rounded-full bg-surface-alt px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-faint">
-                        {ev.channel}
+              {events.map((ev) => {
+                const isTest = ev.event_type === "test_send";
+                const isReply = ev.event_type?.startsWith("inbound_reply_");
+                return (
+                  <li
+                    key={ev.id}
+                    className={`rounded-sm border px-3 py-2 text-[11px] leading-relaxed text-text ${
+                      isTest
+                        ? "border-amber bg-amber-light"
+                        : isReply
+                          ? "border-[#c7d2fe] bg-accent-softer"
+                          : "border-border-soft bg-surface"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-text-dim">
+                      <span className="font-semibold">
+                        {formatEventDate(ev.event_at)}
                       </span>
+                      {isTest ? (
+                        <span
+                          className="rounded-full bg-amber px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+                          title="Dry-run dispatch to a review inbox — tracker status was NOT advanced."
+                        >
+                          TEST
+                        </span>
+                      ) : null}
+                      {ev.direction ? (
+                        <span className="rounded-full bg-surface-alt px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-faint">
+                          {ev.direction}
+                        </span>
+                      ) : null}
+                      {ev.channel ? (
+                        <span className="rounded-full bg-surface-alt px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-faint">
+                          {ev.channel}
+                        </span>
+                      ) : null}
+                      {ev.event_type ? (
+                        <span className="text-text-faint">
+                          · {ev.event_type.replace(/_/g, " ")}
+                        </span>
+                      ) : null}
+                      {ev.gmail_thread_id ? (
+                        <a
+                          href={`https://mail.google.com/mail/u/0/#${
+                            ev.direction === "inbound" ? "inbox" : "sent"
+                          }/${ev.gmail_thread_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-auto text-accent hover:text-accent-dark"
+                        >
+                          open in Gmail ↗
+                        </a>
+                      ) : null}
+                    </div>
+                    {ev.summary ? (
+                      <div className="mt-1 whitespace-pre-wrap">{ev.summary}</div>
                     ) : null}
-                    {ev.event_type ? (
-                      <span className="text-text-faint">· {ev.event_type.replace(/_/g, " ")}</span>
-                    ) : null}
-                  </div>
-                  {ev.summary ? (
-                    <div className="mt-1 whitespace-pre-wrap">{ev.summary}</div>
-                  ) : null}
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
