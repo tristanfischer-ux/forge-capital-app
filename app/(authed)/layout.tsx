@@ -9,6 +9,7 @@ import { TopNav } from "./TopNav";
 import { WalkTourStrip } from "./WalkTourStrip";
 import { EmailHuntModal } from "./match/EmailHuntModal";
 import { Breadcrumbs, BreadcrumbsProvider } from "./Breadcrumbs";
+import { OpusChatBar } from "./OpusChatBar";
 
 /**
  * Authed shell — 1:1 port of V4 topbar + layout chrome
@@ -44,6 +45,9 @@ export default async function AuthedLayout({
   const activeCampaignId = resolveCurrentCampaignId(campaigns, cookieCampaign);
   const totalActive = campaigns.length;
 
+  const activeCampaignName =
+    campaigns.find((c) => c.id === activeCampaignId)?.name ?? null;
+
   return (
     <BreadcrumbsProvider>
       <TopBar
@@ -51,6 +55,7 @@ export default async function AuthedLayout({
         activeCampaignId={activeCampaignId}
         totalActive={totalActive}
       />
+      <OpusChatBar activeCampaignName={activeCampaignName} />
       {/* Sidebar deleted 2026-04-22: Tristan flagged the four panels
           (Drafts ready / Pipeline health / Rhythm / Tracker health) as
           wasted space and demo-data-leaky (Stephan references). Content
