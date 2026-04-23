@@ -258,241 +258,209 @@ export function StatusDistributionChart({
 }: {
   distribution: StatusDistribution;
 }) {
-  // Widened from V4's 380x220 → 500x220 on 2026-04-23 so the Prior/This
-  // week labels and delta callouts don't crowd each other at this card's
-  // rendered width. Bars remain 40px wide; delta callouts anchored to
-  // the right gutter.
-  const baseline = 190;
-  const maxHeight = 170; // baseline - 20 for a small top gutter
-  const maxTotal = Math.max(1, distribution.thisWeek.total, distribution.priorWeek.total);
-  const scale = (v: number) => (v / maxTotal) * maxHeight;
+  // 2026-04-23 rewrite: Tristan flagged the SVG paired-bars as "terrible"
+  // — title wrapped, deltas floated in empty white space, segments hard
+  // to compare. Replaced with two horizontal stacked bars (prior on top,
+  // this-week below) normalised to the larger total so segment widths
+  // compare apples-to-apples. Delta chips inline per segment.
+  const { thisWeek, priorWeek } = distribution;
+  const maxTotal = Math.max(1, thisWeek.total, priorWeek.total);
+
+  const pctOf = (v: number) =>
+    maxTotal === 0 ? 0 : Math.round((v / maxTotal) * 100);
+
+  const deltaChip = (current: number, prior: number) => {
+    if (prior === 0 && current === 0) return null;
+    if (prior === 0) return `+${current}`;
+    if (current === 0) return `-${prior}`;
+    const diff = current - prior;
+    if (diff === 0) return "flat";
+    return `${diff > 0 ? "+" : ""}${diff}`;
+  };
+
+  const segments: Array<{
+    key: "positive" | "mid" | "negative";
+    label: string;
+    colour: string;
+    current: number;
+    prior: number;
+  }> = [
+    {
+      key: "positive",
+      label: "Positive (+7 to +12)",
+      colour: CHART_COLOURS.positive,
+      current: thisWeek.positive,
+      prior: priorWeek.positive,
+    },
+    {
+      key: "mid",
+      label: "Mid (+1 to +6)",
+      colour: CHART_COLOURS.mid,
+      current: thisWeek.mid,
+      prior: priorWeek.mid,
+    },
+    {
+      key: "negative",
+      label: "Negative (-1 to -3)",
+      colour: CHART_COLOURS.negative,
+      current: thisWeek.negative,
+      prior: priorWeek.negative,
+    },
+  ];
 
   const priorX = 110;
   const thisX = 270;
   const barW = 50;
 
-  const deltaPct = (current: number, prior: number): string => {
-    if (prior === 0 && current === 0) return "no activity";
-    if (prior === 0) return `+${current} new`;
-    const pct = Math.round(((current - prior) / prior) * 100);
-    if (pct === 0) return "flat";
-    return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}%`;
-  };
-
-  const renderBar = (
-    x: number,
-    values: StatusDistribution["thisWeek"],
-    colour: { pos: string; mid: string; neg: string },
-  ) => {
-    const negH = scale(values.negative);
-    const midH = scale(values.mid);
-    const posH = scale(values.positive);
-    // Stack: negative on top, then mid, then positive — matches V4's
-    // "Negatives up top, mid in the middle, positives at the base" order.
-    const negY = baseline - posH - midH - negH;
-    const midY = baseline - posH - midH;
-    const posY = baseline - posH;
-
-    const drawRect = (
-      y: number,
-      h: number,
-      fill: string,
-      label: number,
-      key: string,
-    ) =>
-      h > 0 ? (
-        <g key={key}>
-          <rect x={x} y={y} width={barW} height={h} fill={fill} rx="2" />
-          {h >= 14 ? (
-            <text
-              x={x + barW / 2}
-              y={y + h / 2 + 4}
-              fill={CHART_COLOURS.barText}
-              fontSize="10"
-              fontWeight="700"
-              textAnchor="middle"
-              fontFamily="-apple-system"
-            >
-              {label}
-            </text>
-          ) : null}
-        </g>
-      ) : null;
-
-    // Empty-state outline: when a week has zero activity, draw a dashed
-    // ghost rectangle so both columns are visibly present. Without this,
-    // "This week" collapses to just a text label and the chart looks
-    // asymmetric (Tristan's 2026-04-23 "two columns, writing is weird"
-    // report).
-    if (values.total === 0) {
-      return (
-        <g key={`empty-${x}`}>
-          <rect
-            x={x}
-            y={baseline - 30}
-            width={barW}
-            height={30}
-            fill="none"
-            stroke={CHART_COLOURS.baseline}
-            strokeWidth="1"
-            strokeDasharray="3 3"
-            rx="2"
-          />
-          <text
-            x={x + barW / 2}
-            y={baseline - 12}
-            fill={CHART_COLOURS.axisLabel}
-            fontSize="10"
-            textAnchor="middle"
-            fontFamily="-apple-system"
-          >
-            no activity
-          </text>
-        </g>
-      );
-    }
-
-    return (
-      <>
-        {drawRect(posY, posH, colour.pos, values.positive, `pos-${x}`)}
-        {drawRect(midY, midH, colour.mid, values.mid, `mid-${x}`)}
-        {drawRect(negY, negH, colour.neg, values.negative, `neg-${x}`)}
-      </>
-    );
-  };
-
-  const colours = {
-    pos: CHART_COLOURS.positive,
-    mid: CHART_COLOURS.mid,
-    neg: CHART_COLOURS.negative,
-  };
+  // Legacy SVG bar renderer removed 2026-04-23 — replaced by the
+  // horizontal-stacked-bar WeekBar component.
 
   return (
     <div className="chart-card">
       <div className="chart-head">
-        <div className="chart-title">Status distribution &middot; this week vs prior</div>
+        <div className="chart-title">Status distribution</div>
         <div className="chart-legend">
-          <span className="leg-item">
-            <span className="leg-dot plus" />
-            Positive (+7 to +12)
-          </span>
-          <span className="leg-item">
-            <span className="leg-dot neut" />
-            Mid (+1 to +6)
-          </span>
-          <span className="leg-item">
-            <span className="leg-dot neg" />
-            Negative (-1 to -3)
-          </span>
+          {segments.map((s) => (
+            <span className="leg-item" key={s.key}>
+              <span
+                className="leg-dot"
+                style={{ background: s.colour, borderColor: s.colour }}
+              />
+              {s.label}
+            </span>
+          ))}
         </div>
       </div>
-      <svg
-        className="chart-svg"
-        viewBox="0 0 500 220"
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label="Status distribution this week versus prior week"
+
+      {/* Two horizontal stacked bars — prior on top, this week below.
+          Widths normalised to the larger total so bar-to-bar comparison
+          is by-construction correct. */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          padding: "14px 16px 10px",
+        }}
       >
-        {/* baseline */}
-        <line
-          x1="90"
-          y1={baseline}
-          x2="470"
-          y2={baseline}
-          stroke={CHART_COLOURS.baseline}
-          strokeWidth="1"
+        <WeekBar
+          label="Prior week"
+          total={priorWeek.total}
+          segments={segments.map((s) => ({
+            colour: s.colour,
+            key: s.key,
+            value: s.prior,
+          }))}
+          maxTotal={maxTotal}
+          pctOf={pctOf}
+          muted
         />
+        <WeekBar
+          label="This week"
+          total={thisWeek.total}
+          segments={segments.map((s) => ({
+            colour: s.colour,
+            key: s.key,
+            value: s.current,
+          }))}
+          maxTotal={maxTotal}
+          pctOf={pctOf}
+          muted={false}
+        />
+      </div>
 
-        {/* PRIOR WEEK */}
-        <g>
-          <text
-            x={priorX + barW / 2}
-            y="210"
-            fontSize="11"
-            fill={CHART_COLOURS.priorLabel}
-            textAnchor="middle"
-            fontFamily="-apple-system"
-          >
-            Prior week
-          </text>
-          <text
-            x={priorX + barW / 2}
-            y="20"
-            fontSize="10"
-            fontFamily="SF Mono, monospace"
-            fill={CHART_COLOURS.axisLabel}
-            textAnchor="middle"
-          >
-            {distribution.priorWeek.total} total
-          </text>
-          {renderBar(priorX, distribution.priorWeek, colours)}
-        </g>
+      {/* Per-bucket delta row — three compact chips underneath the bars.
+          Each chip shows prior → current and the raw delta, so the
+          comparison is reading the same data three ways: bar segment
+          width, raw counts, and delta chip. No empty right-hand gutter
+          like the old SVG version. */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          padding: "0 16px 14px",
+          flexWrap: "wrap",
+        }}
+      >
+        {segments.map((s) => {
+          const chip = deltaChip(s.current, s.prior);
+          return (
+            <div
+              key={s.key}
+              style={{
+                flex: "1 1 140px",
+                padding: "8px 10px",
+                border: `1px solid ${s.colour}33`,
+                borderRadius: 6,
+                background: `${s.colour}0d`,
+                fontSize: 11,
+                lineHeight: 1.4,
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 700,
+                  color: s.colour,
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.4px",
+                  marginBottom: 2,
+                }}
+              >
+                {s.key}
+              </div>
+              <div style={{ color: "var(--text)" }}>
+                <b style={{ fontSize: 14 }}>{s.current}</b>
+                <span style={{ color: "var(--text-dim)" }}>
+                  {" "}this week · {s.prior} prior
+                </span>
+              </div>
+              {chip ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontWeight: 600,
+                    fontSize: 11,
+                    color:
+                      chip === "flat"
+                        ? "var(--text-dim)"
+                        : s.key === "negative"
+                          ? chip.startsWith("+")
+                            ? "var(--red)"
+                            : "var(--green)"
+                          : chip.startsWith("+")
+                            ? "var(--green)"
+                            : "var(--red)",
+                  }}
+                >
+                  Δ {chip}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 10,
+                    color: "var(--text-faint)",
+                  }}
+                >
+                  no activity
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
-        {/* THIS WEEK */}
-        <g>
-          <text
-            x={thisX + barW / 2}
-            y="210"
-            fontSize="11"
-            fill={CHART_COLOURS.sent}
-            textAnchor="middle"
-            fontWeight="700"
-            fontFamily="-apple-system"
-          >
-            This week
-          </text>
-          <text
-            x={thisX + barW / 2}
-            y="20"
-            fontSize="10"
-            fontFamily="SF Mono, monospace"
-            fill={CHART_COLOURS.sent}
-            textAnchor="middle"
-            fontWeight="700"
-          >
-            {distribution.thisWeek.total} total
-          </text>
-          {renderBar(thisX, distribution.thisWeek, colours)}
-        </g>
-
-        {/* Delta callouts */}
+      {/* Legacy SVG removed 2026-04-23 — replaced by the horizontal
+          bars + delta chips above. */}
+      <svg style={{ display: "none" }} aria-hidden="true">
         <text
-          x="400"
-          y="90"
-          fill={CHART_COLOURS.positive}
-          fontSize="11"
-          fontWeight="700"
-          fontFamily="-apple-system"
-        >
-          {deltaPct(distribution.thisWeek.positive, distribution.priorWeek.positive)}
-        </text>
-        <text
-          x="400"
-          y="105"
-          fill={CHART_COLOURS.priorLabel}
+          x="0"
+          y="0"
           fontSize="10"
           fontFamily="-apple-system"
         >
-          positive
-        </text>
-        <text
-          x="400"
-          y="175"
-          fill={CHART_COLOURS.priorLabel}
-          fontSize="10"
-          fontFamily="-apple-system"
-        >
-          negatives
-        </text>
-        <text
-          x="400"
-          y="190"
-          fill={CHART_COLOURS.negative}
-          fontSize="11"
-          fontWeight="700"
-          fontFamily="-apple-system"
-        >
-          {deltaPct(distribution.thisWeek.negative, distribution.priorWeek.negative)}
+          legacy-placeholder
         </text>
       </svg>
       <div
@@ -500,7 +468,7 @@ export function StatusDistributionChart({
           fontSize: 11,
           color: "var(--text-dim)",
           lineHeight: 1.5,
-          marginTop: 6,
+          padding: "0 16px 14px",
         }}
       >
         Buckets match the 16-code status taxonomy. Partners counted by{" "}
@@ -509,6 +477,104 @@ export function StatusDistributionChart({
         </code>{" "}
         landing in the window.
       </div>
+    </div>
+  );
+}
+
+function WeekBar({
+  label,
+  total,
+  segments,
+  maxTotal,
+  pctOf,
+  muted,
+}: {
+  label: string;
+  total: number;
+  segments: Array<{ key: string; colour: string; value: number }>;
+  maxTotal: number;
+  pctOf: (v: number) => number;
+  muted: boolean;
+}) {
+  const widthPct = maxTotal === 0 ? 0 : Math.round((total / maxTotal) * 100);
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 11,
+          marginBottom: 4,
+        }}
+      >
+        <span
+          style={{
+            color: muted ? "var(--text-dim)" : "var(--text)",
+            fontWeight: muted ? 500 : 700,
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ color: "var(--text-dim)" }}>
+          <b style={{ color: muted ? "var(--text-dim)" : "var(--text)" }}>
+            {total}
+          </b>{" "}
+          total
+        </span>
+      </div>
+      <div
+        style={{
+          position: "relative",
+          height: 22,
+          background: "var(--surface-alt)",
+          borderRadius: 4,
+          overflow: "hidden",
+          opacity: muted ? 0.8 : 1,
+          border: "1px solid var(--border)",
+          width: `${Math.max(widthPct, 4)}%`,
+          display: "flex",
+          minWidth: 20,
+        }}
+        title={`${total} total${
+          total > 0
+            ? ` (${segments.map((s) => `${s.value} ${s.key}`).join(", ")})`
+            : ""
+        }`}
+      >
+        {segments.map((s) => {
+          const w = total === 0 ? 0 : (s.value / total) * 100;
+          if (w === 0) return null;
+          return (
+            <div
+              key={s.key}
+              style={{
+                width: `${w}%`,
+                background: s.colour,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              {w >= 8 ? s.value : null}
+            </div>
+          );
+        })}
+      </div>
+      {total === 0 ? (
+        <div
+          style={{
+            fontSize: 10,
+            color: "var(--text-faint)",
+            fontStyle: "italic",
+            marginTop: 2,
+          }}
+        >
+          no activity
+        </div>
+      ) : null}
     </div>
   );
 }

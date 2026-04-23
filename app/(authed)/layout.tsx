@@ -10,6 +10,7 @@ import { WalkTourStrip } from "./WalkTourStrip";
 import { EmailHuntModal } from "./match/EmailHuntModal";
 import { Breadcrumbs, BreadcrumbsProvider } from "./Breadcrumbs";
 import { OpusChatBar } from "./OpusChatBar";
+import { GoogleConnectionStatus } from "./GoogleConnectionStatus";
 
 /**
  * Authed shell — 1:1 port of V4 topbar + layout chrome
@@ -127,6 +128,13 @@ function TopBar({
 
       {/* Spacer — V4 line 734 pushes right controls to the edge */}
       <div className="spacer" />
+
+      {/* Google (Gmail + Calendar) connection status pill — live probe
+          every 30s via /api/gmail-health. Click for per-service detail
+          + Reconnect affordance when scope is missing. */}
+      <div style={{ marginRight: 10 }}>
+        <GoogleConnectionStatus />
+      </div>
 
       {/* Import tracker — added 2026-04-22. Source-of-truth transfer
           from Claude Co-work's xlsx into campaign_partners. Not a

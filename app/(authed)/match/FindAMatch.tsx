@@ -864,8 +864,8 @@ export function FindAMatch({
             filters.geo === "any" &&
             filters.type === "any" &&
             filters.cheque === "any"
-              ? `Showing ${topN} of ${data.totalScored.toLocaleString("en-GB")} scored in the pool.`
-              : `Showing ${topN} of ${filteredRows.length.toLocaleString("en-GB")} after filters · ${data.totalScored.toLocaleString("en-GB")} scored in pool.`}
+              ? `Showing top ${topN} of ${data.totalScored.toLocaleString("en-GB")} semantic matches ranked from ${data.archetypePoolSize.toLocaleString("en-GB")} active investors (already-contacted firms hidden).`
+              : `Showing ${topN} of ${filteredRows.length.toLocaleString("en-GB")} after filters · ${data.totalScored.toLocaleString("en-GB")} semantic matches from ${data.archetypePoolSize.toLocaleString("en-GB")} active investors.`}
           </p>
         </div>
       ) : null}
@@ -2469,6 +2469,24 @@ function PitchInput({
         onChange={(e) => setHeroText(e.target.value)}
         onKeyDown={onKeyDown}
         spellCheck={false}
+        // Drag-and-drop: the wrapper's onDrop only fires if the browser
+        // doesn't intercept the drop on the textarea's native handler
+        // first. Chrome in particular tries to read dropped files as
+        // text inside a textarea. Defeat that by preventDefault on the
+        // textarea's own dragover + drop AND forwarding the file to the
+        // shared handleFile. Tristan flagged 2026-04-23 that dropping
+        // a PPTX onto the box did nothing.
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!dragOver) setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleFile(file);
+        }}
         // V4's .hero-input has padding: 16px 120px 16px 20px — the 120px
         // right-pad is reserved for the Find matches button sitting in
         // the textarea corner. We've moved Find matches OUT to the
