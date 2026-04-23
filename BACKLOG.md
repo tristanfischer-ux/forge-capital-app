@@ -18,6 +18,27 @@ Split into four levels. **Levels 1 + 2 shipped 2026-04-22** (commit
 pending at time of writing — see latest `feat(nav):` commit). Levels
 3 + 4 remain:
 
+### Level 3 + Level 4 — STATUS: all shipped 2026-04-22 → 2026-04-23
+
+Levels 1, 2, 3, and 4 are live. Graph traversal works all the way
+round:
+
+  /investor/A → /partner/X → /partner/X' at firm B → /investor/B
+  → /portfolio/Y → /portfolio/Z → /investor/C → …
+
+Commits:
+- `eb2c80a` — L1 partner route + L2 cross-links
+- `0e8aaeb` — L3 portfolio canonical + junction
+- `fda7630` — L4a investor-profile canonical portfolio + related firms
+- `8a1389e` — L4b portfolio "also backed by" card
+- `f79e28a` — L4c partner cross-firm matches
+
+Remaining stretch for later: graph visualisation (d3/vis.js on
+`/graph/[entity]/[id]`). Not urgent; the hop-by-hop navigation feels
+complete without it.
+
+Below for the record — original level-by-level scope doc:
+
 ### Level 3 — Portfolio company index (`/portfolio/[slug]`)
 
 **What it is**: a first-class route for each portfolio company with
@@ -133,6 +154,19 @@ On `/portfolio/[slug]`:
 
 ## Closed (kept for grep-ability)
 
+- ✅ **Level 4c — partner cross-firm matches** (`f79e28a` 2026-04-23).
+  Same-email strong matches + same-name possible matches across
+  different `investor_id`s. 418 email collisions / 3,120 name
+  collisions exist today. UI labels kinds clearly so name-only
+  matches don't fabricate a certainty.
+- ✅ **Level 4b — portfolio "also backed by" card** (`8a1389e`
+  2026-04-23). Portfolio page now shows other companies backed by the
+  same investors. Verified on /portfolio/northvolt (10 related: H2
+  Green Steel, Adionics, Alan, ...). Closes company → investor →
+  company loop.
+- ✅ **Level 4a — investor canonical portfolio + related firms**
+  (`fda7630` 2026-04-23). Heartcore (27 portfolio entries, 1 related
+  firm at 500-row push; will richen after tomorrow's 06:55 full push).
 - ✅ **Level 3 — `/portfolio/[slug]` canonical + junction** (this commit).
   Migration 018 + `portfolio_companies` (slug-unique) + `investor_portfolio_links`
   junction + pipeline push script 14c + daily 06:55 BST cron.
