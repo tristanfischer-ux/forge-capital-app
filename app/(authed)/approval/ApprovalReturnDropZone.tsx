@@ -197,11 +197,11 @@ export default function ApprovalReturnDropZone({
         </span>
         <div>
           <div className="ach-title">
-            Approval return &mdash; paste {counterpartName}&rsquo;s reply
+            Step 2 &mdash; paste {counterpartName}&rsquo;s reply to parse
           </div>
         </div>
         <span className="ach-sub">
-          Haiku parses ok / not-for-me / skip markers
+          Parser extracts ok / not-for-me / skip markers into Step 3
         </span>
       </div>
 

@@ -114,9 +114,21 @@ function classifyDecision(
   statusCode: string | null,
   approvedBy: string | null,
   approverNote: string | null,
+  approvedAt: string | null,
 ): "approved" | "flag" | "rejected" | null {
+  // The Incoming panel is "what the reply parser returned", not "every row
+  // that has ever been rejected". A row only surfaces here if there is real
+  // evidence the approver replied: an approver_note (parsed verbatim), an
+  // approved_by (their email), or an approved_at timestamp. Without that
+  // evidence, legacy -3 Disqualified rows (from tracker imports or pipeline
+  // exclusions) used to appear here as ghost "rejections" with empty
+  // verbatim text — the exact bug Tristan flagged 2026-04-23.
+  const hasReplyEvidence =
+    !!approvedBy || !!approverNote || !!approvedAt;
+  if (!hasReplyEvidence) return null;
+
   if (statusCode === "-3") return "rejected";
-  if (statusCode && APPROVED_PAST_PENDING_CODES.has(statusCode) && approvedBy) {
+  if (statusCode && APPROVED_PAST_PENDING_CODES.has(statusCode)) {
     return "approved";
   }
   if (statusCode === "+0" && approverNote && approverNote.trim().length > 0) {
@@ -205,10 +217,10 @@ export async function getApprovalReplies(campaignId: string): Promise<{
   if (!campaignId) return empty;
   const supabase = await createServerClient();
 
-  // Fetch all rows that could carry a decision — we classify in JS so
-  // the "flag vs approved vs rejected" rules stay in one readable place.
-  // Filter is deliberately broad (any row with approver_note OR past-pending
-  // status OR -3) to avoid missing edge cases at the PostgREST layer.
+  // Fetch only rows that carry REPLY EVIDENCE — approved_by, approver_note,
+  // or approved_at non-null. Previously the filter included status_code = -3
+  // which surfaced legacy disqualifications as ghost rejections in the
+  // Incoming panel. classifyDecision re-checks evidence and classifies.
   const { data, error } = await supabase
     .from("campaign_partners")
     .select(
@@ -228,7 +240,7 @@ export async function getApprovalReplies(campaignId: string): Promise<{
     )
     .eq("campaign_id", campaignId)
     .or(
-      "approved_by.not.is.null,approver_note.not.is.null,status_code.eq.-3",
+      "approved_by.not.is.null,approver_note.not.is.null,approved_at.not.is.null",
     )
     .order("approved_at", { ascending: false });
 
@@ -246,6 +258,7 @@ export async function getApprovalReplies(campaignId: string): Promise<{
       row.status_code,
       row.approved_by,
       row.approver_note,
+      row.approved_at,
     );
     if (!decision) continue;
 

@@ -114,43 +114,40 @@ export default async function ApprovalPage({
             ) : null}
           </div>
           <div className="section-sub">
-            Above: what {counterpartName} sees (names + synthesis,{" "}
-            <b>no emails</b>). Below: what you see when approvals come back.
-            One click ingests them all into the tracker.{" "}
-            <b>Nothing is sent without your review.</b>
+            Three steps in the real time sequence: (1) what{" "}
+            {counterpartName} will see, (2) paste their reply so the parser
+            can decode it, (3) the parsed decisions ready to ingest into
+            the tracker. <b>Nothing is sent without your review.</b>
           </div>
         </div>
       </div>
 
-      {/* Approval-return drop-zone — surfaces research/16-parse-approval-replies.py
-          as a paste/drag surface at the top of the page. Tristan dumps
-          reply text, Haiku extracts verdicts, he confirms, we write. */}
-      <ApprovalReturnDropZone
-        campaignId={campaignId}
-        counterpartName={counterpartName}
-      />
-
-      {/* Walk-callout moved to the TOP so instructions come before the
-          artefact, not after. */}
       <div className="walk-callout" style={{ marginBottom: 14 }}>
         <span className="wc-num">2</span>
         <b>How the two-way artefact works.</b> The outgoing sheet below is
         plain Google Sheets &mdash; {counterpartName} doesn&rsquo;t log in
-        anywhere. They reply by email with annotations. Our parser pulls
-        the ok / flag / reject decisions into the incoming panel. You read
-        any flagged rows and hit <b>Ingest</b> — only then do approved
-        partners move forward. Nothing sends automatically.
+        anywhere. They reply by email with annotations. You paste that
+        reply into the middle panel; the parser pulls the ok / flag /
+        reject decisions into the bottom panel. You read any flagged rows
+        and hit <b>Ingest</b> — only then do approved partners move
+        forward. Nothing sends automatically.
       </div>
 
-      {/* Stacked layout — outgoing on top, incoming below. They're
-          different workflows (what goes out vs. what comes back), so
-          reading them top-to-bottom reflects the real sequence. */}
+      {/* Reordered 2026-04-23: OUTGOING → PASTE REPLY → PARSED APPROVALS.
+          This is the real time sequence — you send first, the counterpart
+          replies, you decode the reply, the decisions show below.
+          Previous order (paste-first) inverted the workflow and was the
+          bug Tristan called out on the stage audit. */}
       <div className="approval-col-stack" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <OutgoingColumn
           campaignId={campaignId}
           rows={pending}
           counterpartName={counterpartName}
           counterpartPossessive={counterpartPossessive}
+        />
+        <ApprovalReturnDropZone
+          campaignId={campaignId}
+          counterpartName={counterpartName}
         />
         <IncomingColumn
           rows={incoming.rows}
@@ -209,7 +206,7 @@ function OutgoingColumn({
         </span>
         <div>
           <div className="ach-title">
-            Outgoing &mdash; what {counterpartName} will see
+            Step 1 &mdash; outgoing sheet (what {counterpartName} will see)
           </div>
         </div>
         <span className="ach-sub">{sentStrip}</span>
@@ -373,7 +370,7 @@ function IncomingColumn({
           &larr;
         </span>
         <div>
-          <div className="ach-title">Incoming &mdash; approvals returned</div>
+          <div className="ach-title">Step 3 &mdash; parsed approvals (ready to ingest)</div>
         </div>
         <span
           className="ach-sub"
