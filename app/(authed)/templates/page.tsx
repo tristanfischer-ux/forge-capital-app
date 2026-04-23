@@ -8,7 +8,9 @@ import {
   getCampaignTemplates,
   type CampaignTemplate,
 } from "@/lib/queries/templates";
+import { createServerClient } from "@/lib/supabase/server";
 import { AiSectionDrafter } from "./AiSectionDrafter";
+import VoiceReferenceCard from "./VoiceReferenceCard";
 import type { SectionKind } from "./types";
 
 /**
@@ -89,6 +91,22 @@ export default async function TemplatesPage({
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
   const { askingForMoney, offeringMoney } = await getCampaignTemplates(campaignId);
 
+  // Fetch the voice-reference fields for the active campaign so the
+  // editor card renders with the current values. Done inline here to
+  // avoid expanding CampaignSummary (which is used everywhere and does
+  // not need the long bio/reference text on every page).
+  const voiceRefSupabase = await createServerClient();
+  const { data: voiceRefRow } = await voiceRefSupabase
+    .from("campaigns")
+    .select("founder_bio, voice_reference_email")
+    .eq("id", campaignId)
+    .maybeSingle();
+  const founderBio =
+    (voiceRefRow as { founder_bio?: string | null } | null)?.founder_bio ?? null;
+  const voiceReferenceEmail =
+    (voiceRefRow as { voice_reference_email?: string | null } | null)
+      ?.voice_reference_email ?? null;
+
   // The archetype of the active campaign determines which column is
   // rendered. Tristan's campaign_intent:
   //   investor | customer → asking-for-money
@@ -139,6 +157,17 @@ export default async function TemplatesPage({
         </div>
         <span className="section-link">See all 6 template slots &rarr;</span>
       </div>
+
+      {/* Voice reference card — edits founder_bio + voice_reference_email
+          on this campaign. Opus reads both when drafting. */}
+      {activeCampaign ? (
+        <VoiceReferenceCard
+          campaignId={activeCampaign.id}
+          campaignName={activeCampaign.name}
+          initialFounderBio={founderBio}
+          initialVoiceReferenceEmail={voiceReferenceEmail}
+        />
+      ) : null}
 
       {/* Enhancement 2026-04-22 (UI-B): single-column grid — only the active
           archetype is rendered. The opposite archetype is hidden entirely
@@ -626,26 +655,20 @@ function TemplateFoot({
         </>
       ) : null}
       <span style={{ flex: 1 }} />
-      {/* Edit is V2 — V1 is read-only. Tooltip explains why. */}
-      <button
-        type="button"
-        disabled
-        title="Editing templates in the app lands in V2. For V1, capture new templates via the seed file + Supabase."
-        aria-label="Edit template (not yet enabled in V1)"
+      {/* Editing happens inline via the "Redraft with Opus →" button on
+          each section header (see AiSectionDrafter). The foot used to
+          carry a disabled "Edit" stub — removed 2026-04-23 to stop the
+          duplicate-affordance confusion. */}
+      <span
         style={{
-          padding: "4px 10px",
-          borderRadius: 6,
-          border: "1px solid var(--border)",
-          background: "var(--surface)",
-          color: "var(--text-dim)",
           fontSize: 11,
-          fontWeight: 500,
-          cursor: "not-allowed",
-          opacity: 0.7,
+          color: "var(--text-faint)",
+          fontStyle: "italic",
         }}
       >
-        Edit
-      </button>
+        Edit any paragraph via <b>Redraft with Opus →</b> on the section
+        header.
+      </span>
     </div>
   );
 }

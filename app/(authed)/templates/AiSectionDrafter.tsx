@@ -87,7 +87,7 @@ export function AiSectionDrafter({
   const accentSoft =
     side === "offering" ? "var(--amber-light)" : "var(--accent-softer)";
 
-  const buttonLabel = draft || isOpen ? "Redraft with Haiku" : "Draft with Haiku →";
+  const buttonLabel = draft || isOpen ? "Redraft with Opus" : "Draft with Opus →";
 
   return (
     <span
@@ -105,8 +105,8 @@ export function AiSectionDrafter({
         disabled={isPending}
         title={
           existingBody
-            ? "Generate a fresh draft for this section using Claude Haiku."
-            : "Generate a first draft for this section using Claude Haiku."
+            ? "Generate a fresh draft for this section using Claude Opus 4.7."
+            : "Generate a first draft for this section using Claude Opus 4.7."
         }
         style={{
           fontSize: 10,
@@ -168,7 +168,7 @@ function DrafterPanel({
   return (
     <div
       role="dialog"
-      aria-label="Draft with Haiku"
+      aria-label="Draft with Opus"
       style={{
         position: "absolute",
         right: 16,
@@ -230,7 +230,7 @@ function DrafterPanel({
         rows={sectionKind === "cta" ? 2 : 6}
         placeholder={
           isPending && !draft
-            ? "Drafting with Haiku…"
+            ? "Drafting with Opus…"
             : sectionKind === "cta"
               ? "20min_call  or  presentation_first"
               : "Draft will appear here. Edit before saving."
@@ -299,7 +299,7 @@ function DrafterPanel({
           fontWeight: 400,
         }}
       >
-        Model: claude-haiku-4-5. Edit freely before saving. Save overwrites the
+        Model: claude-opus-4-7. Edit freely before saving. Save overwrites the
         {sectionKind === "cta" ? " cta_variant" : ` ${sectionKind}`} column on
         the campaign&rsquo;s email_templates row.
       </div>
