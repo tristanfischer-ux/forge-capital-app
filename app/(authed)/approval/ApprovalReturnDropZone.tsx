@@ -123,6 +123,14 @@ export default function ApprovalReturnDropZone({
         verdict: r.chosen_verdict,
         note: r.edited_note,
         approver_email: approverEmail || undefined,
+        // UX audit 2026-04-23 item #12: persist Haiku's confidence so
+        // the Step 3 table can render the coloured badge and future
+        // batch operations have quality metadata available. When
+        // Tristan manually overrode the verdict (chosen ≠ proposed),
+        // clear the confidence — the score belongs to Haiku's call,
+        // not the human correction.
+        confidence:
+          r.chosen_verdict === r.proposed_verdict ? r.confidence : null,
       }));
     if (toApply.length === 0) {
       setParseError("No rows selected — tick at least one before applying.");
@@ -536,6 +544,85 @@ Babel Ventures — flag, conflicting partner`}
 }
 
 /* -------------------------------------------------------------------------- */
+/* Confidence badge                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Coloured pill showing Haiku's self-reported parser confidence.
+ *
+ * Tiers (UX audit 2026-04-23 item #12):
+ *   - confidence >= 0.85 → green "high"
+ *   - 0.60..0.84         → amber "review"
+ *   - < 0.60             → red "low — confirm"
+ *   - null               → neutral "no score"
+ *
+ * Sizing matches the existing `.approve-y` / `.approve-no` verdict
+ * badges so the two tags sit side-by-side visually consistently.
+ */
+function ConfidenceBadge({ confidence }: { confidence: number | null }) {
+  if (confidence === null || !Number.isFinite(confidence)) {
+    return (
+      <span
+        title="Haiku didn't return a confidence score for this row — review manually before applying."
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          padding: "1px 6px",
+          borderRadius: 10,
+          background: "var(--surface-alt)",
+          color: "var(--text-dim)",
+          border: "1px solid var(--border-soft)",
+          fontFamily: "'SF Mono', monospace",
+        }}
+      >
+        no score
+      </span>
+    );
+  }
+  const pct = Math.round(confidence * 100);
+  const tier =
+    confidence >= 0.85 ? "high" : confidence >= 0.6 ? "review" : "low";
+  const { bg, fg, border, label } =
+    tier === "high"
+      ? {
+          bg: "var(--green-light)",
+          fg: "var(--green)",
+          border: "#bbf7d0",
+          label: `${pct}%`,
+        }
+      : tier === "review"
+        ? {
+            bg: "var(--amber-light)",
+            fg: "var(--amber)",
+            border: "#fde68a",
+            label: `${pct}% · review`,
+          }
+        : {
+            bg: "var(--red-light)",
+            fg: "var(--red)",
+            border: "#fecaca",
+            label: `${pct}% · confirm`,
+          };
+  return (
+    <span
+      title={`Haiku confidence in this verdict: ${pct}%`}
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        padding: "1px 6px",
+        borderRadius: 10,
+        background: bg,
+        color: fg,
+        border: `1px solid ${border}`,
+        fontFamily: "'SF Mono', monospace",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Review table row                                                           */
 /* -------------------------------------------------------------------------- */
 
@@ -558,7 +645,13 @@ function ReviewTableRow({
   return (
     <tr style={row.result === "applied" ? { background: "var(--green-light)" } : undefined}>
       <td>
-        <div className="firm-c">{row.firm_name ?? "—"}</div>
+        <div className="firm-c" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span>{row.firm_name ?? "—"}</span>
+          {/* UX audit 2026-04-23 item #12: surface Haiku's self-reported
+              confidence so low-certainty rows are visibly reviewable
+              BEFORE Tristan applies the batch. */}
+          <ConfidenceBadge confidence={row.confidence} />
+        </div>
         <div className="contact-c">
           {row.reply_name !== row.firm_name ? (
             <>

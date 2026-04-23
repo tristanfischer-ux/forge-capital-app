@@ -48,6 +48,12 @@ export interface IncomingApprovalRow {
   approved_at: string | null;
   /** Derived decision bucket — approved / flag / rejected. */
   decision: "approved" | "flag" | "rejected";
+  /** Haiku parser's self-reported confidence in the decision (0.0–1.0).
+   *  Null when the row was decided before migration 028 landed OR when
+   *  the parser didn't emit a score. Surfaced on /approval Step 3 as a
+   *  coloured badge so low-confidence parses are visibly reviewable.
+   *  UX audit 2026-04-23 item #12. */
+  parse_confidence: number | null;
 }
 
 export interface IncomingApprovalStats {
@@ -97,6 +103,7 @@ interface DecidedJoinRow {
   approver_note: string | null;
   approved_by: string | null;
   approved_at: string | null;
+  parse_confidence: number | null;
   partners_mirror: {
     name: string | null;
     investors_mirror: {
@@ -237,6 +244,7 @@ export async function getApprovalReplies(campaignId: string): Promise<{
       approver_note,
       approved_by,
       approved_at,
+      parse_confidence,
       partners_mirror:partner_id (
         name,
         investors_mirror:investor_id (
@@ -279,6 +287,7 @@ export async function getApprovalReplies(campaignId: string): Promise<{
       approver_note: row.approver_note,
       approved_at: row.approved_at,
       decision,
+      parse_confidence: row.parse_confidence,
     });
     stats[decision] += 1;
   }

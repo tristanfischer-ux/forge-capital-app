@@ -45,6 +45,12 @@ export interface ParsedLine {
   note: string;
   /** Raw line(s) from the reply that produced this record — for audit. */
   source: string;
+  /** Haiku's self-reported confidence in the verdict, 0.0–1.0. Null when
+   *  the response didn't include a numeric score (pre-2026-04-23 model
+   *  replies or malformed JSON). UX audit 2026-04-23 item #12: surfaced
+   *  on /approval Step 3 as a coloured badge so low-confidence parses
+   *  get human review rather than silently landing in the tracker. */
+  confidence: number | null;
 }
 
 export interface ApprovalMatch {
@@ -66,6 +72,9 @@ export interface ApprovalMatch {
   reply_name: string;
   /** Why we matched — debug-friendly. */
   match_reason: "exact" | "contains" | "token_subset";
+  /** Haiku-reported verdict confidence 0.0–1.0 (null when the parser
+   *  couldn't extract a score). UX audit 2026-04-23 item #12. */
+  confidence: number | null;
 }
 
 export interface UnmatchedLine {
@@ -74,6 +83,9 @@ export interface UnmatchedLine {
   note: string;
   /** 'none' (no candidate), 'ambiguous' (too many), or 'api_error'. */
   reason: "none" | "ambiguous";
+  /** Haiku-reported verdict confidence 0.0–1.0 (may help Tristan
+   *  decide whether to manually reconcile the unmatched row). */
+  confidence: number | null;
 }
 
 export type ParseApprovalReplyResult =
@@ -99,7 +111,7 @@ const SYSTEM_PROMPT = `You are a strict email-reply parser for a venture-capital
 The user pastes text that an approver wrote after reviewing a list of investor firms. Your job is to extract one structured record per firm mentioned, with the approver's verdict.
 
 Return ONLY a single JSON object of the exact shape:
-{"lines": [{"investor_name": string, "verdict": "ok" | "not_for_me" | "skip" | "maybe", "note": string, "source": string}, ...]}
+{"lines": [{"investor_name": string, "verdict": "ok" | "not_for_me" | "skip" | "maybe", "note": string, "source": string, "confidence": number}, ...]}
 
 Rules:
 - "investor_name" = the firm name exactly as written (trim surrounding whitespace; do NOT invent or canonicalise spelling).
@@ -112,6 +124,13 @@ Rules:
   If you cannot map the text to one of those four, skip the line — do NOT emit a record.
 - "note" = verbatim free-text the approver added on the same line AFTER the verdict marker (e.g. "not for me — we already met them last round" → note "we already met them last round"). If there is no extra commentary, return the empty string.
 - "source" = the raw reply text line(s) you parsed this record from — preserve linebreaks if two adjacent lines form one record.
+- "confidence" = your self-assessed certainty that the extracted verdict truly matches what the approver meant, as a decimal between 0.0 and 1.0. Use the following anchors:
+    0.95–1.00 = unambiguous direct annotation ("Sequoia: ok", "Felicis — not for us")
+    0.80–0.94 = clear intent but some inference (punctuation ambiguity, inline verb)
+    0.60–0.79 = plausible but one reasonable alternative reading exists
+    0.30–0.59 = you are guessing; the sentence structure supports multiple firms
+    < 0.30    = almost certainly ambiguous — do not emit unless the verdict is strongly implied
+  Always include confidence; never omit it.
 - Skip signature blocks ("--", "Best,", "Sent from my iPhone"), Gmail quote markers (">"), and "On … wrote:" fences.
 - Skip lines that are only a firm name with no verdict nearby.
 - Return {"lines": []} if no records found. Never fabricate. Never narrate.`;
@@ -200,6 +219,7 @@ export async function parseApprovalReply(input: {
         verdict: line.verdict,
         note: line.note,
         reason: reason === "ambiguous" ? "ambiguous" : "none",
+        confidence: line.confidence,
       });
       continue;
     }
@@ -214,6 +234,7 @@ export async function parseApprovalReply(input: {
       proposed_note: line.note,
       reply_name: line.investor_name,
       match_reason: reason,
+      confidence: line.confidence,
     });
   }
 
@@ -237,6 +258,12 @@ export interface VerdictInstruction {
   note?: string;
   /** Optional approver email — typed into the drop-zone by Tristan. */
   approver_email?: string;
+  /** Haiku-reported confidence 0.0–1.0. Persisted to
+   *  `campaign_partners.parse_confidence` (migration 028) so the /approval
+   *  Step 3 row badge can render a coloured tier and so any future
+   *  batch-override UI has the signal available. UX audit 2026-04-23
+   *  item #12. */
+  confidence?: number | null;
 }
 
 export type ApplyApprovalVerdictsResult =
@@ -293,6 +320,11 @@ export async function applyApprovalVerdicts(input: {
       existing_note: currentRow.approver_note as string | null,
       now_iso: nowIso,
       today,
+      confidence:
+        typeof instruction.confidence === "number" &&
+        Number.isFinite(instruction.confidence)
+          ? Math.max(0, Math.min(1, instruction.confidence))
+          : null,
     });
 
     const { error: updateErr } = await supabase
@@ -362,9 +394,22 @@ function extractLines(raw: string): ParsedLine[] {
     const verdict = typeof e.verdict === "string" ? e.verdict.toLowerCase() : "";
     const note = typeof e.note === "string" ? e.note.trim() : "";
     const source = typeof e.source === "string" ? e.source : "";
+    // Confidence is a new field (2026-04-23, UX audit item #12). Parse
+    // defensively — Haiku may still return a reply without it if the
+    // system prompt was truncated or the model version lags. Clamp to
+    // [0, 1] so downstream UI doesn't have to guard against rubbish.
+    let confidence: number | null = null;
+    if (typeof e.confidence === "number" && Number.isFinite(e.confidence)) {
+      confidence = Math.max(0, Math.min(1, e.confidence));
+    } else if (typeof e.confidence === "string") {
+      const parsed = Number.parseFloat(e.confidence);
+      if (Number.isFinite(parsed)) {
+        confidence = Math.max(0, Math.min(1, parsed));
+      }
+    }
     if (!name) continue;
     if (!isVerdict(verdict)) continue;
-    out.push({ investor_name: name, verdict, note, source });
+    out.push({ investor_name: name, verdict, note, source, confidence });
   }
   return out;
 }
@@ -543,8 +588,19 @@ function buildUpdatePayload(input: {
   existing_note: string | null;
   now_iso: string;
   today: string;
+  /** Haiku-reported confidence — persisted verbatim on every verdict so
+   *  the Step 3 table can render the coloured badge and so later batch
+   *  operations can sort / filter by quality. */
+  confidence: number | null;
 }): Record<string, unknown> {
-  const { verdict, note, approver_email, existing_note, now_iso, today } = input;
+  const { verdict, note, approver_email, existing_note, now_iso, today, confidence } = input;
+
+  // Every payload writes parse_confidence; null clears a prior score
+  // which is the correct behaviour if a manual override replaces a
+  // machine verdict. See migration 028.
+  const confidencePayload: Record<string, unknown> = {
+    parse_confidence: confidence,
+  };
 
   if (verdict === "ok") {
     const payload: Record<string, unknown> = {
@@ -552,6 +608,7 @@ function buildUpdatePayload(input: {
       status_label: labelFor(STATUS_APPROVED),
       approved_by: approver_email,
       approved_at: now_iso,
+      ...confidencePayload,
     };
     if (note) {
       payload.approver_note = mergeNote(existing_note, note, today);
@@ -566,6 +623,7 @@ function buildUpdatePayload(input: {
       approved_by: approver_email,
       approved_at: now_iso,
       approver_note: mergeNote(existing_note, note || "Not for us", today),
+      ...confidencePayload,
     };
   }
 
@@ -580,6 +638,7 @@ function buildUpdatePayload(input: {
         `[SKIP] ${note || "skip this one"}`,
         today,
       ),
+      ...confidencePayload,
     };
   }
 
@@ -588,6 +647,7 @@ function buildUpdatePayload(input: {
     status_code: STATUS_PENDING,
     status_label: labelFor(STATUS_PENDING),
     approver_note: mergeNote(existing_note, `[FLAG] ${note || "maybe"}`, today),
+    ...confidencePayload,
   };
 }
 

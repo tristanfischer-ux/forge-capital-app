@@ -16,6 +16,7 @@ import {
 } from "@/lib/queries/approval";
 import ApprovalReturnDropZone from "./ApprovalReturnDropZone";
 import { EmailApprovalListButton } from "./EmailApprovalListButton";
+import { IncomingDecisionCell } from "./IncomingDecisionCell";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -171,6 +172,7 @@ export default async function ApprovalPage({
           counterpartName={counterpartName}
         />
         <IncomingColumn
+          campaignId={campaignId}
           rows={incoming.rows}
           stats={incoming.stats}
           counterpartName={counterpartName}
@@ -370,11 +372,13 @@ function OutgoingEmptyRow() {
  * + decision badge, plus a green ingest-cta footer.
  */
 function IncomingColumn({
+  campaignId,
   rows,
   stats,
   counterpartName,
   counterpartPossessive,
 }: {
+  campaignId: string;
   rows: IncomingApprovalRow[];
   stats: IncomingApprovalStats;
   counterpartName: string;
@@ -457,7 +461,11 @@ function IncomingColumn({
       </div>
 
       {/* V4 lines 1254-1284 — replies table. */}
-      <IncomingRepliesTable rows={rows} hasRealData={hasRealData} />
+      <IncomingRepliesTable
+        campaignId={campaignId}
+        rows={rows}
+        hasRealData={hasRealData}
+      />
 
       {/* V4 lines 1285-1289 — green ingest CTA. */}
       <div className="ingest-cta">
@@ -538,9 +546,11 @@ function StatCell({
  * tooltip flagging 'wires to X in Phase Y'."
  */
 function IncomingRepliesTable({
+  campaignId,
   rows,
   hasRealData,
 }: {
+  campaignId: string;
   rows: IncomingApprovalRow[];
   hasRealData: boolean;
 }) {
@@ -551,12 +561,19 @@ function IncomingRepliesTable({
           <tr>
             <th style={{ width: "36%" }}>Firm</th>
             <th>Approver&rsquo;s reply (verbatim)</th>
-            <th style={{ width: "16%" }}>Decision</th>
+            {/* UX audit 2026-04-23 item #12: widened to 22% to fit the
+                confidence badge + override affordance alongside the
+                decision chip. */}
+            <th style={{ width: "22%" }}>Decision</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <IncomingRow key={row.campaign_partner_id} row={row} />
+            <IncomingRow
+              key={row.campaign_partner_id}
+              campaignId={campaignId}
+              row={row}
+            />
           ))}
         </tbody>
       </table>
@@ -589,8 +606,18 @@ function IncomingRepliesTable({
   );
 }
 
-/** One real incoming-reply row. */
-function IncomingRow({ row }: { row: IncomingApprovalRow }) {
+/** One real incoming-reply row. UX audit 2026-04-23 item #12: the
+ *  decision cell now includes the Haiku parser's confidence score as a
+ *  coloured badge (green ≥ 85%, amber 60–84%, red < 60%) and exposes a
+ *  "Click to change" inline override UI when confidence is low, so a
+ *  mis-parse is never silent. */
+function IncomingRow({
+  campaignId,
+  row,
+}: {
+  campaignId: string;
+  row: IncomingApprovalRow;
+}) {
   return (
     <tr>
       <td>
@@ -605,15 +632,12 @@ function IncomingRow({ row }: { row: IncomingApprovalRow }) {
         )}
       </td>
       <td>
-        {row.decision === "approved" ? (
-          <span className="approve-y">&#10003; Approved</span>
-        ) : row.decision === "flag" ? (
-          <span style={{ color: "var(--amber)", fontWeight: 700 }}>
-            &#9888; Flag
-          </span>
-        ) : (
-          <span className="approve-no">&#10007; Reject</span>
-        )}
+        <IncomingDecisionCell
+          campaignId={campaignId}
+          campaignPartnerId={row.campaign_partner_id}
+          decision={row.decision}
+          parseConfidence={row.parse_confidence}
+        />
       </td>
     </tr>
   );
