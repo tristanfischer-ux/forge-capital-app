@@ -86,7 +86,9 @@ function generateCalendarSlots(today = new Date()): string[] {
     const cetHour = hour;
     const utc = `${pad(utcHour)}:${pad(min)}`;
     const cet = `${pad(cetHour)}:${pad(min)}`;
-    return `  - ${dayName} ${dateStr}, ${bst} BST (${utc} UTC / ${cet} CET)`;
+    // Bullet character U+2022 matches the v7 TF drafts batch format —
+    // Tristan's canonical style guide uses bullets, not hyphens.
+    return `  • ${dayName} ${dateStr}, ${bst} BST (${utc} UTC / ${cet} CET)`;
   };
 
   return slots.map((s) => toLine(s.daysAhead, s.hour, s.min));
@@ -211,12 +213,19 @@ function firstNameFrom(full: string | null): string | null {
  *   "SkySails Power — airborne wind energy, €5M Series A bridge (DACH deep-tech hardware)"
  */
 function deriveRecipientAngle(data: InvestorModalData): string | null {
+  // Priority 1: Opus-generated cached subject_angle on campaign_partners.
+  // Written by refineSynthesisWithOpus alongside rendered_synthesis.
+  // 2-5 words, insightful per-firm, matches Tristan's v7 TF style.
+  const cached = data.subject_angle?.trim();
+  if (cached) return cached;
+
+  // Fallback: raw sector_focus. Used only when Opus hasn't run — the
+  // test-send batch pre-runs Opus for every row so this branch rarely
+  // ships to an inbox.
   const sector = data.investor.sector_focus?.trim();
   if (sector && sector.length > 0 && sector.length < 70) {
-    // sector_focus is typically short and recipient-relevant.
     return sector;
   }
-  // Fallback: first 2 clauses of thesis_summary, roughly 30-60 chars.
   const thesis = data.investor.thesis_summary?.trim();
   if (thesis) {
     const firstSentence = thesis.split(/[.!?]/)[0];
@@ -225,7 +234,6 @@ function deriveRecipientAngle(data: InvestorModalData): string | null {
     if (pick.length > 0 && pick.length < 70) return pick;
     if (pick.length >= 70) return pick.slice(0, 60).replace(/\s+\S*$/, "") + "…";
   }
-  // Fallback: geo_focus.
   const geo = data.investor.geo_focus?.trim();
   if (geo && geo.length < 50) return geo;
   return null;

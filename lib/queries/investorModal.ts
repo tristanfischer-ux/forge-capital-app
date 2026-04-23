@@ -91,6 +91,8 @@ export interface InvestorModalData {
    *  Tristan saw 2026-04-23 ("focuses primarily on Pioneered 'SpaceTech'..."). */
   rendered_synthesis: string | null;
   rendered_synthesis_at: string | null;
+  /** Opus-produced 2-5 word subject-line angle, cached per-partner. */
+  subject_angle: string | null;
 }
 
 /**
@@ -167,6 +169,7 @@ export async function getInvestorModalData(
       last_contact_at,
       rendered_synthesis,
       rendered_synthesis_at,
+      subject_angle,
       campaign:campaigns (
         id,
         name,
@@ -403,5 +406,6 @@ export async function getInvestorModalData(
     rendered_synthesis: (rootAny.rendered_synthesis as string | null) ?? null,
     rendered_synthesis_at:
       (rootAny.rendered_synthesis_at as string | null) ?? null,
+    subject_angle: (rootAny.subject_angle as string | null) ?? null,
   };
 }

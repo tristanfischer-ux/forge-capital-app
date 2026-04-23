@@ -110,13 +110,12 @@ export async function sendTestBatch(
     const firmName = data.investor.firm_name ?? "Unknown firm";
     const partnerName = data.primary_partner?.name ?? null;
 
-    // Step 2: if this row has no rendered_synthesis cached, generate
-    // one with Opus BEFORE sending so no email goes out with generic
-    // template-substituted adjacencies. Tristan flagged 2026-04-23
-    // that the first 20 [TEST] dispatches had "a whole bunch of
-    // investors which had no synthesis in them" — this closes that
-    // gap. Adds ~3-5s per row (~60-100s for 20), acceptable.
-    if (!data.rendered_synthesis) {
+    // Step 2: if this row has no rendered_synthesis OR no subject_angle
+    // cached, run Opus before sending so no email goes out with a
+    // generic template-substituted synthesis or a bland raw-
+    // sector-focus subject angle. refineSynthesisWithOpus writes both
+    // in one JSON call — adds ~3-5s per row (~60-100s for 20).
+    if (!data.rendered_synthesis || !data.subject_angle) {
       const refined = await refineSynthesisWithOpus({
         campaignPartnerId: partnerId,
       });

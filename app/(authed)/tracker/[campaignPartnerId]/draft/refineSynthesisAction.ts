@@ -28,7 +28,7 @@ export interface RefineSynthesisInput {
 }
 
 export type RefineSynthesisResult =
-  | { ok: true; rendered: string }
+  | { ok: true; rendered: string; subjectAngle: string | null }
   | { ok: false; error: string };
 
 interface Ctx {
@@ -117,21 +117,32 @@ export async function refineSynthesisWithOpus(
   }
 
   const system = [
-    "You are drafting on behalf of Tristan Fischer, founder of Fractional Forge. You produce a SINGLE paragraph — the per-investor synthesis paragraph of a cold-outreach fundraising email. Voice: first-person, British spelling (organise, behaviour, programme), specific nouns over adjectives, direct, no marketing verbs.",
+    "You are drafting on behalf of Tristan Fischer, founder of Fractional Forge. You produce TWO things for a cold-outreach email: (1) the per-investor synthesis paragraph, and (2) a 2-5 word subject-line angle tailored to this firm.",
     "",
-    "STRUCTURE — match paragraph 3 of the voice reference EXACTLY:",
-    "  1. Open with a hedged-knowledge frame: \"My understanding is that <firm> focuses primarily on <thesis>, with <adjacencies> as the closest adjacencies.\" Choose grammar that chains cleanly — if the thesis starts with a verb (Pioneered / Developed / Built), rephrase it into a noun phrase (e.g. \"their work pioneering <X>\" or \"a thesis centred on <X>\"). Never stitch a verb after \"focuses primarily on\".",
+    "Output ONLY a JSON object matching this schema — no prose, no markdown fence:",
+    '  {"synthesis": "<paragraph>", "subject_angle": "<2-5 words>"}',
+    "",
+    "SYNTHESIS PARAGRAPH — match paragraph 3 of the voice reference EXACTLY:",
+    "  1. Open with a hedged-knowledge frame: \"My understanding is that <firm> focuses primarily on <thesis>, with <adjacencies> as the closest adjacencies.\" Choose grammar that chains cleanly — if the thesis starts with a verb (Pioneered / Developed / Built), rephrase it into a noun phrase (e.g. \"their work pioneering <X>\"). Never stitch a verb after \"focuses primarily on\". When possible, cite a specific portfolio company (\"already backing X\") as evidence.",
     "  2. If the match is a stretch, admit it plainly: \"If that is right, <topic> is a stretch against that core mandate\".",
     "  3. Name the specific angle you're pitching on: \"I raise it mainly on the <specific adjacency>\".",
     "  4. Invite pushback: \"and would welcome a view on whether that angle holds\".",
+    "  2-4 sentences. Voice: first-person, British spelling (organise, behaviour, programme), specific nouns over adjectives, direct, no marketing verbs.",
     "",
-    "BANNED:",
-    "  - Bracketed placeholders like [X] / [specific role] / [company] — if a fact is missing, OMIT the clause. The composer has no substitution step for your output — what you write is what ships.",
+    "SUBJECT ANGLE — 2-5 words, the trailing parenthetical on the subject line. Should be the SINGLE most specific, insightful reason this firm might fit this campaign. Examples from Tristan's canonical style guide:",
+    "  • \"DACH deep-tech hardware\" (Alpine Space Ventures / SkySails)",
+    "  • \"Airloom / novel wind precedent\" (Crosscut Ventures / SkySails)",
+    "  • \"Double Impact / AQ Compute fit\" (Bain Capital / SkySails)",
+    "  • \"Deeptech / climate envelope\" (Bpifrance / SkySails)",
+    "  • \"climate-tech hardware accelerator\" (Brinc / SkySails)",
+    "  • \"foundational-industries thesis\" (Construct Capital / SkySails)",
+    "The angle may cite a portfolio-company precedent (like \"Airloom\") if one exists and is relevant. Avoid raw sector-tag lists like \"SaaS, Fintech, Health\".",
+    "",
+    "BANNED ACROSS BOTH OUTPUTS:",
+    "  - Bracketed placeholders like [X] / [specific role] / [company].",
     "  - Flattery tokens: congratulations, great to see, loved your, enjoyed your, impressive work, excited to see.",
     '  - "The global leader in X" / "defined the category" / similar brand-puff.',
     "  - Inventing facts not present in the context.",
-    "",
-    "Output ONLY the paragraph. No preamble, no quotes around it, no explanation. 2-4 sentences. No merge tokens — write the firm name and the specifics out in full.",
   ].join("\n");
 
   const userPromptLines = [
@@ -156,23 +167,56 @@ export async function refineSynthesisWithOpus(
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
       model: DRAFTER_MODEL,
-      max_tokens: 1024,
+      max_tokens: 1400,
       system,
       messages: [{ role: "user", content: userPromptLines.join("\n") }],
     });
     const textBlock = response.content.find((b) => b.type === "text");
-    const rendered =
+    const raw =
       textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
+    if (!raw) {
+      return { ok: false, error: "Opus returned an empty response." };
+    }
+
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    let parsed: { synthesis: unknown; subject_angle: unknown };
+    try {
+      parsed = JSON.parse(cleaned) as typeof parsed;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "parse error";
+      return {
+        ok: false,
+        error: `Opus returned non-JSON (${msg}). Raw: ${raw.slice(0, 200)}`,
+      };
+    }
+
+    const rendered =
+      typeof parsed.synthesis === "string" ? parsed.synthesis.trim() : "";
+    const subjectAngle =
+      typeof parsed.subject_angle === "string"
+        ? parsed.subject_angle.trim() || null
+        : null;
+
     if (!rendered) {
       return { ok: false, error: "Opus returned an empty synthesis." };
     }
 
-    // Bracket guard.
+    // Bracket guard on both outputs.
     const bracketMatch = rendered.match(/\[[^\]\n]{2,60}\]/);
     if (bracketMatch) {
       return {
         ok: false,
         error: `Opus emitted a bracketed placeholder (${bracketMatch[0]}) — click Refine again to retry.`,
+      };
+    }
+    if (subjectAngle && /\[[^\]\n]{1,40}\]/.test(subjectAngle)) {
+      return {
+        ok: false,
+        error: `Opus subject angle contained brackets (${subjectAngle}) — retry.`,
       };
     }
 
@@ -182,6 +226,7 @@ export async function refineSynthesisWithOpus(
       .update({
         rendered_synthesis: rendered,
         rendered_synthesis_at: new Date().toISOString(),
+        subject_angle: subjectAngle,
       })
       .eq("id", campaignPartnerId);
     if (updateErr) {
@@ -189,7 +234,7 @@ export async function refineSynthesisWithOpus(
     }
 
     revalidatePath(`/tracker/${campaignPartnerId}/draft`);
-    return { ok: true, rendered };
+    return { ok: true, rendered, subjectAngle };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `Opus call failed: ${msg}` };
