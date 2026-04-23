@@ -125,13 +125,13 @@ export default async function WeeklyPage({
             inline. One template shape varies by campaign intent.
           </div>
         </div>
-        <span
+        <Link
+          href={`/weekly-digest?c=${campaignId}`}
           className="section-link"
-          title="Preview link lands once Gmail compose wires up (Phase 8)"
-          style={{ cursor: "not-allowed", opacity: 0.7 }}
+          title="Weekly founder digest (Monday 07:00 BST). Previews the plain-text summary and lets you self-send."
         >
-          Preview full email &rarr;
-        </span>
+          Preview founder digest &rarr;
+        </Link>
       </div>
 
       <div className="weekly-wrap">
