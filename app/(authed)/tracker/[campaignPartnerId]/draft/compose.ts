@@ -109,6 +109,16 @@ export interface ComposedDraft {
   thesisTooLongToHedge: boolean;
   /** Placeholder keys we still see in the rendered synthesis (for warning). */
   unresolvedPlaceholders: string[];
+  /**
+   * Full email body ready for dispatch — salutation + paragraphs +
+   * sign-off, separated by blank lines. This is what Gmail send paths
+   * (sendTestBatch, SendGmailMessageButton) should use. Preserves the
+   * "Dear Name," greeting and "Best regards, …" that the draft preview
+   * page renders. Tristan flagged 2026-04-23 that the test batch was
+   * shipping WITHOUT these — fixed by returning this field here so
+   * every send path uses the same canonical full body.
+   */
+  fullBody: string;
   /** Full draft (subject + blank line + body + sign-off) for clipboard. */
   fullClipboardText: string;
 }
@@ -192,13 +202,40 @@ function firstNameFrom(full: string | null): string | null {
  * recipient — that's a future enhancement (thesis-aware subject selector).
  * V1 uses one campaign-level subject.
  */
+/**
+ * Rule 2 per-recipient angle. 2-5 words pulled from sector_focus or
+ * the first clause of thesis_summary, used as the trailing parenthetical
+ * on the subject so each recipient gets a tailored subject line rather
+ * than an identical one across the batch. Examples from the runbook:
+ *   "SkySails Power — airborne wind energy, €5M Series A bridge (Flying Whales / hydrogen CVC)"
+ *   "SkySails Power — airborne wind energy, €5M Series A bridge (DACH deep-tech hardware)"
+ */
+function deriveRecipientAngle(data: InvestorModalData): string | null {
+  const sector = data.investor.sector_focus?.trim();
+  if (sector && sector.length > 0 && sector.length < 70) {
+    // sector_focus is typically short and recipient-relevant.
+    return sector;
+  }
+  // Fallback: first 2 clauses of thesis_summary, roughly 30-60 chars.
+  const thesis = data.investor.thesis_summary?.trim();
+  if (thesis) {
+    const firstSentence = thesis.split(/[.!?]/)[0];
+    const clauses = firstSentence.split(/[,;—]/).map((c) => c.trim()).filter(Boolean);
+    const pick = clauses.slice(0, 2).join(" / ");
+    if (pick.length > 0 && pick.length < 70) return pick;
+    if (pick.length >= 70) return pick.slice(0, 60).replace(/\s+\S*$/, "") + "…";
+  }
+  // Fallback: geo_focus.
+  const geo = data.investor.geo_focus?.trim();
+  if (geo && geo.length < 50) return geo;
+  return null;
+}
+
 function deriveSubject(data: InvestorModalData): string {
   const campaignName = data.campaign?.name ?? "Campaign";
   // Strip internal prefixes ("AUDIT · ") and workstream suffixes
   // ("· Investor") so the subject reads as the company name, not the
-  // tracker filename. Tristan flagged 2026-04-23 that a subject like
-  // "AUDIT · Wren Aerospace · Investor — Wren Aerospace — Dutch HAPS
-  // startup" doubles the company name and exposes internal tags.
+  // tracker filename.
   const displayName = campaignName
     .replace(/^audit\s*[·|:]?\s*/i, "")
     .replace(/\s*[·|]\s*(investor|customer|supplier)\s*$/i, "")
@@ -206,22 +243,31 @@ function deriveSubject(data: InvestorModalData): string {
 
   const pitch = data.campaign?.company_description?.trim();
   const raise = data.campaign?.raise_size?.trim();
-  const tail = raise ? ` (${raise})` : "";
+  const raiseTail = raise ? `, ${raise}` : "";
+  const angle = deriveRecipientAngle(data);
+  const angleTail = angle ? ` (${angle})` : "";
 
+  // Subject format per runbook §9 — Rule 2:
+  //   <Display name> — <short pitch><, raise size> (<per-recipient angle>)
+  let head: string;
   if (pitch) {
     const firstClause = pitch.split(/[.;\n]/)[0]?.trim();
     if (firstClause && firstClause.length > 0) {
-      // If the clause starts with the display name, don't double it.
       const clauseStartsWithName = firstClause
         .toLowerCase()
         .startsWith(displayName.toLowerCase());
-      const base = clauseStartsWithName
-        ? `${firstClause}${tail}`
-        : `${displayName} — ${firstClause}${tail}`;
-      return base.length > 140 ? base.slice(0, 137) + "…" : base;
+      head = clauseStartsWithName
+        ? `${firstClause}${raiseTail}`
+        : `${displayName} — ${firstClause}${raiseTail}`;
+    } else {
+      head = `${displayName}${raiseTail}`;
     }
+  } else {
+    head = `${displayName}${raiseTail}`;
   }
-  return raise ? `${displayName} (${raise})` : displayName;
+
+  const full = `${head}${angleTail}`;
+  return full.length > 160 ? full.slice(0, 157) + "…" : full;
 }
 
 /**
@@ -378,7 +424,10 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
   paragraphs.push(buildCtaBlock(template?.cta_variant ?? null));
 
   // Full clipboard text — subject + blank + Dear + paragraphs + sign-off.
-  const salutationLine = firstName ? `Dear ${firstName},` : "Dear [first name],";
+  // Salutation — prefer first name; when missing, fall back to
+  // "Hello," rather than a bracketed "[first name]" placeholder which
+  // would violate the bracket-ban and ship to a recipient.
+  const salutationLine = firstName ? `Dear ${firstName},` : "Hello,";
   const clipboardSections = [
     `Subject: ${subject}`,
     "",
@@ -389,6 +438,17 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
     SIGN_OFF_BLOCK,
   ];
 
+  // fullBody — the canonical rendered email body for dispatch paths.
+  // Matches what the preview page renders: salutation, blank line,
+  // paragraphs separated by blank lines, blank line, sign-off.
+  const fullBody = [
+    salutationLine,
+    "",
+    paragraphs.join("\n\n"),
+    "",
+    SIGN_OFF_BLOCK,
+  ].join("\n");
+
   return {
     subject,
     toEmail: partner?.email ?? null,
@@ -398,6 +458,7 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
     signOff: SIGN_OFF_BLOCK,
     thesisTooLongToHedge,
     unresolvedPlaceholders,
+    fullBody,
     fullClipboardText: clipboardSections.join("\n"),
   };
 }

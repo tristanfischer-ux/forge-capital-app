@@ -152,10 +152,14 @@ export async function sendTestBatch(
     const draft = composeDraft(data);
 
     const subject = `${TEST_BATCH_TAG} ${draft.subject}`.slice(0, 240);
+    // Use the composer's fullBody — salutation + paragraphs + sign-off.
+    // Previously sent just `bodyParagraphs.join`, which dropped both the
+    // "Dear <Name>," greeting and the "Best regards, Tristan Fischer..."
+    // sign-off. Tristan flagged this 2026-04-23 on batch #2.
     const body = [
-      draft.bodyParagraphs.join("\n\n"),
+      draft.fullBody,
       "",
-      "—",
+      "— TEST —",
       "This is a TEST dispatch to a review inbox. No real investor received this message. Reply with 'ok / not for me / skip' style markers to simulate an approver response.",
     ].join("\n\n");
 

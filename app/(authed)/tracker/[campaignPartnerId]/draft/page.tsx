@@ -180,12 +180,12 @@ export default async function DraftPage({
             <SendGmailMessageButton
               to={data.primary_partner?.email ?? ""}
               subject={draft.subject}
-              body={draft.bodyParagraphs.join("\n\n")}
+              body={draft.fullBody}
             />
             <CreateGmailDraftButton
               to={data.primary_partner?.email ?? ""}
               subject={draft.subject}
-              body={draft.bodyParagraphs.join("\n\n")}
+              body={draft.fullBody}
             />
             <CopyToClipboardButton fullText={draft.fullClipboardText} />
           </div>
