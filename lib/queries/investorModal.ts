@@ -279,15 +279,45 @@ export async function getInvestorModalData(
     }
   }
 
-  // Normalise the partner list.
+  // Email override lookup. The user-provided email overrides
+  // (migration 013) take precedence over the nightly mirror values.
+  // RLS scopes the table to the current user's overrides — same
+  // pattern as `lib/queries/match-score.ts` post-audit fix. Without
+  // this, the draft page renders "no email on file" for partners
+  // resolved via the email-hunt modal — surfaced by the Wren
+  // walkthrough 2026-04-23.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const overrideByPartner = new Map<number, { email: string; email_tier: string }>();
+  if (siblingRows.length > 0) {
+    const partnerIds = siblingRows.map((r) => r.id as number);
+    const { data: overrides } = await supabase
+      .from("partner_email_overrides")
+      .select("partner_id, email, email_tier")
+      .in("partner_id", partnerIds);
+    for (const row of (overrides ?? []) as Array<{
+      partner_id: number;
+      email: string;
+      email_tier: string;
+    }>) {
+      overrideByPartner.set(row.partner_id, {
+        email: row.email,
+        email_tier: row.email_tier,
+      });
+    }
+  }
+
+  // Normalise the partner list. Apply the email override (if any) so
+  // the rest of the app — TierBadge, Create-Gmail-Draft destination,
+  // verification-gate filter — sees the user-resolved address.
   const allPartners: InvestorModalPartner[] = siblingRows.map((row) => {
     const cp = cpBySibling.get(row.id as number);
+    const override = overrideByPartner.get(row.id as number);
     return {
       id: row.id as number,
       name: (row.name as string | null) ?? null,
       title: (row.title as string | null) ?? null,
-      email: (row.email as string | null) ?? null,
-      email_tier: ((row.email_tier as string | null) ?? null) as EmailTier,
+      email: override?.email ?? (row.email as string | null) ?? null,
+      email_tier: (override?.email_tier ?? (row.email_tier as string | null) ?? null) as EmailTier,
       bio: (row.bio as string | null) ?? null,
       focus_areas: (row.focus_areas as string | null) ?? null,
       campaign_partner_id: cp?.id ?? null,
