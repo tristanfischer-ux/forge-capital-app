@@ -36,6 +36,37 @@ const TIER_META: Record<Exclude<EmailTier, null>, TierMeta> = {
     showReplacementCta: false,
     tooltip: "Hunter confidence 80+ and not a generic address.",
   },
+  // NeverBounce sendable bucket — green, mirrors the corresponded family
+  // because the verdict comes straight from the receiving server.
+  neverbounce_valid: {
+    label: "NeverBounce — valid",
+    classes:
+      "bg-tier-corresponded-bg text-tier-corresponded-fg border-tier-corresponded-border",
+    showReplacementCta: false,
+    tooltip: "NeverBounce confirmed deliverable. Safe to send.",
+  },
+  // Catch-all is sendable but the domain accepts everything, so we tint
+  // it the same green as valid (still passes the gate) — the lower
+  // confidence is communicated via the label, not a colour change.
+  neverbounce_catchall: {
+    label: "NeverBounce — catch-all",
+    classes:
+      "bg-tier-corresponded-bg text-tier-corresponded-fg border-tier-corresponded-border",
+    showReplacementCta: false,
+    tooltip:
+      "Domain accepts everything — sendable but bounce risk is non-zero.",
+  },
+  // Uncertain bucket — amber, same family as `unverified`. No CTA chip
+  // because the resolution path is identical to unverified (Hunter or
+  // LinkedIn cross-check).
+  neverbounce_unknown: {
+    label: "NeverBounce — unknown",
+    classes:
+      "bg-tier-unverified-bg text-tier-unverified-fg border-tier-unverified-border",
+    showReplacementCta: false,
+    tooltip:
+      "NeverBounce returned no verdict. Cannot advance to +2 Drafted.",
+  },
   unverified: {
     label: "Unverified",
     classes:
@@ -49,6 +80,21 @@ const TIER_META: Record<Exclude<EmailTier, null>, TierMeta> = {
       "bg-tier-generic-bg text-tier-generic-fg border-tier-generic-border",
     showReplacementCta: true,
     tooltip: "Generic pattern (info@ / contact@ / team@). Hard-blocked.",
+  },
+  // Hard-blocked NeverBounce variants — red family, replacement CTA.
+  neverbounce_invalid: {
+    label: "NeverBounce — invalid",
+    classes:
+      "bg-tier-bounced-bg text-tier-bounced-fg border-tier-bounced-border",
+    showReplacementCta: true,
+    tooltip: "NeverBounce confirmed undeliverable. Hard-blocked.",
+  },
+  neverbounce_disposable: {
+    label: "NeverBounce — disposable",
+    classes:
+      "bg-tier-bounced-bg text-tier-bounced-fg border-tier-bounced-border",
+    showReplacementCta: true,
+    tooltip: "Disposable / throwaway mailbox. Hard-blocked.",
   },
   bounced: {
     label: "Bounced",

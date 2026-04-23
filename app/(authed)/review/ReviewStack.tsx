@@ -226,16 +226,38 @@ export function ReviewStack({ drafts }: { drafts: DraftReviewRow[] }) {
 }
 
 const tierChipColour = (tier: DraftReviewRow["email_tier"]): string => {
-  if (tier === "corresponded" || tier === "hunter_verified") return "var(--green)";
-  if (tier === "generic_blocked" || tier === "bounced") return "var(--red)";
+  // Sendable bucket — green. Mirrors `lib/queries/tracker.ts`.
+  if (
+    tier === "corresponded" ||
+    tier === "hunter_verified" ||
+    tier === "neverbounce_valid" ||
+    tier === "neverbounce_catchall"
+  ) {
+    return "var(--green)";
+  }
+  // Hard-blocked bucket — red.
+  if (
+    tier === "generic_blocked" ||
+    tier === "bounced" ||
+    tier === "neverbounce_invalid" ||
+    tier === "neverbounce_disposable"
+  ) {
+    return "var(--red)";
+  }
+  // Uncertain (unverified, neverbounce_unknown) and null fall through.
   return "var(--text-dim)";
 };
 
 const tierChipLabel = (tier: DraftReviewRow["email_tier"]): string => {
   if (tier === "corresponded") return "✓ Corresponded";
   if (tier === "hunter_verified") return "✓ Hunter verified";
+  if (tier === "neverbounce_valid") return "✓ NeverBounce valid";
+  if (tier === "neverbounce_catchall") return "✓ NeverBounce catch-all";
   if (tier === "generic_blocked") return "⚠ Generic address";
   if (tier === "bounced") return "⚠ Bounced";
+  if (tier === "neverbounce_invalid") return "⚠ NeverBounce invalid";
+  if (tier === "neverbounce_disposable") return "⚠ NeverBounce disposable";
+  if (tier === "neverbounce_unknown") return "⚠ NeverBounce unknown";
   if (tier === "unverified") return "⚠ Unverified";
   return "— no tier";
 };

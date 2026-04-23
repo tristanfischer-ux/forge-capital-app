@@ -1619,6 +1619,68 @@ function ResultCardDrillDown({
           <p>{row.thesis_summary}</p>
         </div>
       ) : null}
+      {row.portfolio_fit && row.portfolio_fit.length > 0 ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">
+            Portfolio fit · top {row.portfolio_fit.length}
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {row.portfolio_fit.map((p) => (
+              <li
+                key={p.slug}
+                style={{
+                  padding: "6px 0",
+                  borderBottom: "1px solid var(--border-soft)",
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{p.name}</span>
+                  {p.sector ? (
+                    <span
+                      style={{
+                        color: "var(--text-dim)",
+                        fontSize: 11,
+                      }}
+                    >
+                      · {p.sector}
+                    </span>
+                  ) : null}
+                </div>
+                {p.what_they_do ? (
+                  <div
+                    style={{
+                      color: "var(--text-dim)",
+                      marginTop: 2,
+                    }}
+                  >
+                    {p.what_they_do}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      color: "var(--text-faint)",
+                      marginTop: 2,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    No dossier prose on file yet — populates once the
+                    portfolio-company synthesiser runs.
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="rc-expand-grid">
         <MetaCell
           label="Stage"
@@ -1749,11 +1811,18 @@ function TagChips({ row }: { row: MatchResultRow }) {
       </span>,
     );
   }
-  if (
-    row.primary_partner?.email_tier !== "corresponded" &&
-    row.primary_partner?.email_tier !== "hunter_verified" &&
-    row.verified_email_count === 0
-  ) {
+  // Mirror the sendable bucket in `lib/queries/tracker.ts` (corresponded,
+  // hunter_verified, neverbounce_valid, neverbounce_catchall). Any tier
+  // outside that set, with zero verified emails on the firm overall,
+  // earns the red email-gate chip.
+  const sendableTiers = new Set<string>([
+    "corresponded",
+    "hunter_verified",
+    "neverbounce_valid",
+    "neverbounce_catchall",
+  ]);
+  const primaryTier = row.primary_partner?.email_tier ?? "";
+  if (!sendableTiers.has(primaryTier) && row.verified_email_count === 0) {
     out.push(
       <span key="gate" className="tag-chip tag-blocked">
         <span className="dot" />

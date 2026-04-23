@@ -761,9 +761,17 @@ export async function getMatchScore(
     const partners = inv.partners_mirror ?? [];
     const primary =
       partners.find((p) => p.is_primary_contact === true) ?? partners[0] ?? null;
+    // Sendable bucket — anything that can advance to +2 Drafted. Updated
+    // 2026-04-23 to include the NeverBounce sendable variants; matches
+    // the taxonomy in `lib/queries/tracker.ts`.
     const verifiedCount = partners.filter((p) => {
       const tier = effectiveTier(p.id, p.email_tier);
-      return tier === "corresponded" || tier === "hunter_verified";
+      return (
+        tier === "corresponded" ||
+        tier === "hunter_verified" ||
+        tier === "neverbounce_valid" ||
+        tier === "neverbounce_catchall"
+      );
     }).length;
 
     const dims = scoreDims(
@@ -835,8 +843,18 @@ export async function getMatchScore(
       on_other_campaign: other ? { ...other, firm_name: inv.firm_name ?? "This firm" } : null,
       near_miss: nm,
       why_them: deriveWhyThem(inv),
+      // Attached in a follow-up pass below — keep the in-loop allocation
+      // to a stable empty array so the row already conforms to the type.
+      portfolio_fit: [],
     });
   }
+
+  // Batch-fetch portfolio fit for every scored investor. One round-trip
+  // pulls every link row across the whole result set; we then bucket
+  // and attach top-3 per investor in JS. This is cheaper than N queries
+  // and keeps the surface honest — when no portfolio rows exist the
+  // attached array stays empty and the UI renders nothing.
+  await attachPortfolioFit(supabase, scored);
 
   // Step 4: tab-based filter + sort
   let ranked = scored;
@@ -874,4 +892,123 @@ export async function getMatchScore(
     detectedSignals: signals,
     suggestedArchetype: suggested,
   };
+}
+
+/* ------------------------------------------------------------------------- */
+/* Portfolio-fit attachment                                                  */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * For every scored investor, attach the top-3 portfolio companies that
+ * best represent the firm's actual investing pattern. The signal we use
+ * is round recency (most recent rounds first) joined to the dossier-style
+ * `portfolio_company_profiles` table for the "what they do" line — when
+ * a profile is missing, the company still surfaces with `what_they_do = null`.
+ *
+ * One round-trip pulls every `investor_portfolio_links` row across the
+ * full investor set, plus the canonical name/slug from `portfolio_companies`.
+ * A second round-trip pulls the dossier rows in one shot keyed by
+ * company name. Both are bounded by the size of the scored set
+ * (typically <= 25 investors × <= 100 rounds each).
+ *
+ * This is intentionally simple — no embedding-driven sector match yet.
+ * "Top-3 by recency" is the V1 take; the embedding-similarity rank lands
+ * once the compose-side embedding pipeline is wired through.
+ */
+async function attachPortfolioFit(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  rows: MatchResultRow[],
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  const investorIds = rows.map((r) => r.investor_id);
+
+  const { data: linkRows, error: linkErr } = await supabase
+    .from("investor_portfolio_links")
+    .select(
+      `investor_id, portfolio_company_id, round, round_at,
+       portfolio_companies:portfolio_company_id ( slug, name, sector )`,
+    )
+    .in("investor_id", investorIds)
+    .order("round_at", { ascending: false, nullsFirst: false })
+    .limit(2000);
+
+  if (linkErr) {
+    console.warn(
+      "[match-score] portfolio-fit links query failed:",
+      linkErr.message,
+    );
+    return;
+  }
+
+  interface LinkRow {
+    investor_id: number;
+    portfolio_company_id: number;
+    round: string | null;
+    round_at: string | null;
+    portfolio_companies: {
+      slug: string;
+      name: string;
+      sector: string | null;
+    } | null;
+  }
+
+  // Bucket per investor, stop after 3 visible companies. Round-recency
+  // ordering means the first 3 we see are the picks.
+  const byInvestor = new Map<number, Array<{ slug: string; name: string; sector: string | null }>>();
+  for (const raw of (linkRows ?? []) as unknown as LinkRow[]) {
+    const pc = raw.portfolio_companies;
+    if (!pc) continue;
+    const bucket = byInvestor.get(raw.investor_id) ?? [];
+    if (bucket.length >= 3) continue;
+    if (bucket.some((b) => b.slug === pc.slug)) continue;
+    bucket.push({ slug: pc.slug, name: pc.name, sector: pc.sector });
+    byInvestor.set(raw.investor_id, bucket);
+  }
+
+  // Collect distinct names so we can pull dossier prose in one round-trip.
+  const distinctNames = new Set<string>();
+  for (const bucket of byInvestor.values()) {
+    for (const c of bucket) distinctNames.add(c.name);
+  }
+
+  const dossierByName = new Map<string, { sector: string | null; what_they_do: string | null }>();
+  if (distinctNames.size > 0) {
+    const { data: dossierRows, error: dossierErr } = await supabase
+      .from("portfolio_company_profiles")
+      .select("company_name, sector, what_they_do")
+      .in("company_name", Array.from(distinctNames));
+    if (dossierErr) {
+      console.warn(
+        "[match-score] portfolio-fit dossier query failed:",
+        dossierErr.message,
+      );
+    } else {
+      for (const r of (dossierRows ?? []) as Array<{
+        company_name: string;
+        sector: string | null;
+        what_they_do: string | null;
+      }>) {
+        dossierByName.set(r.company_name, {
+          sector: r.sector,
+          what_they_do: r.what_they_do,
+        });
+      }
+    }
+  }
+
+  for (const row of rows) {
+    const bucket = byInvestor.get(row.investor_id) ?? [];
+    row.portfolio_fit = bucket.map((c) => {
+      const dossier = dossierByName.get(c.name);
+      return {
+        slug: c.slug,
+        name: c.name,
+        // Prefer the dossier sector (more specific) over the canonical
+        // table's sector field. Null when neither exists.
+        sector: dossier?.sector ?? c.sector ?? null,
+        what_they_do: dossier?.what_they_do ?? null,
+      };
+    });
+  }
 }

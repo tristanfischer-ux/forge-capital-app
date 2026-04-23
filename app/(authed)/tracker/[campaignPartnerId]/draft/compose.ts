@@ -560,13 +560,24 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
 }
 
 /**
- * Determine whether the draft may be copied to Gmail. Blocking tiers are
- * `generic_blocked`, `bounced`, `unverified` — only `corresponded` or
- * `hunter_verified` (or an explicit null tier with an email on file, which
- * we block-with-warning) advance to +2 Drafted.
+ * Determine whether the draft may be copied to Gmail.
+ *
+ * Sendable tiers (NOT blocked): `corresponded`, `hunter_verified`,
+ * `neverbounce_valid`, `neverbounce_catchall`. Anything else — `unverified`,
+ * `neverbounce_unknown`, `generic_blocked`, `neverbounce_invalid`,
+ * `neverbounce_disposable`, `bounced` — is blocked. Updated 2026-04-23
+ * to include the NeverBounce taxonomy.
  */
 export function isTierBlocked(
   tier: NonNullable<InvestorModalData["primary_partner"]>["email_tier"] | null,
 ): boolean {
-  return tier === "generic_blocked" || tier === "bounced" || tier === "unverified";
+  if (
+    tier === "corresponded" ||
+    tier === "hunter_verified" ||
+    tier === "neverbounce_valid" ||
+    tier === "neverbounce_catchall"
+  ) {
+    return false;
+  }
+  return true;
 }

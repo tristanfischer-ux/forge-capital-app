@@ -707,6 +707,7 @@ function ProvenanceCard({ partner }: { partner: PartnerProfileData }) {
           )}
         </span>
       </div>
+      <VerifiedByLine partner={partner} />
       <p
         style={{
           fontSize: 11,
@@ -721,4 +722,122 @@ function ProvenanceCard({ partner }: { partner: PartnerProfileData }) {
       </p>
     </div>
   );
+}
+
+/**
+ * "Verified by Hunter / NeverBounce · Nh ago" — provenance for the
+ * `email_tier` value sitting on this partner. Renders three pieces of
+ * information when present: the provider that wrote the tier, how long
+ * ago, and (when available) the raw verifier verdict for the address.
+ *
+ * Renders nothing if there's no `email_tier_at` AND no
+ * `email_verified_method` AND no raw payload — the whole row is empty.
+ */
+function VerifiedByLine({ partner }: { partner: PartnerProfileData }) {
+  const { email_tier, email_tier_at, email_verified_method, email_verifier_raw } =
+    partner;
+  if (!email_tier_at && !email_verified_method && !email_verifier_raw) {
+    return null;
+  }
+
+  // Provider — prefer the recorded method, otherwise infer from the tier
+  // prefix (`neverbounce_*`) or the raw payload shape.
+  const provider = inferVerifierProvider(
+    email_verified_method,
+    email_tier,
+    email_verifier_raw,
+  );
+
+  // Raw verdict — NeverBounce uses `result`; Hunter uses `status`.
+  const rawVerdict = readRawVerdict(email_verifier_raw);
+
+  return (
+    <>
+      <div className="ms-kv">
+        <span className="k">Verified by</span>
+        <span className="v">
+          {provider}
+          {email_tier_at ? (
+            <>
+              {" · "}
+              <span style={{ color: "var(--text-dim)" }}>
+                {formatTierTimestamp(email_tier_at)}
+              </span>
+            </>
+          ) : null}
+        </span>
+      </div>
+      {rawVerdict ? (
+        <div className="ms-kv">
+          <span className="k">Raw verdict</span>
+          <span
+            className="v"
+            style={{
+              fontFamily: "'SF Mono', monospace",
+              fontSize: 11,
+              color: "var(--text-dim)",
+            }}
+            title={JSON.stringify(email_verifier_raw)}
+          >
+            {rawVerdict}
+          </span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function inferVerifierProvider(
+  method: string | null,
+  tier: PartnerProfileData["email_tier"],
+  raw: PartnerProfileData["email_verifier_raw"],
+): string {
+  if (method && method.trim().length > 0) return method;
+  if (typeof tier === "string" && tier.startsWith("neverbounce_")) {
+    return "NeverBounce";
+  }
+  if (tier === "hunter_verified") return "Hunter";
+  if (tier === "corresponded") return "Gmail (corresponded)";
+  // Fall through: shape-sniff the raw payload.
+  if (raw && typeof raw === "object") {
+    if ("result" in raw || "code" in raw) return "NeverBounce";
+    if ("status" in raw || "score" in raw) return "Hunter";
+  }
+  return "verifier";
+}
+
+function readRawVerdict(
+  raw: PartnerProfileData["email_verifier_raw"],
+): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const rec = raw as Record<string, unknown>;
+  // NeverBounce: { result: "valid" | "invalid" | ... }
+  if (typeof rec.result === "string") {
+    const result = rec.result as string;
+    const reason = typeof rec.reason === "string" ? rec.reason : null;
+    return reason ? `${result} — ${reason}` : result;
+  }
+  // Hunter: { status: "valid" | "accept_all" | ..., score: 0–100 }
+  if (typeof rec.status === "string") {
+    const status = rec.status as string;
+    const score = typeof rec.score === "number" ? rec.score : null;
+    return score !== null ? `${status} (score ${score})` : status;
+  }
+  return null;
+}
+
+function formatTierTimestamp(iso: string): string {
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const ageMs = Date.now() - ts;
+  const minutes = Math.round(ageMs / 60_000);
+  if (minutes < 60) return `${Math.max(1, minutes)} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.round(months / 12);
+  return `${years}y ago`;
 }

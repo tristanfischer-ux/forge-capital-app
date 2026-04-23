@@ -291,8 +291,19 @@ export async function getPipelineHealth(
     else if (s === "+3" || s === "+4" || s === "+5") sent_awaiting += 1;
     else if (s === "+6") replies_pending_log += 1;
 
+    // Gate-blocked bucket — the hard-blocked deliverability tiers.
+    // Updated 2026-04-23 to include NeverBounce `invalid` (confirmed
+    // undeliverable) and `disposable` (throwaway address) alongside the
+    // legacy `generic_blocked` and `bounced` markers.
     const tier = r.partners_mirror?.email_tier ?? null;
-    if (tier === "generic_blocked" || tier === "bounced") gate_blocked += 1;
+    if (
+      tier === "generic_blocked" ||
+      tier === "bounced" ||
+      tier === "neverbounce_invalid" ||
+      tier === "neverbounce_disposable"
+    ) {
+      gate_blocked += 1;
+    }
   }
 
   // Week clock — integer weeks since campaign.created_at, clamped to 1..16.

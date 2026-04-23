@@ -25,11 +25,19 @@ export interface EmailHuntPartner {
   name: string | null;
   title: string | null;
   current_email: string | null;
+  /** Mirror's `email_tier` value. Mirrors `EmailTier` from
+   *  `lib/queries/tracker.ts` — kept inline here so the action file
+   *  doesn't pull a non-async export across the "use server" boundary. */
   current_tier:
     | "corresponded"
     | "hunter_verified"
+    | "neverbounce_valid"
+    | "neverbounce_catchall"
+    | "neverbounce_unknown"
     | "unverified"
     | "generic_blocked"
+    | "neverbounce_invalid"
+    | "neverbounce_disposable"
     | "bounced"
     | null;
   override_email: string | null;

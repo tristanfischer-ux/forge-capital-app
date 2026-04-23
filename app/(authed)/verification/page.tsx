@@ -180,12 +180,18 @@ export default async function VerificationPage({
 /**
  * Tiers that cannot advance a contact to +2 Drafted (per
  * V4-FEEDBACK-ROUND-2.md §"Verification tiers"). Used to size the red
- * banner's "N blocked" count.
+ * banner's "N blocked" count. Includes the NeverBounce blocked variants
+ * added 2026-04-23 — `invalid` (confirmed undeliverable), `disposable`
+ * (throwaway address), and `unknown` (no verdict, treated as uncertain
+ * and folded into the blocked count for safety).
  */
 const BLOCKING_TIERS = new Set<VerificationTier>([
   "unverified",
   "generic_blocked",
   "bounced",
+  "neverbounce_invalid",
+  "neverbounce_disposable",
+  "neverbounce_unknown",
 ]);
 
 /** Per-tier display content — labels, rationale copy, step progression,
@@ -254,6 +260,68 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     cta: "Open in tracker",
     ctaTitle: "Jump to the tracker filtered to Hunter-verified partners.",
   },
+  neverbounce_valid: {
+    label: "NeverBounce valid",
+    sub: "NeverBounce confirmed deliverable — safe to send",
+    reason: (
+      <>
+        NeverBounce ran the address against its mailbox-level checks and
+        returned <code>valid</code>. Drafts generate immediately for these
+        contacts &mdash; the verdict is stronger than a Hunter pattern match
+        because NeverBounce talks to the receiving server.
+      </>
+    ),
+    steps: [
+      { label: "1.", tone: "done", status: "NeverBounce probe — valid" },
+      { label: "2.", tone: "done", status: "deliverability — confirmed" },
+      { label: "3.", tone: "done", status: "ready for +2 Drafted — done" },
+    ],
+    chip: { label: "+2 Ready", klass: "tag-approved" },
+    cta: "Open in tracker",
+    ctaTitle: "Jump to the tracker filtered to NeverBounce-valid partners.",
+  },
+  neverbounce_catchall: {
+    label: "NeverBounce catch-all",
+    sub: "Domain accepts everything — may bounce, not known-bad",
+    reason: (
+      <>
+        NeverBounce reports the domain is configured as a catch-all: every
+        address routes to a single inbox or vanishes silently. Sendable but
+        carries some bounce risk &mdash; we still draft, and weight these
+        rows lower in batch sends so a stale catch-all doesn&rsquo;t take
+        deliverability with it.
+      </>
+    ),
+    steps: [
+      { label: "1.", tone: "done", status: "NeverBounce probe — catch-all" },
+      { label: "2.", tone: "done", status: "deliverability — uncertain but accepted" },
+      { label: "3.", tone: "done", status: "ready for +2 Drafted — done" },
+    ],
+    chip: { label: "+2 Ready", klass: "tag-approved" },
+    cta: "Open in tracker",
+    ctaTitle: "Jump to the tracker filtered to NeverBounce catch-all partners.",
+  },
+  neverbounce_unknown: {
+    label: "NeverBounce unknown",
+    sub: "No verdict returned — treat as unverified",
+    reason: (
+      <>
+        NeverBounce probed the address and returned no decision &mdash; the
+        receiving server timed out or refused the probe. Sits in the
+        uncertain bucket alongside <b>Unverified</b>: cannot advance to
+        <b> +2 Drafted</b> without a Hunter cross-check or a manual
+        LinkedIn confirm.
+      </>
+    ),
+    steps: [
+      { label: "1.", tone: "done", status: "NeverBounce probe — no verdict" },
+      { label: "2.", tone: "active", status: "Hunter cross-check — queued" },
+      { label: "3.", tone: "pending", status: "DB update — blocked" },
+    ],
+    chip: { label: "+1 Approved", klass: "tag-status" },
+    cta: "Resolve email",
+    ctaTitle: "Open the resolve-email modal on the first NeverBounce-unknown firm.",
+  },
   unverified: {
     label: "Unverified",
     sub: "Pattern guessed or missing — cannot advance to +2 Drafted",
@@ -293,6 +361,44 @@ const TIER_META: Record<VerificationTier, TierMeta> = {
     chip: { label: "+1 Approved", klass: "tag-warn" },
     cta: "Hunt for replacement",
     ctaTitle: "Queue every generic-inbox partner for the nightly Hunter run.",
+  },
+  neverbounce_invalid: {
+    label: "NeverBounce invalid",
+    sub: "NeverBounce confirmed undeliverable — address is dead",
+    reason: (
+      <>
+        NeverBounce confirmed the address does not accept mail. Sending
+        anyway would be a near-guaranteed bounce. Hunt for a current
+        address before re-drafting.
+      </>
+    ),
+    steps: [
+      { label: "1.", tone: "done", status: "NeverBounce probe — invalid" },
+      { label: "2.", tone: "active", status: "LinkedIn enrichment — needed" },
+      { label: "3.", tone: "pending", status: "named replacement — pending" },
+    ],
+    chip: { label: "-2 Bounced", klass: "tag-blocked" },
+    cta: "Hunt for replacement",
+    ctaTitle: "Queue every NeverBounce-invalid partner for the nightly Hunter run.",
+  },
+  neverbounce_disposable: {
+    label: "NeverBounce disposable",
+    sub: "Throwaway / disposable address — cannot send",
+    reason: (
+      <>
+        NeverBounce flagged this as a disposable mailbox &mdash; a one-time
+        forwarding address that won&rsquo;t reach anyone real. Skip and
+        hunt the partner&rsquo;s actual work address.
+      </>
+    ),
+    steps: [
+      { label: "1.", tone: "done", status: "NeverBounce probe — disposable" },
+      { label: "2.", tone: "active", status: "LinkedIn enrichment — needed" },
+      { label: "3.", tone: "pending", status: "real address — pending" },
+    ],
+    chip: { label: "-2 Bounced", klass: "tag-blocked" },
+    cta: "Hunt for replacement",
+    ctaTitle: "Queue every NeverBounce-disposable partner for the nightly Hunter run.",
   },
   bounced: {
     label: "Bounced",
@@ -334,11 +440,15 @@ function TierRow({
   const percent =
     totalPartners > 0 ? Math.round((count / totalPartners) * 100) : 0;
 
-  // Ready tiers (corresponded / hunter_verified) open the tracker with
-  // a tier filter applied — server-rendered <Link>, no client state.
-  // Blocked tiers delegate to the client `TierRowActions` component
-  // which handles the modal / bulk server action / toast.
-  const isReadyTier = tier === "corresponded" || tier === "hunter_verified";
+  // Ready tiers (sendable bucket) open the tracker with a tier filter
+  // applied — server-rendered <Link>, no client state. Blocked tiers
+  // delegate to the client `TierRowActions` component which handles the
+  // modal / bulk server action / toast.
+  const isReadyTier =
+    tier === "corresponded" ||
+    tier === "hunter_verified" ||
+    tier === "neverbounce_valid" ||
+    tier === "neverbounce_catchall";
 
   return (
     <div className="gate-row">

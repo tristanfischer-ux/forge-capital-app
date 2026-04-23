@@ -31,12 +31,21 @@ export function TrackerStatTilesStrip({ rows }: { rows: TrackerRow[] }) {
   // +6 Response received — first useful reply signal
   const responded = rows.filter((r) => r.status_code === "+6").length;
 
-  // email_tier='bounced' AND / OR status_code='-2' Bounced. A partner can
-  // have an address that has bounced without the campaign_partners row
-  // being advanced to the -2 status yet (tier lands on the mirror first).
-  // We count by email_tier — that's the honest read on "how many Gmail
-  // bounces are sitting in this campaign right now".
-  const bounced = rows.filter((r) => r.email_tier === "bounced").length;
+  // Hard-blocked deliverability bucket. A partner can be in this bucket
+  // without the campaign_partners row having been advanced to -2 yet
+  // (tier lands on the mirror first). We count by email_tier — that's
+  // the honest read on "how many addresses need replacing in this
+  // campaign right now". Updated 2026-04-23 to include the NeverBounce
+  // hard-blocked variants.
+  const HARD_BLOCKED_TIERS = new Set([
+    "bounced",
+    "generic_blocked",
+    "neverbounce_invalid",
+    "neverbounce_disposable",
+  ]);
+  const bounced = rows.filter(
+    (r) => r.email_tier !== null && HARD_BLOCKED_TIERS.has(r.email_tier),
+  ).length;
 
   const tiles: StatTile[] = [
     {
@@ -60,7 +69,7 @@ export function TrackerStatTilesStrip({ rows }: { rows: TrackerRow[] }) {
     {
       id: "bounced",
       value: String(bounced),
-      label: "Bounces need replacement",
+      label: "Hard-blocked addresses need replacement",
       tone: bounced > 0 ? "red" : "neutral",
     },
   ];

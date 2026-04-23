@@ -259,6 +259,9 @@ function BlockedBanner({
   tier: EmailTier;
   partnerEmail: string | null;
 }) {
+  // Tier-specific copy. Sendable tiers never reach this banner — the
+  // page-level `isTierBlocked` short-circuits before render. Updated
+  // 2026-04-23 to cover the NeverBounce variants.
   const copy =
     tier === "generic_blocked"
       ? {
@@ -275,11 +278,35 @@ function BlockedBanner({
               ? `${partnerEmail} hard-bounced on a previous send. The address is blocked; resolve a replacement before drafting.`
               : "The partner's email hard-bounced on a previous send. Hunt for a replacement before drafting.",
           }
-        : {
-            headline: "Email not verified — cannot advance to +2 Drafted.",
-            detail:
-              "This partner has no deliverability tier on file. Run the Hunter verifier or confirm prior correspondence in Gmail before drafting.",
-          };
+        : tier === "neverbounce_invalid"
+          ? {
+              headline:
+                "NeverBounce confirmed undeliverable — do not send.",
+              detail: partnerEmail
+                ? `${partnerEmail} returned an invalid verdict from NeverBounce. Sending would near-guarantee a bounce; hunt for a current address before drafting.`
+                : "NeverBounce flagged the last address on file as invalid. Hunt for a current address before drafting.",
+            }
+          : tier === "neverbounce_disposable"
+            ? {
+                headline:
+                  "Disposable mailbox — do not send.",
+                detail: partnerEmail
+                  ? `${partnerEmail} is a disposable / throwaway address. It won't reach anyone real; hunt for the partner's actual work address before drafting.`
+                  : "The address on file is a disposable / throwaway mailbox. Hunt for the partner's real work address before drafting.",
+              }
+            : tier === "neverbounce_unknown"
+              ? {
+                  headline:
+                    "NeverBounce returned no verdict — cannot advance to +2 Drafted.",
+                  detail:
+                    "The receiving server timed out or refused NeverBounce's probe. Run the Hunter verifier or confirm prior correspondence in Gmail before drafting.",
+                }
+              : {
+                  headline:
+                    "Email not verified — cannot advance to +2 Drafted.",
+                  detail:
+                    "This partner has no deliverability tier on file. Run the Hunter verifier or confirm prior correspondence in Gmail before drafting.",
+                };
 
   return (
     <section className="mb-4 rounded-[10px] border border-red bg-red-light px-5 py-4">

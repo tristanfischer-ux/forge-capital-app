@@ -39,6 +39,25 @@ export interface ConflictRow {
   primary_contact_name: string | null;
 }
 
+/**
+ * One portfolio-fit row attached to a matched investor — the most
+ * representative companies they've already backed in the founder's
+ * sector, lifted from `portfolio_company_profiles` joined via
+ * `investor_portfolio_links`. Used by the FindAMatch drill-down so
+ * Tristan can see "who else like me did they fund" before approaching.
+ */
+export interface PortfolioFitRow {
+  /** Slug from the canonical `portfolio_companies` table — drives the
+   *  `/portfolio/[slug]` link when the page exists. */
+  slug: string;
+  name: string;
+  /** Profile-derived sector tag — broader than the canonical row's
+   *  sector field; populated by the dossier synthesiser. */
+  sector: string | null;
+  /** One-line "what they do" from the dossier. ~120 char target. */
+  what_they_do: string | null;
+}
+
 export interface MatchResultRow {
   investor_id: number;
   firm_name: string | null;
@@ -69,6 +88,10 @@ export interface MatchResultRow {
   on_other_campaign: ConflictRow | null;
   near_miss: NearMiss | null;
   why_them: string | null;
+  /** Top-3 portfolio companies the investor has already backed that look
+   *  like a sector fit for the founder's pitch. Empty when no overlap or
+   *  no dossier rows landed yet. */
+  portfolio_fit: PortfolioFitRow[];
 }
 
 export interface GetMatchScoreResult {

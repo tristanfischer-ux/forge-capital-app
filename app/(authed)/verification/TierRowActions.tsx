@@ -11,27 +11,44 @@ import {
  * Verification-gate per-tier action button.
  *
  * Each deliverability tier shows one CTA on the right of the row; the
- * label + behaviour are driven by `tier`:
+ * label + behaviour are driven by `tier`. The component handles every
+ * non-sendable tier — sendable rows render a server `<Link>` directly
+ * in page.tsx and never reach this component.
  *
- *   - `corresponded` / `hunter_verified` — server-rendered `<Link>`
- *                                          (see page.tsx). This
- *                                          component is NOT used for
- *                                          those rows.
- *   - `unverified`      — dispatches the global `fc:resolve-email`
- *                         custom event on the first partner's investor
- *                         so the shell-level EmailHuntModal opens.
- *   - `generic_blocked` — calls `queueHunterForPartners` on every
- *                         partner in the tier, shows a toast with the
- *                         processed/skipped counts.
- *   - `bounced`         — opens a confirmation modal; on confirm, calls
- *                         `markPartnersInactive` on every campaign
- *                         partner in the tier and shows a toast.
+ * Behaviour groups (the action a tier maps to):
+ *   - resolve  → `unverified`, `neverbounce_unknown`. Dispatches the
+ *                global `fc:resolve-email` event on the first partner's
+ *                investor so the shell-level EmailHuntModal opens.
+ *   - hunt     → `generic_blocked`, `neverbounce_invalid`,
+ *                `neverbounce_disposable`. Calls `queueHunterForPartners`
+ *                on every partner in the tier, shows a toast with the
+ *                processed/skipped counts.
+ *   - inactive → `bounced`. Opens a confirmation modal; on confirm,
+ *                calls `markPartnersInactive` on every campaign partner
+ *                in the tier and shows a toast.
  *
  * Toasts render inside the row itself (a thin inline strip below the
  * button) so every tier's feedback stays co-located with the button
  * that caused it. Matches the existing inline-message style used by
  * FindAMatch's result cards.
  */
+type ActionTier = Extract<
+  VerificationTier,
+  | "unverified"
+  | "neverbounce_unknown"
+  | "generic_blocked"
+  | "neverbounce_invalid"
+  | "neverbounce_disposable"
+  | "bounced"
+>;
+
+const RESOLVE_TIERS = new Set<ActionTier>(["unverified", "neverbounce_unknown"]);
+const HUNT_TIERS = new Set<ActionTier>([
+  "generic_blocked",
+  "neverbounce_invalid",
+  "neverbounce_disposable",
+]);
+
 export function TierRowActions({
   tier,
   count,
@@ -39,7 +56,7 @@ export function TierRowActions({
   partnerIds,
   campaignPartnerIds,
 }: {
-  tier: Extract<VerificationTier, "unverified" | "generic_blocked" | "bounced">;
+  tier: ActionTier;
   count: number;
   /** First `investors_mirror.id` for a partner in this tier — used to
    *  anchor the EmailHuntModal on a concrete firm. null means nothing
@@ -58,34 +75,34 @@ export function TierRowActions({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const disabled = count === 0;
+  const isResolve = RESOLVE_TIERS.has(tier);
+  const isHunt = HUNT_TIERS.has(tier);
 
   // Shared label for the button — drives the accessible label + copy.
-  const cta =
-    tier === "unverified"
-      ? "Resolve email"
-      : tier === "generic_blocked"
-        ? "Hunt for replacement"
-        : "Mark inactive";
+  const cta = isResolve
+    ? "Resolve email"
+    : isHunt
+      ? "Hunt for replacement"
+      : "Mark inactive";
 
-  const tooltip =
-    tier === "unverified"
-      ? firstInvestorId
-        ? "Open the resolve-email modal on the first unverified firm."
-        : "No unverified contacts to resolve."
-      : tier === "generic_blocked"
-        ? count > 0
-          ? `Queue ${count} partner${count === 1 ? "" : "s"} for Hunter on the next nightly run.`
-          : "No generic-inbox partners to queue."
-        : count > 0
-          ? `Remove ${count} bounced partner${count === 1 ? "" : "s"} from drafting pools. Reversible via the tracker drawer.`
-          : "No bounced partners to mark inactive.";
+  const tooltip = isResolve
+    ? firstInvestorId
+      ? "Open the resolve-email modal on the first unresolved firm."
+      : "No unresolved contacts to open."
+    : isHunt
+      ? count > 0
+        ? `Queue ${count} partner${count === 1 ? "" : "s"} for Hunter on the next nightly run.`
+        : "No partners to queue."
+      : count > 0
+        ? `Remove ${count} bounced partner${count === 1 ? "" : "s"} from drafting pools. Reversible via the tracker drawer.`
+        : "No bounced partners to mark inactive.";
 
   function onClick() {
     if (disabled || pending) return;
 
-    if (tier === "unverified") {
+    if (isResolve) {
       if (firstInvestorId === null) {
-        setMsg({ kind: "err", text: "Nothing unverified to open." });
+        setMsg({ kind: "err", text: "Nothing to open." });
         return;
       }
       // The shell-level EmailHuntModal (mounted in app/(authed)/layout.tsx)
@@ -100,7 +117,7 @@ export function TierRowActions({
       return;
     }
 
-    if (tier === "generic_blocked") {
+    if (isHunt) {
       setMsg(null);
       startTransition(async () => {
         const out = await queueHunterForPartners({ partnerIds });

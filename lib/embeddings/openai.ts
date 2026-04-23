@@ -1,20 +1,25 @@
 /**
  * Query-time embedding client for semantic match search — OpenAI
- * text-embedding-3-small with `dimensions: 768` (matryoshka-truncated
- * so it fits the existing `investors_mirror.embedding vector(768)`
- * column).
+ * text-embedding-3-small at the model's native 1536 dimensions.
+ *
+ * Why 1536 (not 768): both the Supabase
+ * `investors_mirror.embedding vector(1536)` column and the new
+ * `portfolio_company_profiles.embedding vector(1536)` column store
+ * vectors at the model's native width. Truncating queries to 768 here
+ * would silently break cosine similarity against those rows. Verified
+ * against the live schema 2026-04-23.
  *
  * Why OpenAI over Replicate: the Forge Capital static dashboard uses
  * locally-hosted nomic-embed-text via browser-side Ollama — that can't
  * be reached from Vercel. Replicate doesn't host nomic publicly (model
  * returned 404 on every candidate owner). OpenAI does hosted
- * embeddings reliably, cheaply, and supports custom dimensions so we
- * keep the existing schema.
+ * embeddings reliably and cheaply.
  *
  * **Critical**: document vectors must also be embedded with THIS model
- * for retrieval to work — they're not compatible with nomic vectors.
- * The `scripts/embed-investors.mjs` job re-embeds all
- * `investors_mirror` rows via the same model. Don't mix the two.
+ * + dimension count for retrieval to work — they're not compatible with
+ * nomic vectors or with the truncated 768-dim variant. The
+ * `scripts/embed-investors.mjs` job re-embeds all `investors_mirror`
+ * rows via the same model. Don't mix the two.
  *
  * Cost: text-embedding-3-small is $0.02/1M tokens. Typical query
  * (~50 tokens) = $0.000001. 20 queries/day = $0.0006/month. Free.
@@ -24,7 +29,7 @@
  */
 
 const MODEL = "text-embedding-3-small";
-const DIMENSIONS = 768;
+const DIMENSIONS = 1536;
 
 export interface OpenAIEmbedResult {
   ok: true;

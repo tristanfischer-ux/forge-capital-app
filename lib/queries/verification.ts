@@ -42,12 +42,20 @@ export interface VerificationTierCount {
   count: number;
 }
 
-/** Stable order top-to-bottom in the ladder. 100% comes first. */
+/** Stable order top-to-bottom in the ladder. Sendable bucket comes first
+ *  (corresponded → hunter_verified → neverbounce_valid → neverbounce_catchall),
+ *  then uncertain (neverbounce_unknown → unverified), then blocked
+ *  (generic_blocked → neverbounce_invalid → neverbounce_disposable → bounced). */
 export const VERIFICATION_TIER_ORDER: VerificationTier[] = [
   "corresponded",
   "hunter_verified",
+  "neverbounce_valid",
+  "neverbounce_catchall",
+  "neverbounce_unknown",
   "unverified",
   "generic_blocked",
+  "neverbounce_invalid",
+  "neverbounce_disposable",
   "bounced",
 ];
 

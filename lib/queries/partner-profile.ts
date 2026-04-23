@@ -71,12 +71,30 @@ export interface PartnerCrossFirmMatch {
   match_kind: "email" | "name";
 }
 
+/**
+ * Free-form jsonb returned by the email-verification subsystem (Hunter or
+ * NeverBounce, depending on which probe wrote the row last). Stored as
+ * jsonb on `partners_mirror.email_verifier_raw`. Shape varies by provider:
+ * NeverBounce typically writes `{ result, code, role, free_email, ... }`,
+ * Hunter writes `{ status, score, regexp, gibberish, ... }`. We surface
+ * the raw object for the UI so the provenance card can render whichever
+ * shape lands.
+ */
+export type EmailVerifierRaw = Record<string, unknown> | null;
+
 export interface PartnerProfileData {
   id: number;
   name: string | null;
   title: string | null;
   email: string | null;
   email_tier: EmailTier;
+  /** ISO timestamp the tier landed (set by the verifier writing the row).
+   *  Drives the "Verified by X · Yh ago" provenance line. */
+  email_tier_at: string | null;
+  /** Hunter or NeverBounce method label, when stored. */
+  email_verified_method: string | null;
+  /** Raw verifier payload — provider-shaped jsonb, see EmailVerifierRaw. */
+  email_verifier_raw: EmailVerifierRaw;
   linkedin: string | null;
   twitter: string | null;
   bio: string | null;
@@ -111,7 +129,8 @@ export async function getPartnerProfile(
   const { data: partner, error: partnerErr } = await supabase
     .from("partners_mirror")
     .select(
-      `id, investor_id, name, title, email, email_tier, linkedin, twitter,
+      `id, investor_id, name, title, email, email_tier, email_tier_at,
+       email_verified_method, email_verifier_raw, linkedin, twitter,
        bio, deep_bio, focus_areas, is_primary_contact, last_synced_at`,
     )
     .eq("id", partnerId)
@@ -130,6 +149,9 @@ export async function getPartnerProfile(
     title: string | null;
     email: string | null;
     email_tier: string | null;
+    email_tier_at: string | null;
+    email_verified_method: string | null;
+    email_verifier_raw: EmailVerifierRaw;
     linkedin: string | null;
     twitter: string | null;
     bio: string | null;
@@ -355,6 +377,10 @@ export async function getPartnerProfile(
     title: partnerRow.title,
     email: partnerRow.email,
     email_tier: (partnerRow.email_tier ?? null) as EmailTier,
+    email_tier_at: partnerRow.email_tier_at ?? null,
+    email_verified_method: partnerRow.email_verified_method ?? null,
+    email_verifier_raw:
+      (partnerRow.email_verifier_raw as EmailVerifierRaw) ?? null,
     linkedin: partnerRow.linkedin,
     twitter: partnerRow.twitter,
     bio: partnerRow.bio,

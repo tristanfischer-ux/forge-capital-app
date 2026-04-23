@@ -396,10 +396,16 @@ export async function getPipelineSummary(
     if (r.status_code && APPROVED_PAST_CODES.has(r.status_code)) {
       approvedPast += 1;
     }
+    // Gate-blocked = the hard-blocked tier bucket (drafts will not
+    // generate) + anyone explicitly at -2. Includes the NeverBounce
+    // hard-blocked variants added 2026-04-23: `invalid` (confirmed
+    // undeliverable) and `disposable` (throwaway address).
     const tier = r.partners_mirror?.email_tier;
     if (
       tier === "generic_blocked" ||
       tier === "bounced" ||
+      tier === "neverbounce_invalid" ||
+      tier === "neverbounce_disposable" ||
       r.status_code === "-2"
     ) {
       gateBlocked += 1;

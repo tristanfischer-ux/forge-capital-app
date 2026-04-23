@@ -1,17 +1,36 @@
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
- * The 5-tier deliverability taxonomy from `003_partners_mirror.sql`.
- * Only `corresponded` and `hunter_verified` can legitimately advance a
- * partner to +2 Drafted (per V4-FEEDBACK-ROUND-2.md §"Verification tiers").
- * `generic_blocked` and `bounced` must surface as RED badges with a
- * hunt-for-replacement CTA.
+ * The deliverability taxonomy from `003_partners_mirror.sql` extended with
+ * the NeverBounce tiers added in 2026-04-23.
+ *
+ * Sendable bucket (can advance a partner to +2 Drafted):
+ *   - `corresponded` — we have replied to this address (highest)
+ *   - `hunter_verified` — Hunter score 90+, SMTP probe accepted
+ *   - `neverbounce_valid` — NeverBounce confirmed deliverable
+ *   - `neverbounce_catchall` — NeverBounce reports the domain accepts all,
+ *     so the address may bounce but is not known-bad
+ *
+ * Uncertain bucket (cannot advance until upgraded):
+ *   - `neverbounce_unknown` — NeverBounce returned no verdict
+ *   - `unverified` — pattern guessed or no Hunter probe at all
+ *
+ * Blocked bucket (RED — drafts will not generate, hunt for replacement):
+ *   - `generic_blocked` — info@ / contact@ / hello@ — never sent
+ *   - `neverbounce_invalid` — NeverBounce confirmed undeliverable
+ *   - `neverbounce_disposable` — disposable / throwaway address
+ *   - `bounced` — Gmail returned a hard bounce when we tried
  */
 export type EmailTier =
   | "corresponded"
   | "hunter_verified"
+  | "neverbounce_valid"
+  | "neverbounce_catchall"
+  | "neverbounce_unknown"
   | "unverified"
   | "generic_blocked"
+  | "neverbounce_invalid"
+  | "neverbounce_disposable"
   | "bounced"
   | null;
 
@@ -249,15 +268,25 @@ async function fetchEventAggregates(
 export type TrackerTierFilter =
   | "corresponded"
   | "hunter_verified"
+  | "neverbounce_valid"
+  | "neverbounce_catchall"
+  | "neverbounce_unknown"
   | "unverified"
   | "generic_blocked"
+  | "neverbounce_invalid"
+  | "neverbounce_disposable"
   | "bounced";
 
 const VALID_TIER_FILTERS: readonly TrackerTierFilter[] = [
   "corresponded",
   "hunter_verified",
+  "neverbounce_valid",
+  "neverbounce_catchall",
+  "neverbounce_unknown",
   "unverified",
   "generic_blocked",
+  "neverbounce_invalid",
+  "neverbounce_disposable",
   "bounced",
 ];
 

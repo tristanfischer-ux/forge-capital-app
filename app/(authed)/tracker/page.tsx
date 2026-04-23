@@ -268,8 +268,13 @@ function GmailSyncPendingBanner() {
 const TIER_LABEL: Record<TrackerTierFilter, string> = {
   corresponded: "Corresponded",
   hunter_verified: "Hunter-verified",
+  neverbounce_valid: "NeverBounce valid",
+  neverbounce_catchall: "NeverBounce catch-all",
+  neverbounce_unknown: "NeverBounce unknown",
   unverified: "Unverified",
   generic_blocked: "Generic inbox blocked",
+  neverbounce_invalid: "NeverBounce invalid",
+  neverbounce_disposable: "NeverBounce disposable",
   bounced: "Bounced",
 };
 

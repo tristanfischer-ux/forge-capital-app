@@ -183,8 +183,13 @@ function PartnerResolver({
 
   const overrideEmail = partner.override_email;
   const effectiveTier = partner.override_tier ?? partner.current_tier;
+  // Sendable bucket — corresponded, hunter_verified, neverbounce_valid,
+  // neverbounce_catchall. Mirrors `lib/queries/tracker.ts`.
   const canAdvance =
-    effectiveTier === "corresponded" || effectiveTier === "hunter_verified";
+    effectiveTier === "corresponded" ||
+    effectiveTier === "hunter_verified" ||
+    effectiveTier === "neverbounce_valid" ||
+    effectiveTier === "neverbounce_catchall";
   const queueStatus = partner.hunt_request_status;
 
   function submitManual() {
@@ -489,10 +494,20 @@ function TierChip({
     );
   }
   if (canAdvance) {
+    const advanceLabel =
+      tier === "corresponded"
+        ? "Corresponded"
+        : tier === "hunter_verified"
+          ? "Hunter-verified"
+          : tier === "neverbounce_valid"
+            ? "NeverBounce valid"
+            : tier === "neverbounce_catchall"
+              ? "NeverBounce catch-all"
+              : (tier as string);
     return (
       <span className="tag-chip tag-approved" style={{ flexShrink: 0 }}>
         <span className="dot" />
-        {tier === "corresponded" ? "Corresponded" : "Hunter-verified"}
+        {advanceLabel}
       </span>
     );
   }
@@ -503,9 +518,18 @@ function TierChip({
         ? "Generic blocked"
         : tier === "bounced"
           ? "Bounced"
-          : tier;
+          : tier === "neverbounce_unknown"
+            ? "NeverBounce unknown"
+            : tier === "neverbounce_invalid"
+              ? "NeverBounce invalid"
+              : tier === "neverbounce_disposable"
+                ? "NeverBounce disposable"
+                : tier;
   const kind =
-    tier === "generic_blocked" || tier === "bounced"
+    tier === "generic_blocked" ||
+    tier === "bounced" ||
+    tier === "neverbounce_invalid" ||
+    tier === "neverbounce_disposable"
       ? "tag-blocked"
       : "tag-warn";
   return (

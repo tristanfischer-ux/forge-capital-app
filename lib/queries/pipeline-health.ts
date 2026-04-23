@@ -240,16 +240,22 @@ export async function getPipelineHealth(): Promise<PipelineHealth> {
       ),
     ),
     fetchMaxSynthesizedAt(supabase),
+    // Sendable bucket: corresponded + Hunter + NeverBounce valid/catch-all.
+    // Mirrors `lib/queries/tracker.ts`'s sendable taxonomy added 2026-04-23.
     safeCount(supabase, "partners_mirror", (q) =>
       (q as unknown as { in: (col: string, v: unknown[]) => unknown }).in("email_tier", [
         "hunter_verified",
         "corresponded",
+        "neverbounce_valid",
+        "neverbounce_catchall",
       ]),
     ),
+    // Uncertain bucket: classic `unverified` + NeverBounce `unknown`. Both
+    // need a Hunter cross-check or LinkedIn confirm before they can draft.
     safeCount(supabase, "partners_mirror", (q) =>
-      (q as unknown as { eq: (col: string, v: unknown) => unknown }).eq(
+      (q as unknown as { in: (col: string, v: unknown[]) => unknown }).in(
         "email_tier",
-        "unverified",
+        ["unverified", "neverbounce_unknown"],
       ),
     ),
     safeCount(supabase, "partner_email_hunt_requests", (q) =>
@@ -378,9 +384,10 @@ export async function getPipelineHealth(): Promise<PipelineHealth> {
       launchdLabel: "com.forgecapital.nightly-reverify",
       cadence: "Daily 19:00",
       count: partnersHunterOrCorresponded < 0 ? 0 : partnersHunterOrCorresponded,
-      countLabel: "partners verified (hunter + corresponded)",
+      countLabel:
+        "partners in the sendable bucket (corresponded + hunter + nb-valid + nb-catchall)",
       countSource:
-        "COUNT(*) WHERE email_tier IN ('hunter_verified','corresponded')",
+        "COUNT(*) WHERE email_tier IN ('hunter_verified','corresponded','neverbounce_valid','neverbounce_catchall')",
       lastRunAt: reverifyMtime?.toISOString() ?? null,
       lastRunSource: reverifyMtime
         ? "mtime of ~/.forge-capital/nightly-reverify.log"
