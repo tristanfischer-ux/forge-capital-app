@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   forceSimulation,
   forceManyBody,
@@ -65,8 +66,24 @@ const EDGE_STYLES: Record<GraphEdgeKind, { dash: string; color: string }> = {
 
 export function GraphView({ data }: { data: GraphNeighbourhoodData }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const router = useRouter();
   const [tick, setTick] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
+  // Pointer-down position per node — used to disambiguate tap-to-navigate
+  // from drag-to-reposition. The original implementation called
+  // setPointerCapture immediately on pointerdown, which on most browsers
+  // suppresses the synthesised click that would otherwise navigate via
+  // <a>. Now we capture only after the pointer moves >5px and route the
+  // navigation manually via next/navigation when a pointerup arrives
+  // without significant movement.
+  const dragStateRef = useRef<{
+    id: string;
+    startClientX: number;
+    startClientY: number;
+    moved: boolean;
+    pointerId: number;
+  } | null>(null);
+  const DRAG_THRESHOLD_PX = 5;
 
   // d3-force simulation — mutated in-place, re-renders via `tick` state.
   const { nodes, links } = useMemo(() => {
@@ -110,36 +127,77 @@ export function GraphView({ data }: { data: GraphNeighbourhoodData }) {
     };
   }, [nodes, links]);
 
-  // Drag support — pointer-level, no d3-drag dependency.
-  const [dragId, setDragId] = useState<string | null>(null);
+  // Pointer handlers — disambiguate tap (navigate) from drag (reposition).
+  // Capture is deferred until the pointer crosses DRAG_THRESHOLD_PX so that
+  // a quick tap fires onPointerUp on the same target and navigates.
   function onPointerDown(e: React.PointerEvent, id: string) {
     const node = nodes.find((n) => n.id === id);
     if (!node) return;
-    setDragId(id);
-    (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
-    node.fx = node.x;
-    node.fy = node.y;
+    dragStateRef.current = {
+      id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      moved: false,
+      pointerId: e.pointerId,
+    };
   }
   function onPointerMove(e: React.PointerEvent) {
-    if (!dragId) return;
-    const node = nodes.find((n) => n.id === dragId);
+    const state = dragStateRef.current;
+    if (!state) return;
+    const dx = e.clientX - state.startClientX;
+    const dy = e.clientY - state.startClientY;
+    const dist = Math.hypot(dx, dy);
+
+    if (!state.moved && dist < DRAG_THRESHOLD_PX) return;
+
+    if (!state.moved) {
+      // First move past the threshold — promote to drag, capture pointer
+      // so subsequent moves outside the node still hit the SVG.
+      state.moved = true;
+      const node = nodes.find((n) => n.id === state.id);
+      if (node) {
+        node.fx = node.x;
+        node.fy = node.y;
+      }
+      const svg = svgRef.current;
+      try {
+        svg?.setPointerCapture(state.pointerId);
+      } catch {
+        // some browsers throw if the element doesn't own the pointer
+      }
+    }
+
+    const node = nodes.find((n) => n.id === state.id);
     const svg = svgRef.current;
     if (!node || !svg) return;
     const rect = svg.getBoundingClientRect();
-    const scaleX = WIDTH / rect.width;
-    const scaleY = HEIGHT / rect.height;
-    node.fx = (e.clientX - rect.left) * scaleX;
-    node.fy = (e.clientY - rect.top) * scaleY;
+    node.fx = (e.clientX - rect.left) * (WIDTH / rect.width);
+    node.fy = (e.clientY - rect.top) * (HEIGHT / rect.height);
     setTick((t) => t + 1);
   }
-  function onPointerUp(id: string) {
-    const node = nodes.find((n) => n.id === id);
+  function onPointerUp(_id: string) {
+    const state = dragStateRef.current;
+    dragStateRef.current = null;
+    if (!state) return;
+    const svg = svgRef.current;
+    if (svg && svg.hasPointerCapture(state.pointerId)) {
+      svg.releasePointerCapture(state.pointerId);
+    }
+    if (!state.moved) {
+      // Tap → navigate. Centre node has no useful destination (already
+      // here) so we suppress its tap.
+      const node = nodes.find((n) => n.id === state.id);
+      if (node && !node.isCenter) {
+        router.push(node.href);
+      }
+      return;
+    }
+    // Drag end — release the fixed position so the sim re-settles.
+    const node = nodes.find((n) => n.id === state.id);
     if (node && !node.isCenter) {
-      // Release fixed position so the sim re-settles.
       node.fx = null;
       node.fy = null;
     }
-    setDragId(null);
   }
 
   // Force `tick` to be read — React sees it via state, no need to touch here
@@ -158,7 +216,12 @@ export function GraphView({ data }: { data: GraphNeighbourhoodData }) {
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        style={{ width: "100%", height: "auto", display: "block", cursor: dragId ? "grabbing" : "default" }}
+        style={{
+          width: "100%",
+          height: "auto",
+          display: "block",
+          cursor: dragStateRef.current?.moved ? "grabbing" : "default",
+        }}
         onPointerMove={onPointerMove}
       >
         {/* Edges */}
@@ -209,9 +272,25 @@ export function GraphView({ data }: { data: GraphNeighbourhoodData }) {
               onPointerUp={() => onPointerUp(n.id)}
               onMouseEnter={() => setHover(n.id)}
               onMouseLeave={() => setHover(null)}
-              style={{ cursor: n.isCenter ? "default" : "grab" }}
+              style={{
+                cursor: n.isCenter ? "default" : isHover ? "pointer" : "grab",
+              }}
+              role={n.isCenter ? undefined : "button"}
+              tabIndex={n.isCenter ? undefined : 0}
+              aria-label={
+                n.isCenter
+                  ? undefined
+                  : `Open ${n.kind} profile for ${n.label} — tap to open, drag to move`
+              }
+              onKeyDown={(e) => {
+                if (n.isCenter) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(n.href);
+                }
+              }}
             >
-              <a href={n.href} aria-label={`Open ${n.kind} profile for ${n.label}`}>
+              <>
                 <circle
                   r={r}
                   fill={c.fill}
@@ -239,7 +318,7 @@ export function GraphView({ data }: { data: GraphNeighbourhoodData }) {
                     {truncate(n.meta, 28)}
                   </text>
                 ) : null}
-              </a>
+              </>
             </g>
           );
         })}
