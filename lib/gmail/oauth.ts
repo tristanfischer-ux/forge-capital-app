@@ -31,6 +31,13 @@
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.compose",
   "https://www.googleapis.com/auth/gmail.readonly",
+  // Added 2026-04-23 — CRM calendar ingest reads Tristan's primary
+  // calendar and auto-logs meetings with partners as contact_events.
+  // Read-only is sufficient; we never write back to Calendar.
+  // Users who connected before this change need to /api/auth/gmail
+  // reconnect to upgrade their scope; the ingest script skips rows
+  // where scope is insufficient.
+  "https://www.googleapis.com/auth/calendar.readonly",
 ];
 export const GMAIL_SCOPE = GMAIL_SCOPES.join(" ");
 
