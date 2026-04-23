@@ -28,8 +28,84 @@ export function PortfolioView({
       <div>
         <PortfolioHeadline company={company} />
         <BackersBlock backers={company.backers} name={company.name} />
+        <RelatedCompaniesBlock
+          related={company.related_companies}
+          myName={company.name}
+        />
       </div>
       <SideRail company={company} />
+    </div>
+  );
+}
+
+function RelatedCompaniesBlock({
+  related,
+  myName,
+}: {
+  related: PortfolioProfileData["related_companies"];
+  myName: string;
+}) {
+  if (related.length === 0) {
+    return (
+      <div className="m-section">
+        <h3>Also backed by these investors</h3>
+        <p style={{ color: "var(--text-dim)" }}>
+          No other companies in common yet — this page fills in when the
+          same investors show up against multiple portfolio rows
+          (research/04-research-portfolio.js).
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="m-section">
+      <h3>
+        Also backed by {myName}&rsquo;s investors · {related.length}
+      </h3>
+      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        {related.map((r) => (
+          <li
+            key={r.slug}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "8px 0",
+              borderBottom: "1px solid var(--border-soft)",
+              fontSize: 12,
+              gap: 10,
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <Link
+                href={`/portfolio/${r.slug}`}
+                className="partner-link"
+                style={{ fontWeight: 500 }}
+                aria-label={`Open portfolio company profile for ${r.name}`}
+              >
+                {r.name}
+              </Link>
+              {r.shared_backer_names.length > 0 ? (
+                <div
+                  style={{
+                    color: "var(--text-faint)",
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  Shared backers: {r.shared_backer_names.join(", ")}
+                </div>
+              ) : null}
+            </div>
+            <span
+              className="tag-chip tag-neutral"
+              style={{ flexShrink: 0 }}
+            >
+              {r.shared_backers} shared
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

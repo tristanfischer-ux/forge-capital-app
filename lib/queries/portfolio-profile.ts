@@ -32,6 +32,13 @@ export interface PortfolioInvestorBacker {
   primary_partner_title: string | null;
 }
 
+export interface PortfolioRelatedCompany {
+  slug: string;
+  name: string;
+  shared_backers: number;
+  shared_backer_names: string[];
+}
+
 export interface PortfolioProfileData {
   id: number;
   slug: string;
@@ -42,6 +49,10 @@ export interface PortfolioProfileData {
   website: string | null;
   last_synced_at: string | null;
   backers: PortfolioInvestorBacker[];
+  /** Other portfolio companies backed by investors that ALSO back this one.
+   *  Ordered by shared-investor count desc. Top 10. Closes the
+   *  company → investor → company loop in the graph. */
+  related_companies: PortfolioRelatedCompany[];
 }
 
 export async function getPortfolioCompany(
@@ -176,6 +187,68 @@ export async function getPortfolioCompany(
       return an.localeCompare(bn);
     });
 
+  // ── Related companies = other portfolio companies backed by my
+  //    investors. For each of MY investor_ids, look up their portfolio
+  //    links, exclude this company, bucket-count shared investors.
+  const relatedCompanies: PortfolioRelatedCompany[] = [];
+  if (investorIds.length > 0) {
+    const { data: crossRows, error: crossErr } = await supabase
+      .from("investor_portfolio_links")
+      .select(
+        `investor_id, portfolio_company_id,
+         portfolio_companies:portfolio_company_id ( id, slug, name ),
+         investors_mirror:investor_id ( firm_name )`,
+      )
+      .in("investor_id", investorIds)
+      .neq("portfolio_company_id", company.id);
+    if (crossErr) {
+      console.error(
+        "getPortfolioCompany related companies fetch failed:",
+        crossErr.message,
+      );
+    } else {
+      const rows = (crossRows ?? []) as unknown as Array<{
+        investor_id: number;
+        portfolio_company_id: number;
+        portfolio_companies: { id: number; slug: string; name: string } | null;
+        investors_mirror: { firm_name: string | null } | null;
+      }>;
+      type Bucket = {
+        slug: string;
+        name: string;
+        backers: Set<string>; // firm_names
+      };
+      const bucket = new Map<number, Bucket>();
+      for (const r of rows) {
+        const pc = r.portfolio_companies;
+        if (!pc) continue; // RLS-hidden
+        const existing = bucket.get(pc.id) ?? {
+          slug: pc.slug,
+          name: pc.name,
+          backers: new Set<string>(),
+        };
+        const firmName = r.investors_mirror?.firm_name;
+        if (firmName) existing.backers.add(firmName);
+        bucket.set(pc.id, existing);
+      }
+      relatedCompanies.push(
+        ...Array.from(bucket.values())
+          .map((b) => ({
+            slug: b.slug,
+            name: b.name,
+            shared_backers: b.backers.size,
+            shared_backer_names: Array.from(b.backers).slice(0, 3),
+          }))
+          .sort(
+            (a, b) =>
+              b.shared_backers - a.shared_backers ||
+              a.name.localeCompare(b.name),
+          )
+          .slice(0, 10),
+      );
+    }
+  }
+
   return {
     id: company.id,
     slug: company.slug,
@@ -186,5 +259,6 @@ export async function getPortfolioCompany(
     website: company.website,
     last_synced_at: company.last_synced_at,
     backers,
+    related_companies: relatedCompanies,
   };
 }
