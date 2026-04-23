@@ -5,6 +5,7 @@ import {
   getApprovalCampaignMeta,
   type OutgoingApprovalRow,
 } from "@/lib/queries/approval";
+import { isSelfManaged } from "@/lib/queries/self-managed";
 
 /**
  * Printable outgoing-sheet view for V4 §9 — what Stephan / Andrew / Olivier
@@ -50,6 +51,13 @@ export default async function ApprovalSheetPage({
   const displayName =
     meta.campaign_display_name?.trim() || meta.campaign_name || "Campaign";
   const campaignSlug = slugForFilename(displayName);
+  // Self-managed campaigns (no counterpart_email) drop the "for <name>"
+  // framing that reads awkwardly when Tristan is both sender and
+  // approver. Codified 2026-04-23.
+  const selfManaged = isSelfManaged({
+    counterpart_email: meta.counterpart_email,
+    counterpart_name: meta.counterpart_name,
+  });
 
   return (
     <div
@@ -92,7 +100,9 @@ export default async function ApprovalSheetPage({
           </span>
           <div>
             <div className="ach-title">
-              Outgoing &mdash; what the approver sees
+              {selfManaged
+                ? "Outgoing list — what will go out"
+                : "Outgoing — what the approver sees"}
             </div>
           </div>
           <span className="ach-sub">
@@ -103,7 +113,9 @@ export default async function ApprovalSheetPage({
         <div className="sheet-head-strip">
           <div className="sh-left">
             <span className="sh-title">
-              {todayLabel} Outreach Summary for {displayName} v1
+              {selfManaged
+                ? `${displayName} · ${todayLabel}`
+                : `${todayLabel} Outreach Summary for ${displayName} v1`}
             </span>
             <span className="sh-meta">
               {" · "}
@@ -151,10 +163,20 @@ export default async function ApprovalSheetPage({
             lineHeight: 1.55,
           }}
         >
-          <b style={{ color: "var(--text)" }}>Evidence of approval</b> is
-          captured by the approver&rsquo;s reply email &mdash; their ok /
-          not-for-me annotations are parsed back automatically. We never ask
-          them to log in anywhere.
+          <b style={{ color: "var(--text)" }}>Evidence of approval</b>{" "}
+          {selfManaged ? (
+            <>
+              is captured by your <code>ok / no / flag / skip</code>{" "}
+              annotations per row &mdash; the parser reconciles each
+              decision into the tracker when you ingest.
+            </>
+          ) : (
+            <>
+              is captured by the approver&rsquo;s reply email &mdash; their
+              ok / not-for-me annotations are parsed back automatically.
+              We never ask them to log in anywhere.
+            </>
+          )}
         </div>
       </div>
 

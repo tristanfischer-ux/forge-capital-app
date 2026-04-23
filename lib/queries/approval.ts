@@ -74,6 +74,12 @@ export interface ApprovalCampaignMeta {
   campaign_display_name: string | null;
   /** Campaign's approver display name (migration 012). Null if not yet set. */
   counterpart_name: string | null;
+  /** Campaign's approver email (migration 012). Null on self-managed
+   *  campaigns (SkySails, Panatere, ForgeOS, Fischer Farms Customer) —
+   *  consumed via `isSelfManaged` in `lib/queries/self-managed.ts` so
+   *  surfaces can swap counterpart-centric copy for first-person copy.
+   *  Codified 2026-04-23. */
+  counterpart_email: string | null;
   /** Count of +0 rows waiting in the outgoing sheet. */
   pending_count: number;
 }
@@ -308,7 +314,7 @@ export async function getApprovalCampaignMeta(
   const [campaignResult, countResult] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, name, display_name, counterpart_name")
+      .select("id, name, display_name, counterpart_name, counterpart_email")
       .eq("id", campaignId)
       .maybeSingle(),
     supabase
@@ -329,12 +335,14 @@ export async function getApprovalCampaignMeta(
     name: string | null;
     display_name?: string | null;
     counterpart_name?: string | null;
+    counterpart_email?: string | null;
   };
   return {
     campaign_id: row.id,
     campaign_name: row.name ?? null,
     campaign_display_name: row.display_name ?? null,
     counterpart_name: row.counterpart_name ?? null,
+    counterpart_email: row.counterpart_email ?? null,
     pending_count: countResult.count ?? 0,
   };
 }

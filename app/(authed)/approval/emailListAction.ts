@@ -2,6 +2,7 @@
 
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
 import { getPendingApproval, getApprovalCampaignMeta } from "@/lib/queries/approval";
+import { isSelfManaged } from "@/lib/queries/self-managed";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
@@ -58,27 +59,54 @@ export async function emailApprovalListToAddress(
 
   const today = new Date().toISOString().slice(0, 10);
   const displayName = resolveDisplay(meta);
-  const subject = `[APPROVAL] ${displayName} — ${rows.length} investors for review · ${today}`;
+  // Self-managed campaigns (no counterpart_email) are Tristan emailing
+  // himself. Swap the subject prefix + drop the "reviewer" framing so
+  // the inbox reads right when he opens the mail on his phone.
+  const selfManaged = isSelfManaged({
+    counterpart_email: meta.counterpart_email,
+    counterpart_name: meta.counterpart_name,
+  });
+  const subjectPrefix = selfManaged ? "[SELF-APPROVAL]" : "[APPROVAL]";
+  const subject = `${subjectPrefix} ${displayName} — ${rows.length} investors for review · ${today}`;
 
   const lines: string[] = [];
-  lines.push(
-    `Hi,`,
-    ``,
-    `Below are the ${rows.length} investors the pipeline has surfaced for ${displayName} as of ${today}.`,
-    ``,
-    `For each row, reply with one of:`,
-    `  ok     — approve, proceed to draft`,
-    `  no     — not a fit, archive`,
-    `  flag   — needs a look, ping me`,
-    `  skip   — skip this round, keep in pool`,
-    ``,
-    `The reply parser on /approval (Step 2) reads your annotations and reconciles each row into the tracker.`,
-    ``,
-    `— Tristan`,
-    ``,
-    `-----------------`,
-    ``,
-  );
+  if (selfManaged) {
+    lines.push(
+      `Below are the ${rows.length} investors ready for your approval on ${displayName} as of ${today}.`,
+      ``,
+      `For each row, reply with one of:`,
+      `  ok     — approve, proceed to draft`,
+      `  no     — not a fit, archive`,
+      `  flag   — needs a look, come back to it`,
+      `  skip   — skip this round, keep in pool`,
+      ``,
+      `The reply parser on /approval (Step 2) reads the annotations and reconciles each row into the tracker.`,
+      ``,
+      `— Tristan`,
+      ``,
+      `-----------------`,
+      ``,
+    );
+  } else {
+    lines.push(
+      `Hi,`,
+      ``,
+      `Below are the ${rows.length} investors the pipeline has surfaced for ${displayName} as of ${today}.`,
+      ``,
+      `For each row, reply with one of:`,
+      `  ok     — approve, proceed to draft`,
+      `  no     — not a fit, archive`,
+      `  flag   — needs a look, ping me`,
+      `  skip   — skip this round, keep in pool`,
+      ``,
+      `The reply parser on /approval (Step 2) reads your annotations and reconciles each row into the tracker.`,
+      ``,
+      `— Tristan`,
+      ``,
+      `-----------------`,
+      ``,
+    );
+  }
 
   rows.forEach((r, i) => {
     const contact = [r.partner_name, r.partner_title, r.hq_location]

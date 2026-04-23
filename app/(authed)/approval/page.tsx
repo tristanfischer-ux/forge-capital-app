@@ -14,6 +14,11 @@ import {
   type IncomingApprovalRow,
   type IncomingApprovalStats,
 } from "@/lib/queries/approval";
+import {
+  isSelfManaged,
+  counterpartDisplayName,
+  counterpartPossessive as counterpartPossessiveFor,
+} from "@/lib/queries/self-managed";
 import ApprovalReturnDropZone from "./ApprovalReturnDropZone";
 import { EmailApprovalListButton } from "./EmailApprovalListButton";
 import { IncomingDecisionCell } from "./IncomingDecisionCell";
@@ -91,15 +96,46 @@ export default async function ApprovalPage({
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId) ?? null;
   const campaignName = activeCampaign?.name ?? meta?.campaign_name ?? null;
-  const counterpartName = activeCampaign
-    ? counterpartLabel(activeCampaign, "title")
-    : "Counterpart TBD";
+  // Self-managed campaigns (SkySails, Panatere, ForgeOS, Fischer Farms
+  // Customer as of 2026-04-23) have no counterpart_email — Tristan is
+  // both sender and approver. The shared helper in lib/queries/self-managed.ts
+  // is the single source of truth; this page branches its copy on it.
+  // `meta` carries counterpart_email since we updated getApprovalCampaignMeta.
+  const selfManaged = isSelfManaged(
+    meta
+      ? {
+          counterpart_email: meta.counterpart_email,
+          counterpart_name: meta.counterpart_name,
+        }
+      : null,
+  );
+  const counterpartName = selfManaged
+    ? counterpartDisplayName(
+        meta
+          ? {
+              counterpart_email: meta.counterpart_email,
+              counterpart_name: meta.counterpart_name,
+            }
+          : null,
+      )
+    : activeCampaign
+      ? counterpartLabel(activeCampaign, "title")
+      : "Counterpart TBD";
   const counterpartPhrase = activeCampaign
     ? counterpartLabel(activeCampaign, "phrase")
     : "the counterpart";
-  const counterpartPossessive = activeCampaign
-    ? counterpartLabel(activeCampaign, "possessive")
-    : "the counterpart's";
+  const counterpartPossessive = selfManaged
+    ? counterpartPossessiveFor(
+        meta
+          ? {
+              counterpart_email: meta.counterpart_email,
+              counterpart_name: meta.counterpart_name,
+            }
+          : null,
+      )
+    : activeCampaign
+      ? counterpartLabel(activeCampaign, "possessive")
+      : "the counterpart's";
 
   return (
     <section id="approval" className="section" style={{ marginTop: 0 }}>
@@ -116,27 +152,53 @@ export default async function ApprovalPage({
             ) : null}
           </div>
           <div className="section-sub">
-            Three steps in the real time sequence: (1) what{" "}
-            {counterpartName} will see, (2) paste their reply so the parser
-            can decode it, (3) the parsed decisions ready to ingest into
-            the tracker. <b>Nothing is sent without your review.</b>
+            {selfManaged ? (
+              <>
+                Three steps in the real sequence: (1) what will go out, (2)
+                your approval notes, (3) decisions ready to ingest into the
+                tracker. <b>Nothing is sent without your review.</b>
+              </>
+            ) : (
+              <>
+                Three steps in the real time sequence: (1) what{" "}
+                {counterpartName} will see, (2) paste their reply so the
+                parser can decode it, (3) the parsed decisions ready to
+                ingest into the tracker.{" "}
+                <b>Nothing is sent without your review.</b>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       <div className="walk-callout" style={{ marginBottom: 14 }}>
         <span className="wc-num">2</span>
-        <b>How the two-way artefact works.</b> The outgoing sheet below is
-        plain Google Sheets &mdash; {counterpartName} doesn&rsquo;t log in
-        anywhere. They reply by email with annotations. You paste that
-        reply into the middle panel; the parser pulls the ok / flag /
-        reject decisions into the bottom panel. You read any flagged rows
-        and hit <b>Ingest</b> — only then do approved partners move
-        forward. Nothing sends automatically.
+        {selfManaged ? (
+          <>
+            <b>How the two-way artefact works.</b> The outgoing sheet below
+            is plain Google Sheets &mdash; no log-in needed. When you email
+            it to yourself on your phone, you reply with{" "}
+            <code>ok / no / flag / skip</code> per row; the parser pulls
+            decisions into the bottom panel. Hit <b>Ingest</b> when
+            you&rsquo;re happy. Nothing sends automatically.
+          </>
+        ) : (
+          <>
+            <b>How the two-way artefact works.</b> The outgoing sheet below
+            is plain Google Sheets &mdash; {counterpartName} doesn&rsquo;t
+            log in anywhere. They reply by email with annotations. You
+            paste that reply into the middle panel; the parser pulls the
+            ok / flag / reject decisions into the bottom panel. You read
+            any flagged rows and hit <b>Ingest</b> — only then do approved
+            partners move forward. Nothing sends automatically.
+          </>
+        )}
       </div>
 
       {/* Email the list to a reviewer (e.g. when Tristan is away from his
-          desk and wants to approve/reject rows from his phone). */}
+          desk and wants to approve/reject rows from his phone). On
+          self-managed campaigns (no counterpart_email) the reviewer is
+          Tristan himself — copy flips to first-person. */}
       <section
         style={{
           marginBottom: 14,
@@ -148,9 +210,20 @@ export default async function ApprovalPage({
         }}
       >
         <div style={{ marginBottom: 6, color: "var(--text-dim)" }}>
-          <b style={{ color: "var(--text)" }}>Approve on phone</b> — email the
-          outgoing list as plain text. Reply with <code>ok / no / flag / skip</code>{" "}
-          per row; Step 2 below ingests the annotations.
+          <b style={{ color: "var(--text)" }}>Approve on phone</b>
+          {selfManaged ? (
+            <>
+              {" "}— email the list to yourself, reply with{" "}
+              <code>ok / no / flag / skip</code> per row from your Mail
+              app, Step 2 below ingests the annotations.
+            </>
+          ) : (
+            <>
+              {" "}— email the outgoing list as plain text. Reply with{" "}
+              <code>ok / no / flag / skip</code> per row; Step 2 below
+              ingests the annotations.
+            </>
+          )}
         </div>
         <EmailApprovalListButton campaignId={campaignId} />
       </section>
@@ -166,6 +239,7 @@ export default async function ApprovalPage({
           rows={pending}
           counterpartName={counterpartName}
           counterpartPossessive={counterpartPossessive}
+          selfManaged={selfManaged}
         />
         <ApprovalReturnDropZone
           campaignId={campaignId}
@@ -177,6 +251,7 @@ export default async function ApprovalPage({
           stats={incoming.stats}
           counterpartName={counterpartName}
           counterpartPossessive={counterpartPossessive}
+          selfManaged={selfManaged}
         />
       </div>
     </section>
@@ -201,19 +276,27 @@ function OutgoingColumn({
   rows,
   counterpartName,
   counterpartPossessive,
+  selfManaged,
 }: {
   campaignId: string;
   rows: OutgoingApprovalRow[];
   counterpartName: string;
   counterpartPossessive: string;
+  /** True when the campaign has no external counterpart — Tristan is
+   *  both sender and approver. Swaps "what X will see" for "outgoing
+   *  list" and the evidence-footer wording accordingly. */
+  selfManaged: boolean;
 }) {
   const count = rows.length;
   // Filename is honest about what it represents — no more hardcoded
   // demo "Stephan TF v12". Date = today's ISO; counterpart initial
-  // stripped cleanly. If no counterpart, honest blank.
+  // stripped cleanly. On self-managed campaigns the title just reads
+  // "Outreach summary · YYYY-MM-DD" — no "for <name>" suffix, since
+  // the name is "you".
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const sheetTitle =
-    counterpartName === "Counterpart TBD"
+  const sheetTitle = selfManaged
+    ? `Outreach summary · ${today}`
+    : counterpartName === "Counterpart TBD"
       ? `Outreach summary · ${today} (counterpart not set)`
       : `Outreach summary for ${counterpartName} · ${today}`;
   const sentStrip = rows.length === 0
@@ -229,7 +312,10 @@ function OutgoingColumn({
         </span>
         <div>
           <div className="ach-title">
-            Step 1 &mdash; outgoing sheet (what {counterpartName} will see)
+            Step 1 &mdash; outgoing sheet{" "}
+            {selfManaged
+              ? "(the list that will go out)"
+              : `(what ${counterpartName} will see)`}
           </div>
         </div>
         <span className="ach-sub">{sentStrip}</span>
@@ -296,10 +382,21 @@ function OutgoingColumn({
           lineHeight: 1.55,
         }}
       >
-        <b style={{ color: "var(--text)" }}>Evidence of approval</b> is
-        captured by {counterpartPossessive} reply email to this sheet &mdash;
-        ok / not-for-me annotations are parsed back automatically. We never
-        ask them to log in anywhere.
+        <b style={{ color: "var(--text)" }}>Evidence of approval</b>{" "}
+        {selfManaged ? (
+          <>
+            is captured by your <code>ok / no / flag / skip</code>{" "}
+            annotations per row &mdash; reply to the email you send
+            yourself and the parser reconciles each decision into the
+            tracker.
+          </>
+        ) : (
+          <>
+            is captured by {counterpartPossessive} reply email to this
+            sheet &mdash; ok / not-for-me annotations are parsed back
+            automatically. We never ask them to log in anywhere.
+          </>
+        )}
       </div>
     </div>
   );
@@ -377,12 +474,17 @@ function IncomingColumn({
   stats,
   counterpartName,
   counterpartPossessive,
+  selfManaged,
 }: {
   campaignId: string;
   rows: IncomingApprovalRow[];
   stats: IncomingApprovalStats;
   counterpartName: string;
   counterpartPossessive: string;
+  /** True when Tristan is both sender and approver — swaps the
+   *  "latest reply from <counterpart>" empty-state copy for a
+   *  first-person variant. */
+  selfManaged: boolean;
 }) {
   const total = stats.approved + stats.flag + stats.rejected;
   const hasRealData = total > 0;
@@ -403,7 +505,9 @@ function IncomingColumn({
         >
           {hasRealData
             ? "Latest reply parsed"
-            : `No replies parsed yet from ${counterpartName}`}
+            : selfManaged
+              ? "No approvals parsed yet"
+              : `No replies parsed yet from ${counterpartName}`}
         </span>
       </div>
 
@@ -455,8 +559,18 @@ function IncomingColumn({
             maxWidth: 200,
           }}
         >
-          Reply parser reads {counterpartPossessive} inline{" "}
-          &ldquo;ok&rdquo; / &ldquo;not for us&rdquo; / &ldquo;tell me more&rdquo; annotations.
+          {selfManaged ? (
+            <>
+              Reply parser reads your inline{" "}
+              <code>ok / no / flag / skip</code> annotations per row.
+            </>
+          ) : (
+            <>
+              Reply parser reads {counterpartPossessive} inline{" "}
+              &ldquo;ok&rdquo; / &ldquo;not for us&rdquo; / &ldquo;tell me
+              more&rdquo; annotations.
+            </>
+          )}
         </div>
       </div>
 
