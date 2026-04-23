@@ -8,6 +8,7 @@ import { composeDraft, isTierBlocked } from "./compose";
 import { CopyToClipboardButton } from "./CopyToClipboardButton";
 import { CreateGmailDraftButton } from "./CreateGmailDraftButton";
 import { SendGmailMessageButton } from "./SendGmailMessageButton";
+import { RefineSynthesisButton } from "./RefineSynthesisButton";
 
 /**
  * Full-page preview of the draft email that WOULD be sent to this partner.
@@ -141,6 +142,18 @@ export default async function DraftPage({
       <section className="mb-4 rounded-[10px] border border-border bg-surface p-6 shadow-[var(--shadow)]">
         <DraftBody draft={draft} />
       </section>
+
+      {/* Opus refine — regenerate the synthesis paragraph per-investor
+          to fix grammar stumbles from token substitution. */}
+      {!blocked && data.primary_partner ? (
+        <section className="mb-4 rounded-[10px] border border-dashed border-border bg-surface-alt p-4">
+          <RefineSynthesisButton
+            campaignPartnerId={campaignPartnerId}
+            hasRendered={Boolean(data.rendered_synthesis)}
+            renderedAt={data.rendered_synthesis_at}
+          />
+        </section>
+      ) : null}
 
       {/* Draft-level warnings */}
       {draft.thesisTooLongToHedge ? (

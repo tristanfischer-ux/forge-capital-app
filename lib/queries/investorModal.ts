@@ -79,6 +79,12 @@ export interface InvestorModalData {
     intelligent_synthesis_template: string | null;
     cta_variant: "20min_call" | "presentation_first" | null;
   } | null;
+  /** Opus-rendered per-investor synthesis on the campaign_partners row.
+   *  When present, the composer uses this verbatim instead of substituting
+   *  {{FIRM_THESIS}} into the template — avoids the verb-chain stumble
+   *  Tristan saw 2026-04-23 ("focuses primarily on Pioneered 'SpaceTech'..."). */
+  rendered_synthesis: string | null;
+  rendered_synthesis_at: string | null;
 }
 
 /**
@@ -153,6 +159,8 @@ export async function getInvestorModalData(
       status_code,
       status_label,
       last_contact_at,
+      rendered_synthesis,
+      rendered_synthesis_at,
       campaign:campaigns (
         id,
         name,
@@ -382,5 +390,8 @@ export async function getInvestorModalData(
     primary_partner: primary,
     all_partners: allPartners,
     email_template: templateRow,
+    rendered_synthesis: (rootAny.rendered_synthesis as string | null) ?? null,
+    rendered_synthesis_at:
+      (rootAny.rendered_synthesis_at as string | null) ?? null,
   };
 }

@@ -70,7 +70,14 @@ function shortenThesisForHedge(
   thesisSummary: string | null,
   connectionBrief: string | null,
 ): { text: string | null; tooLong: boolean } {
-  const source = (connectionBrief ?? thesisSummary ?? "").trim();
+  // thesis_summary FIRST — it is the actual thesis phrase (e.g. "Pioneered
+  // 'SpaceTech' as an investment category..."). connection_brief is a
+  // research-sourcing disclosure ("X is publicly visible through multiple
+  // channels...") which is NOT a thesis. Fixed 2026-04-23 after the audit
+  // email to Christophe read "focuses primarily on Seraphim is publicly
+  // visible through multiple channels..." — grammatically broken because
+  // connection_brief was being substituted into the template as a thesis.
+  const source = (thesisSummary ?? connectionBrief ?? "").trim();
   if (!source) return { text: null, tooLong: false };
 
   // Grab the first sentence.
@@ -217,20 +224,33 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
     );
   }
 
-  // Intelligent synthesis (with hedge)
+  // Intelligent synthesis (with hedge).
+  //
+  // Preference order:
+  //   1. `rendered_synthesis` on the campaign_partners row — Opus has
+  //      already produced a grammatical per-investor paragraph. Use
+  //      verbatim. This is what the "Refine synthesis with Opus" button
+  //      writes after the 2026-04-23 verb-chain stumble.
+  //   2. Otherwise, fall back to template-token substitution with the
+  //      same shortenThesisForHedge compression as before. Known to
+  //      stumble on verb-leading theses ("focuses primarily on Pioneered
+  //      SpaceTech..."); the Regenerate button fixes those one at a time.
+  const rendered = data.rendered_synthesis?.trim();
   const synthesisTemplate = template?.intelligent_synthesis_template?.trim();
-  if (synthesisTemplate) {
+  if (rendered) {
+    paragraphs.push(rendered);
+  } else if (synthesisTemplate) {
     const { text: shortThesis, tooLong } = shortenThesisForHedge(
       data.investor.thesis_summary,
       data.investor.connection_brief,
     );
     thesisTooLongToHedge = tooLong;
-    const { rendered, unresolved } = renderSynthesis(
+    const { rendered: substituted, unresolved } = renderSynthesis(
       synthesisTemplate,
       firmName,
       shortThesis,
     );
-    paragraphs.push(rendered);
+    paragraphs.push(substituted);
     unresolvedPlaceholders.push(...unresolved);
   } else {
     paragraphs.push(
