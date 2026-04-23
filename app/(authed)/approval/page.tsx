@@ -15,6 +15,7 @@ import {
   type IncomingApprovalStats,
 } from "@/lib/queries/approval";
 import ApprovalReturnDropZone from "./ApprovalReturnDropZone";
+import { EmailApprovalListButton } from "./EmailApprovalListButton";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -132,6 +133,26 @@ export default async function ApprovalPage({
         and hit <b>Ingest</b> — only then do approved partners move
         forward. Nothing sends automatically.
       </div>
+
+      {/* Email the list to a reviewer (e.g. when Tristan is away from his
+          desk and wants to approve/reject rows from his phone). */}
+      <section
+        style={{
+          marginBottom: 14,
+          padding: "12px 14px",
+          background: "var(--surface-alt)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          fontSize: 12,
+        }}
+      >
+        <div style={{ marginBottom: 6, color: "var(--text-dim)" }}>
+          <b style={{ color: "var(--text)" }}>Approve on phone</b> — email the
+          outgoing list as plain text. Reply with <code>ok / no / flag / skip</code>{" "}
+          per row; Step 2 below ingests the annotations.
+        </div>
+        <EmailApprovalListButton campaignId={campaignId} />
+      </section>
 
       {/* Reordered 2026-04-23: OUTGOING → PASTE REPLY → PARSED APPROVALS.
           This is the real time sequence — you send first, the counterpart
