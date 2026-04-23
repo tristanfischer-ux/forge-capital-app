@@ -31,11 +31,143 @@ export function PartnerProfileView({
         <FirmBlock firm={partner.firm} />
         <BioBlock partner={partner} />
         <FocusAreasBlock partner={partner} />
+        <CrossFirmBlock
+          matches={partner.cross_firm}
+          partnerName={partner.name}
+        />
         <CampaignActivityBlock links={partner.campaign_links} />
         <RecentEventsBlock events={partner.recent_events} />
       </div>
       <SideRail partner={partner} />
     </div>
+  );
+}
+
+function CrossFirmBlock({
+  matches,
+  partnerName,
+}: {
+  matches: PartnerProfileData["cross_firm"];
+  partnerName: string | null;
+}) {
+  if (matches.length === 0) {
+    return null; // silence by default — most partners have no matches and the empty state would be noise
+  }
+  const strong = matches.filter((m) => m.match_kind === "email");
+  const possible = matches.filter((m) => m.match_kind === "name");
+  return (
+    <div className="m-section">
+      <h3>
+        {partnerName ?? "This partner"} at other firms ·{" "}
+        {matches.length}
+      </h3>
+      {strong.length > 0 ? (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--text-dim)",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 6,
+              marginTop: 4,
+            }}
+          >
+            Same email on file · {strong.length}
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {strong.map((m) => (
+              <CrossFirmRow key={`email-${m.id}`} match={m} />
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {possible.length > 0 ? (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--text-dim)",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 6,
+              marginTop: 14,
+            }}
+          >
+            Same name · {possible.length}{" "}
+            <span
+              style={{
+                fontWeight: 400,
+                textTransform: "none",
+                letterSpacing: 0,
+                color: "var(--text-faint)",
+              }}
+            >
+              (may be a coincidence — confirm before acting)
+            </span>
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {possible.map((m) => (
+              <CrossFirmRow key={`name-${m.id}`} match={m} />
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function CrossFirmRow({
+  match,
+}: {
+  match: PartnerProfileData["cross_firm"][number];
+}) {
+  return (
+    <li
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "8px 0",
+        borderBottom: "1px solid var(--border-soft)",
+        fontSize: 12,
+        gap: 10,
+      }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <Link
+          href={`/partner/${match.id}`}
+          className="partner-link"
+          style={{ fontWeight: 500 }}
+          aria-label={`Open partner profile at ${match.firm_name ?? "other firm"}`}
+        >
+          {match.firm_name ?? "Unnamed firm"}
+        </Link>
+        {match.title ? (
+          <div
+            style={{
+              color: "var(--text-faint)",
+              fontSize: 11,
+              marginTop: 2,
+            }}
+          >
+            {match.title}
+          </div>
+        ) : null}
+      </div>
+      {match.firm_id != null ? (
+        <Link
+          href={`/investor/${match.firm_id}`}
+          className="partner-link"
+          style={{ fontSize: 11, flexShrink: 0 }}
+          aria-label={`Open firm profile ${match.firm_name ?? ""}`}
+        >
+          Firm ↗
+        </Link>
+      ) : null}
+    </li>
   );
 }
 

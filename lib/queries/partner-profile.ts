@@ -59,6 +59,18 @@ export interface PartnerProfileEvent {
   summary: string | null;
 }
 
+export interface PartnerCrossFirmMatch {
+  /** Partner row id on the OTHER firm (navigates to /partner/[id]). */
+  id: number;
+  firm_id: number | null;
+  firm_name: string | null;
+  title: string | null;
+  /** 'email' = same email address (strong match, definitely same person).
+   *  'name' = same normalised name but different email (possibly same
+   *  person, possibly a name collision — UI labels clearly). */
+  match_kind: "email" | "name";
+}
+
 export interface PartnerProfileData {
   id: number;
   name: string | null;
@@ -74,6 +86,11 @@ export interface PartnerProfileData {
   last_synced_at: string | null;
   firm: PartnerProfileFirm | null;
   siblings: PartnerProfileSibling[];
+  /** Same-person or same-name matches at OTHER firms — closes the
+   *  partner → firm → partner hop in the graph. Email matches are
+   *  strong (same person); name-only matches are labelled as
+   *  "possibly" so the UI doesn't fabricate a certainty. */
+  cross_firm: PartnerCrossFirmMatch[];
   campaign_links: PartnerProfileCampaignLink[];
   recent_events: PartnerProfileEvent[];
 }
@@ -265,6 +282,73 @@ export async function getPartnerProfile(
     }
   }
 
+  // Cross-firm matches — partners at OTHER firms who share this
+  // partner's email (strong, definitely same person) or name
+  // (possibly same person). 418 email collisions + 3,120 name
+  // collisions exist today; the UI labels each match's strength
+  // honestly so "possibly" rows don't fabricate a certainty.
+  const crossFirm: PartnerCrossFirmMatch[] = [];
+  const emailKey = partnerRow.email?.trim().toLowerCase() ?? "";
+  const nameKey = partnerRow.name?.trim().toLowerCase() ?? "";
+
+  async function collectCrossFirm(
+    filter: "email" | "name",
+  ): Promise<void> {
+    const query = supabase
+      .from("partners_mirror")
+      .select(
+        `id, name, title, email,
+         investors_mirror:investor_id ( id, firm_name )`,
+      )
+      .neq("id", partnerRow.id)
+      .limit(50);
+    const { data: rows, error } =
+      filter === "email"
+        ? await query.ilike("email", emailKey)
+        : await query.ilike("name", nameKey);
+    if (error) {
+      console.error(
+        `getPartnerProfile cross_firm ${filter} fetch failed:`,
+        error.message,
+      );
+      return;
+    }
+    const typed = (rows ?? []) as unknown as Array<{
+      id: number;
+      name: string | null;
+      title: string | null;
+      email: string | null;
+      investors_mirror: { id: number; firm_name: string | null } | null;
+    }>;
+    for (const r of typed) {
+      // Exclude anyone at the SAME firm (they show up as siblings).
+      if (
+        r.investors_mirror?.id != null &&
+        r.investors_mirror.id === partnerRow.investor_id
+      ) {
+        continue;
+      }
+      // Dedup by partner id — same person might match on both email +
+      // name; keep the first appearance (email is stronger, so email
+      // run goes first).
+      if (crossFirm.some((c) => c.id === r.id)) continue;
+      crossFirm.push({
+        id: r.id,
+        firm_id: r.investors_mirror?.id ?? null,
+        firm_name: r.investors_mirror?.firm_name ?? null,
+        title: r.title,
+        match_kind: filter,
+      });
+    }
+  }
+
+  if (emailKey && emailKey.length > 3 && emailKey.includes("@")) {
+    await collectCrossFirm("email");
+  }
+  if (nameKey && nameKey.length > 3) {
+    await collectCrossFirm("name");
+  }
+
   return {
     id: partnerRow.id,
     name: partnerRow.name,
@@ -280,6 +364,7 @@ export async function getPartnerProfile(
     last_synced_at: partnerRow.last_synced_at,
     firm,
     siblings,
+    cross_firm: crossFirm.slice(0, 20),
     campaign_links: campaignLinks,
     recent_events: recentEvents,
   };
