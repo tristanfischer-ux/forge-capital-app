@@ -196,6 +196,89 @@ function firstNameFrom(full: string | null): string | null {
 }
 
 /**
+ * Ranks per Outreach Drafting Runbook §8. When the partner's name begins
+ * with one of these titles the salutation uses `Dear <Rank> <Surname>,`
+ * rather than a first-name greeting — AND never a bare `Dear <Rank>,`
+ * form (Runbook §5 Rule 10). Includes two-token ranks like "Lieutenant
+ * Colonel" / "Major General" / "Rear Admiral" so multi-word titles are
+ * handled correctly before single-token matching.
+ */
+const RANK_TITLES = new Set([
+  "admiral",
+  "ambassador",
+  "captain",
+  "honorable",
+  "general",
+  "colonel",
+  "commander",
+  "lieutenant",
+  "major",
+  "senator",
+  "governor",
+  "commodore",
+  "rear admiral",
+  "vice admiral",
+  "brigadier",
+  "brigadier general",
+  "lieutenant general",
+  "lieutenant colonel",
+  "major general",
+]);
+
+/**
+ * Proper-case a rank token string (e.g. "lieutenant colonel" →
+ * "Lieutenant Colonel"). Used when the partner's stored name casing
+ * disagrees with the canonical rank casing.
+ */
+function toTitleCase(s: string): string {
+  return s
+    .split(/\s+/)
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word))
+    .join(" ");
+}
+
+/**
+ * Derive the "Dear X," salutation line per Runbook §8 rank-aware rule.
+ *
+ *   "Admiral Lorin Selby"        → "Dear Admiral Selby,"
+ *   "Lieutenant Colonel Sam Reed" → "Dear Lieutenant Colonel Reed,"
+ *   "Dr. Marcus Weiss"           → "Dear Marcus,"
+ *   "Astasia Myers"              → "Dear Astasia,"
+ *   null / ""                    → "Hello,"
+ *
+ * Two-token ranks are matched first to avoid "Lieutenant Colonel Sam
+ * Reed" landing on the single-token "Lieutenant" branch.
+ */
+function deriveSalutation(name: string | null): string {
+  if (!name) return "Hello,";
+  const cleaned = name
+    .replace(/^(dr\.?|mr\.?|mrs\.?|ms\.?|prof\.?)\s+/i, "")
+    .trim();
+  if (!cleaned) return "Hello,";
+  const tokens = cleaned.split(/\s+/);
+  if (tokens.length === 0) return "Hello,";
+
+  // Try two-token rank first, then single-token rank.
+  if (tokens.length >= 3) {
+    const twoToken = `${tokens[0]} ${tokens[1]}`.toLowerCase();
+    if (RANK_TITLES.has(twoToken)) {
+      const surname = tokens[tokens.length - 1];
+      return `Dear ${toTitleCase(twoToken)} ${surname},`;
+    }
+  }
+
+  if (tokens.length >= 2) {
+    const oneToken = tokens[0].toLowerCase();
+    if (RANK_TITLES.has(oneToken)) {
+      const surname = tokens[tokens.length - 1];
+      return `Dear ${toTitleCase(oneToken)} ${surname},`;
+    }
+  }
+
+  return `Dear ${tokens[0]},`;
+}
+
+/**
  * Derive a subject line in the shape
  *   `<Campaign name> — <short pitch>`
  *
@@ -432,10 +515,11 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
   paragraphs.push(buildCtaBlock(template?.cta_variant ?? null));
 
   // Full clipboard text — subject + blank + Dear + paragraphs + sign-off.
-  // Salutation — prefer first name; when missing, fall back to
-  // "Hello," rather than a bracketed "[first name]" placeholder which
-  // would violate the bracket-ban and ship to a recipient.
-  const salutationLine = firstName ? `Dear ${firstName},` : "Hello,";
+  // Salutation — rank-aware per Runbook §8. "Admiral Lorin Selby" →
+  // "Dear Admiral Selby,", "Dr. Marcus Weiss" → "Dear Marcus,",
+  // null → "Hello," (avoids a bracketed "[first name]" placeholder
+  // which would violate the bracket-ban and ship to a recipient).
+  const salutationLine = deriveSalutation(partner?.name ?? null);
   const clipboardSections = [
     `Subject: ${subject}`,
     "",
