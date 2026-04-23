@@ -46,6 +46,12 @@ export interface InvestorModalData {
     campaign_intent: "investor" | "customer" | "supplier" | null;
     company_description: string | null;
     raise_size: string | null;
+    /** Rule 3 bio — fallback source for credibility paragraph when
+     *  email_templates.credibility_paragraph_full is not set. */
+    founder_bio: string | null;
+    /** Few-shot reference email — forwarded to Opus when refining
+     *  synthesis per-investor. */
+    voice_reference_email: string | null;
   } | null;
   investor: {
     id: number | null;
@@ -166,7 +172,9 @@ export async function getInvestorModalData(
         name,
         campaign_intent,
         company_description,
-        raise_size
+        raise_size,
+        founder_bio,
+        voice_reference_email
       ),
       partner:partners_mirror (
         id,
@@ -366,6 +374,8 @@ export async function getInvestorModalData(
               : null,
           company_description: campaignRow.company_description ?? null,
           raise_size: campaignRow.raise_size ?? null,
+          founder_bio: campaignRow.founder_bio ?? null,
+          voice_reference_email: campaignRow.voice_reference_email ?? null,
         }
       : null,
     investor: {

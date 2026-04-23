@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getInvestorModalData } from "@/lib/queries/investorModal";
 import { composeDraft } from "@/app/(authed)/tracker/[campaignPartnerId]/draft/compose";
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
+import { refineSynthesisWithOpus } from "@/app/(authed)/tracker/[campaignPartnerId]/draft/refineSynthesisAction";
 
 /**
  * Server action: dispatch a batch of test-drafts to a review inbox.
@@ -93,7 +94,8 @@ export async function sendTestBatch(
   for (const partnerId of pendingIds) {
     if (outcomes.filter((o) => o.ok).length >= capped) break;
 
-    const data = await getInvestorModalData(partnerId);
+    // Step 1: load partner data once (fast).
+    let data = await getInvestorModalData(partnerId);
     if (!data) {
       outcomes.push({
         campaignPartnerId: partnerId,
@@ -107,6 +109,45 @@ export async function sendTestBatch(
 
     const firmName = data.investor.firm_name ?? "Unknown firm";
     const partnerName = data.primary_partner?.name ?? null;
+
+    // Step 2: if this row has no rendered_synthesis cached, generate
+    // one with Opus BEFORE sending so no email goes out with generic
+    // template-substituted adjacencies. Tristan flagged 2026-04-23
+    // that the first 20 [TEST] dispatches had "a whole bunch of
+    // investors which had no synthesis in them" — this closes that
+    // gap. Adds ~3-5s per row (~60-100s for 20), acceptable.
+    if (!data.rendered_synthesis) {
+      const refined = await refineSynthesisWithOpus({
+        campaignPartnerId: partnerId,
+      });
+      if (refined.ok) {
+        // Re-load so composeDraft picks up the new rendered_synthesis.
+        data = await getInvestorModalData(partnerId);
+        if (!data) {
+          outcomes.push({
+            campaignPartnerId: partnerId,
+            firmName,
+            partnerName,
+            ok: false,
+            detail: "reload after refine returned null",
+          });
+          continue;
+        }
+      } else {
+        // Refine failed (usually: missing thesis_summary). We record
+        // the failure but DO NOT send — a generic template-subst'd
+        // email with "{{FIRM_THESIS}}" literal would be worse than
+        // skipping this row entirely.
+        outcomes.push({
+          campaignPartnerId: partnerId,
+          firmName,
+          partnerName,
+          ok: false,
+          detail: `Skipped — synthesis could not be generated: ${refined.error}`,
+        });
+        continue;
+      }
+    }
 
     const draft = composeDraft(data);
 

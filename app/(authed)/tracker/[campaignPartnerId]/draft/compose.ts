@@ -19,20 +19,78 @@ import type { InvestorModalData } from "@/lib/queries/investorModal";
  * placeholders so the reviewer sees what needs fixing before sending.
  */
 
-const DEFAULT_SALUTATION_OPEN = "I hope this finds you well. My name is Tristan Fischer.";
-
-// Full sign-off block — verbatim from REAL-TEMPLATES-FROM-GMAIL.md Sample 2
-// (FishFrom → Christy / Alabaster, 2026-04-20). This is the canonical
-// first-contact sign-off. Never shortened — Rule 3 forbids the truncated
-// variant for first contact.
+// Full sign-off block — Rule 12 verbatim from the Outreach Drafting
+// Runbook (docs/outreach-drafting-runbook-full-tf.md §5). No phone
+// number, no "Best wishes" — the canonical first-contact sign-off uses
+// "Best regards," and ends with the full LinkedIn URL including
+// protocol and trailing slash. Tristan flagged 2026-04-23 that the 20
+// [TEST] emails used "Best wishes," which is off-voice.
 export const SIGN_OFF_BLOCK = [
-  "Best wishes,",
+  "Best regards,",
   "",
   "Tristan Fischer",
-  "+44 7776 191944",
   "tristan.fischer@gmail.com",
-  "www.linkedin.com/in/tristanfischer",
+  "https://www.linkedin.com/in/tristanfischer/",
 ].join("\n");
+
+/**
+ * FishFrom-only video link per Rule 5. Linked verbatim from the runbook
+ * § 5 Rule 5 — attributed to Andrew Robertson, placed before the
+ * 20-minute ask. MUST appear in every FishFrom email; MUST NEVER appear
+ * in SkySails, Panatere, or any other campaign.
+ */
+const FISHFROM_VIDEO_LINK =
+  "https://drive.google.com/file/d/1NaBR14yfBOzrS9GiauCRYDEYs6JpBh7O/view";
+
+/**
+ * Generate 5 specific calendar slots spread across the next 10 working
+ * days, in BST with UTC + CET offsets per runbook §7. Real Google
+ * Calendar integration lands in a later pass — for now the slots are
+ * deterministic offsets from the current UK date.
+ *
+ * NOTE: because this is deterministic, every recipient in a batch gets
+ * the same 5 slots. That's intentional for V1 (the constraint is
+ * Tristan's availability, which is the same regardless of recipient).
+ */
+function generateCalendarSlots(today = new Date()): string[] {
+  const slots: Array<{ daysAhead: number; hour: number; min: number }> = [
+    { daysAhead: 2, hour: 10, min: 0 },
+    { daysAhead: 4, hour: 15, min: 0 },
+    { daysAhead: 5, hour: 9, min: 30 },
+    { daysAhead: 8, hour: 14, min: 0 },
+    { daysAhead: 10, hour: 11, min: 0 },
+  ];
+
+  const toLine = (daysAhead: number, hour: number, min: number): string => {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() + daysAhead);
+    // Skip weekends — bump forward to Monday.
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+    const dayName = d.toLocaleDateString("en-GB", {
+      weekday: "long",
+      timeZone: "Europe/London",
+    });
+    const dateStr = d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      timeZone: "Europe/London",
+    });
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const bst = `${pad(hour)}:${pad(min)}`;
+    // BST = UTC+1, CET = UTC+1 (same), BST = CET in summer. But during
+    // winter: BST = GMT = UTC; CET = UTC+1. Use BST = UTC+1 as current
+    // convention (late April 2026 is already BST).
+    const utcHour = hour - 1;
+    const cetHour = hour;
+    const utc = `${pad(utcHour)}:${pad(min)}`;
+    const cet = `${pad(cetHour)}:${pad(min)}`;
+    return `  - ${dayName} ${dateStr}, ${bst} BST (${utc} UTC / ${cet} CET)`;
+  };
+
+  return slots.map((s) => toLine(s.daysAhead, s.hour, s.min));
+}
 
 export interface ComposedDraft {
   /** Subject line — derived from campaign + partner (see deriveSubject). */
@@ -136,19 +194,34 @@ function firstNameFrom(full: string | null): string | null {
  */
 function deriveSubject(data: InvestorModalData): string {
   const campaignName = data.campaign?.name ?? "Campaign";
+  // Strip internal prefixes ("AUDIT · ") and workstream suffixes
+  // ("· Investor") so the subject reads as the company name, not the
+  // tracker filename. Tristan flagged 2026-04-23 that a subject like
+  // "AUDIT · Wren Aerospace · Investor — Wren Aerospace — Dutch HAPS
+  // startup" doubles the company name and exposes internal tags.
+  const displayName = campaignName
+    .replace(/^audit\s*[·|:]?\s*/i, "")
+    .replace(/\s*[·|]\s*(investor|customer|supplier)\s*$/i, "")
+    .trim();
+
   const pitch = data.campaign?.company_description?.trim();
+  const raise = data.campaign?.raise_size?.trim();
+  const tail = raise ? ` (${raise})` : "";
+
   if (pitch) {
     const firstClause = pitch.split(/[.;\n]/)[0]?.trim();
     if (firstClause && firstClause.length > 0) {
-      const raise = data.campaign?.raise_size?.trim();
-      const tail = raise ? ` (${raise})` : "";
-      // Keep subject under 90 chars where possible.
-      const base = `${campaignName} — ${firstClause}${tail}`;
+      // If the clause starts with the display name, don't double it.
+      const clauseStartsWithName = firstClause
+        .toLowerCase()
+        .startsWith(displayName.toLowerCase());
+      const base = clauseStartsWithName
+        ? `${firstClause}${tail}`
+        : `${displayName} — ${firstClause}${tail}`;
       return base.length > 140 ? base.slice(0, 137) + "…" : base;
     }
   }
-  const raise = data.campaign?.raise_size?.trim();
-  return raise ? `${campaignName} (${raise})` : campaignName;
+  return raise ? `${displayName} (${raise})` : displayName;
 }
 
 /**
@@ -179,13 +252,15 @@ function renderSynthesis(
   return { rendered: out, unresolved };
 }
 
-function buildCtaBlock(variant: "20min_call" | "presentation_first" | null): string {
-  if (variant === "presentation_first") {
-    // Matches SkySails / Smedvig sample.
-    return "I would be happy to send the investor presentation or arrange a call.";
-  }
-  // Default: "20min_call" style — matches FishFrom / Alabaster sample.
-  return "Would you have 20 minutes for a brief call? I am available early next week.";
+function buildCtaBlock(
+  variant: "20min_call" | "presentation_first" | null,
+): string {
+  const slotLines = generateCalendarSlots();
+  const intro =
+    variant === "presentation_first"
+      ? "I would be happy to send the investor presentation or arrange a call. Would any of the following 30-minute slots work?"
+      : "Would any of the following 30-minute slots work for a call? I am in UK time (BST, UTC+1). If none of these work I will happily suggest others.";
+  return [intro, "", ...slotLines].join("\n");
 }
 
 export function composeDraft(data: InvestorModalData): ComposedDraft {
@@ -203,24 +278,34 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
   const unresolvedPlaceholders: string[] = [];
   let thesisTooLongToHedge = false;
 
-  // Credibility
-  const credibility = template?.credibility_paragraph_full?.trim();
+  // Credibility — Rule 3 verbatim bio. Fallback order:
+  //   1. email_templates.credibility_paragraph_full (Opus-drafted, approved)
+  //   2. campaigns.founder_bio (the raw bio saved on the Voice Reference card)
+  // This lets sends work out of the box on any campaign with a
+  // founder_bio, even if the /templates UI has never been visited.
+  const credibility =
+    template?.credibility_paragraph_full?.trim() ||
+    data.campaign?.founder_bio?.trim() ||
+    null;
   if (credibility) {
-    paragraphs.push(`${DEFAULT_SALUTATION_OPEN} ${credibility}`);
+    paragraphs.push(credibility);
   } else {
-    // Honest empty-state: surface the gap, don't fabricate a bio.
     paragraphs.push(
-      `${DEFAULT_SALUTATION_OPEN} [Credibility paragraph missing — add one to the email_templates row for this campaign before sending.]`,
+      "[Credibility paragraph missing — edit the founder bio on /templates before sending.]",
     );
   }
 
-  // Company
-  const company = template?.company_paragraph?.trim();
+  // Company — fallback to campaigns.company_description when the
+  // Opus-drafted company_paragraph on email_templates is not set.
+  const company =
+    template?.company_paragraph?.trim() ||
+    data.campaign?.company_description?.trim() ||
+    null;
   if (company) {
     paragraphs.push(company);
   } else {
     paragraphs.push(
-      "[Company paragraph missing — add one to the email_templates row for this campaign before sending.]",
+      "[Company paragraph missing — edit the company description on /templates before sending.]",
     );
   }
 
@@ -253,12 +338,43 @@ export function composeDraft(data: InvestorModalData): ComposedDraft {
     paragraphs.push(substituted);
     unresolvedPlaceholders.push(...unresolved);
   } else {
+    // Honest non-bracketed signal — brackets are banned anywhere in
+    // rendered body text. The preview page surfaces this as a review
+    // warning; real sends go through sendTestBatch which pre-generates
+    // rendered_synthesis via Opus, so this branch never actually ships
+    // to an inbox.
     paragraphs.push(
-      "[Per-investor synthesis template missing — add one (must open with a Rule-1 hedge) to the email_templates row before sending.]",
+      "Per-investor synthesis not yet generated. Click Refine synthesis with Opus below before sending.",
+    );
+    unresolvedPlaceholders.push("synthesis");
+  }
+
+  // Rule 5 — FishFrom video link (FishFrom-only, ALWAYS present on
+  // FishFrom, NEVER on any other campaign). Detected by campaign name
+  // containing "FishFrom" case-insensitively. The drafted composer
+  // output is never shown to non-FishFrom recipients.
+  const campaignName = data.campaign?.name ?? "";
+  const isFishFrom = /fishfrom/i.test(campaignName);
+  if (isFishFrom) {
+    paragraphs.push(
+      `There is a short video of the FishFrom platform and founder Andrew Robertson here — it gives a better sense of the technology than a deck: ${FISHFROM_VIDEO_LINK}`,
     );
   }
 
-  // CTA
+  // Low-confidence escape-hatch per runbook §5 Rule 10. When the
+  // per-investor synthesis stumbled (thesisTooLongToHedge, or unresolved
+  // {{FIRM_THESIS}} placeholder), prepend an "if I have misread the fit
+  // here, I would welcome the correction" sentence so the reader can
+  // correct Tristan without feeling spammed.
+  const lowConfidence =
+    thesisTooLongToHedge || unresolvedPlaceholders.length > 0;
+  if (lowConfidence) {
+    paragraphs.push(
+      "If I have misread the fit here, I would welcome the correction.",
+    );
+  }
+
+  // Rule 10 §6 — the 20-minute ask with 3-5 specific slots.
   paragraphs.push(buildCtaBlock(template?.cta_variant ?? null));
 
   // Full clipboard text — subject + blank + Dear + paragraphs + sign-off.
