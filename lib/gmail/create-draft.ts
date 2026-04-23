@@ -1,5 +1,6 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { refreshAccessToken } from "./oauth";
+import { checkMx } from "@/lib/email/check-mx";
 
 /**
  * Create a Gmail draft on behalf of the signed-in user using their stored
@@ -124,6 +125,19 @@ export interface SendMessageResult {
 export async function sendGmailMessage(
   input: CreateDraftInput,
 ): Promise<SendMessageResult> {
+  // MX pre-flight — every outbound through this function is checked
+  // against live DNS. Prevents hard-bounces from typo domains and
+  // stale contact cards (e.g. acquired firms whose domain redirected
+  // without preserving MX). Fails fast with an explicit reason so the
+  // caller can surface it per-row rather than us hitting Gmail's rate
+  // limit on dead addresses.
+  const mx = await checkMx(input.to);
+  if (!mx.deliverable) {
+    throw new Error(
+      `MX check failed for ${input.to}: ${mx.reason}`,
+    );
+  }
+
   const accessToken = await getAccessTokenForCurrentUser();
   const raw = encodeRfc2822Message(input.to, input.subject, input.body);
   const res = await fetch(
