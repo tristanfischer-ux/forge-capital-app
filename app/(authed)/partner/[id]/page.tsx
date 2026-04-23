@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
 import { PartnerProfileView } from "./PartnerProfileView";
 import { BreadcrumbsOverride } from "../../Breadcrumbs";
+import { LogInteractionButton } from "./LogInteractionModal";
 
 /**
  * Partner profile — full drill-down page for one `partners_mirror` row.
@@ -45,7 +46,8 @@ export default async function PartnerProfilePage(props: {
             Partner profile · partner id {partner.id}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 14, alignItems: "baseline" }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <LogInteractionButton partnerId={partner.id} />
           <Link
             href={`/graph/partner/${partner.id}`}
             className="as-link"
