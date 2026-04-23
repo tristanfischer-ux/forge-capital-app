@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd template for the scheduled-sends dispatcher daemon.
+
+  THIS IS A TEMPLATE. Copy it to:
+      ~/Library/LaunchAgents/com.forgecapital.scheduled-sends-dispatcher.plist
+  Replace the placeholder values below with real secrets. Then:
+      launchctl load ~/Library/LaunchAgents/com.forgecapital.scheduled-sends-dispatcher.plist
+      launchctl start com.forgecapital.scheduled-sends-dispatcher
+
+  Unlike the gmail-sync / calendar-sync daemons (which run on
+  StartInterval), this daemon runs forever in its own process and
+  internally polls every 60s. KeepAlive=true restarts it if it crashes.
+
+  Logs land at /private/tmp/fc-scheduled-sends.log.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.forgecapital.scheduled-sends-dispatcher</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/tristanfischer/Developer/forge-capital-app/scripts/scheduled-sends-dispatcher.mjs</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/tristanfischer/Developer/forge-capital-app</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/private/tmp/fc-scheduled-sends.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/private/tmp/fc-scheduled-sends.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NEXT_PUBLIC_SUPABASE_URL</key>
+        <string><!-- PASTE YOUR NEXT_PUBLIC_SUPABASE_URL HERE --></string>
+
+        <key>SUPABASE_SERVICE_ROLE_KEY</key>
+        <string><!-- PASTE YOUR SUPABASE_SERVICE_ROLE_KEY HERE --></string>
+
+        <key>GMAIL_CLIENT_ID</key>
+        <string><!-- PASTE YOUR GMAIL_CLIENT_ID HERE --></string>
+
+        <key>GMAIL_CLIENT_SECRET</key>
+        <string><!-- PASTE YOUR GMAIL_CLIENT_SECRET HERE --></string>
+
+        <key>HUNTER_API_KEY</key>
+        <string><!-- OPTIONAL: PASTE YOUR HUNTER_API_KEY HERE (omit to fall back to MX-only pre-flight) --></string>
+
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>

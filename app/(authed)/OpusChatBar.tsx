@@ -11,14 +11,29 @@ import { usePathname } from "next/navigation";
  * a box which stays at the top which I can just tap into even if I
  * scroll down the page it's still always there and persistent."
  *
- * Scope V1: Q&A only. Opus cannot write code or mutate the DB from
- * this path. When Tristan wants a code change, Opus proposes the
- * edit as text; he applies it via the terminal.
+ * V2 (2026-04-23): tool-using. The server streams two kinds of
+ * payload: plain text (Opus's prose) and `TOOL:<json>\n` lines
+ * (tool-use + tool-result events). The client splits them out,
+ * appending prose to the current assistant bubble and pushing tool
+ * events into a per-message chip list that renders inline.
+ *
+ * Tool summaries stay short ("log_interaction ✓ call · 30m") so the
+ * chip is legible next to the bubble. When Opus is still thinking
+ * about a tool call, we render a "…" chip; once the result comes
+ * back we swap in the summary.
  */
+
+interface ToolChip {
+  id: string;
+  name: string;
+  status: "pending" | "done" | "error";
+  summary?: string;
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  tools?: ToolChip[];
 }
 
 export function OpusChatBar(props: { activeCampaignName?: string | null }) {
@@ -77,15 +92,81 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let acc = "";
+      let pendingBuffer = ""; // holds bytes we haven't yet committed
+      let prose = "";
+      const chips: ToolChip[] = [];
+
+      const flush = () => {
+        setMessages([
+          ...nextMessages,
+          { role: "assistant", content: prose, tools: [...chips] },
+        ]);
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        acc += decoder.decode(value, { stream: true });
-        setMessages([
-          ...nextMessages,
-          { role: "assistant", content: acc },
-        ]);
+        pendingBuffer += decoder.decode(value, { stream: true });
+
+        // Walk the buffer, extracting `TOOL:<json>\n` lines where we
+        // find them; everything else is prose.
+        while (true) {
+          const toolStart = pendingBuffer.indexOf("TOOL:");
+          if (toolStart === -1) {
+            // No tool line in the buffer — commit everything as prose.
+            prose += pendingBuffer;
+            pendingBuffer = "";
+            break;
+          }
+          // Anything before the TOOL: marker is prose we can commit.
+          if (toolStart > 0) {
+            prose += pendingBuffer.slice(0, toolStart);
+            pendingBuffer = pendingBuffer.slice(toolStart);
+          }
+          // Wait for the terminating newline before parsing.
+          const lineEnd = pendingBuffer.indexOf("\n", 5);
+          if (lineEnd === -1) break;
+          const line = pendingBuffer.slice(5, lineEnd);
+          pendingBuffer = pendingBuffer.slice(lineEnd + 1);
+          try {
+            const payload = JSON.parse(line) as {
+              phase: "start" | "result";
+              id: string;
+              name: string;
+              summary?: string;
+              isError?: boolean;
+            };
+            if (payload.phase === "start") {
+              chips.push({
+                id: payload.id,
+                name: payload.name,
+                status: "pending",
+              });
+            } else {
+              const chip = chips.find((c) => c.id === payload.id);
+              if (chip) {
+                chip.status = payload.isError ? "error" : "done";
+                chip.summary = payload.summary;
+              } else {
+                chips.push({
+                  id: payload.id,
+                  name: payload.name,
+                  status: payload.isError ? "error" : "done",
+                  summary: payload.summary,
+                });
+              }
+            }
+          } catch {
+            // Malformed tool line — drop it rather than polluting prose.
+          }
+        }
+
+        flush();
+      }
+      // Commit any trailing buffer as prose.
+      if (pendingBuffer) {
+        prose += pendingBuffer;
+        flush();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -242,8 +323,56 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
                       fontWeight: m.role === "user" ? 500 : 400,
                     }}
                   >
+                    {m.tools && m.tools.length > 0 ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 4,
+                          marginBottom: m.content ? 6 : 0,
+                        }}
+                      >
+                        {m.tools.map((chip) => (
+                          <span
+                            key={chip.id}
+                            title={chip.summary ?? chip.name}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              padding: "2px 6px",
+                              fontSize: 10,
+                              fontWeight: 500,
+                              borderRadius: 3,
+                              border: "1px solid var(--border-soft)",
+                              background:
+                                chip.status === "error"
+                                  ? "rgba(220, 38, 38, 0.08)"
+                                  : chip.status === "pending"
+                                    ? "var(--surface)"
+                                    : "var(--accent-softer)",
+                              color:
+                                chip.status === "error"
+                                  ? "rgb(153, 27, 27)"
+                                  : "var(--accent-dark)",
+                              fontFamily:
+                                "ui-monospace, SFMono-Regular, monospace",
+                            }}
+                          >
+                            <span aria-hidden="true">🔧</span>
+                            <span>
+                              {chip.status === "pending"
+                                ? `${chip.name} …`
+                                : (chip.summary ?? chip.name)}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     {m.content ||
-                      (streaming && m.role === "assistant"
+                      (streaming &&
+                      m.role === "assistant" &&
+                      (!m.tools || m.tools.length === 0)
                         ? "▋"
                         : null)}
                   </div>
