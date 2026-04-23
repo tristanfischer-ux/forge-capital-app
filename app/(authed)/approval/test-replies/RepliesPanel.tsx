@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   classifyAndDraftResponse,
   sendResponseAndUpdateStatus,
@@ -14,13 +15,51 @@ export function RepliesPanel(props: {
 }) {
   const rowsWithReply = props.rows.filter((r) => r.replyBody);
   const rowsWithoutReply = props.rows.filter((r) => !r.replyBody);
+  const router = useRouter();
+  const [isRefreshing, startRefresh] = useTransition();
+  const [lastChecked, setLastChecked] = useState<string>(() =>
+    new Date().toISOString().slice(11, 19),
+  );
+
+  function onRefresh() {
+    if (isRefreshing) return;
+    startRefresh(() => {
+      router.refresh();
+      setLastChecked(new Date().toISOString().slice(11, 19));
+    });
+  }
 
   return (
     <div className="space-y-5">
       <section className="rounded-[10px] border border-border bg-surface p-5 shadow-[var(--shadow)]">
-        <h2 className="mb-3 text-[14px] font-semibold text-text">
-          Replies received ({rowsWithReply.length})
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <h2 className="text-[14px] font-semibold text-text">
+            Replies received ({rowsWithReply.length})
+          </h2>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            style={{
+              fontSize: 11,
+              padding: "4px 10px",
+              border: "1px solid var(--accent)",
+              background: "var(--accent-softer)",
+              color: "var(--accent)",
+              borderRadius: 4,
+              fontWeight: 600,
+              cursor: isRefreshing ? "wait" : "pointer",
+            }}
+            title="Re-reads every [TEST] thread on Gmail for new inbound messages."
+          >
+            {isRefreshing ? "Checking Gmail…" : "Check for new replies"}
+          </button>
+          <span
+            style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: "auto" }}
+          >
+            Last checked {lastChecked} UTC
+          </span>
+        </div>
         {rowsWithReply.length === 0 ? (
           <p className="text-[13px] text-text-dim">
             No replies yet. When {props.userEmail ?? "the test address"}{" "}
