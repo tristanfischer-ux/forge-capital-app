@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { sendTestBatch, type PerRowOutcome } from "./actions";
+import {
+  exportBatchToXlsx,
+  sendTestBatch,
+  type PerRowOutcome,
+} from "./actions";
 
 interface PreviewRow {
   firmName: string | null;
@@ -19,6 +23,8 @@ export function TestBatchPanel(props: {
     Math.min(20, props.pendingCount),
   );
   const [isPending, startTransition] = useTransition();
+  const [isExporting, startExportTransition] = useTransition();
+  const [exportError, setExportError] = useState<string | null>(null);
   const [result, setResult] = useState<
     | { kind: "idle" }
     | { kind: "confirming" }
@@ -49,6 +55,44 @@ export function TestBatchPanel(props: {
         });
       } else {
         setResult({ kind: "error", message: out.error });
+      }
+    });
+  }
+
+  function onExport() {
+    if (isExporting) return;
+    setExportError(null);
+    startExportTransition(async () => {
+      const out = await exportBatchToXlsx({ campaignId: props.campaignId });
+      if (!out.ok) {
+        setExportError(out.error);
+        return;
+      }
+      // Decode base64 → Blob → anchor-click download. We do this in the
+      // browser rather than returning a streaming response so the server
+      // action stays a plain JSON-ish payload the React Flight layer is
+      // happy with.
+      try {
+        const binary = atob(out.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = out.filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        // Let the browser finish the download before revoking.
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setExportError(`download failed: ${msg}`);
       }
     });
   }
@@ -117,17 +161,41 @@ export function TestBatchPanel(props: {
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {result.kind === "idle" || result.kind === "error" ? (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => setResult({ kind: "confirming" })}
-            disabled={
-              isPending || props.pendingCount === 0 || !toEmail.includes("@")
-            }
-            style={{ padding: "8px 14px", fontSize: 13, fontWeight: 600 }}
-          >
-            Send {count} as [TEST] to {toEmail}
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => setResult({ kind: "confirming" })}
+              disabled={
+                isPending || props.pendingCount === 0 || !toEmail.includes("@")
+              }
+              style={{ padding: "8px 14px", fontSize: 13, fontWeight: 600 }}
+            >
+              Send {count} as [TEST] to {toEmail}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={onExport}
+              disabled={isExporting || props.pendingCount === 0}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+              }}
+              title="Download all pending drafts as an Excel workbook — dry run, nothing sent."
+            >
+              {isExporting ? "Exporting…" : "Export drafts as .xlsx"}
+            </button>
+            {exportError ? (
+              <span style={{ color: "var(--red)", fontSize: 12 }}>
+                {exportError}
+              </span>
+            ) : null}
+          </>
         ) : null}
 
         {result.kind === "confirming" ? (
