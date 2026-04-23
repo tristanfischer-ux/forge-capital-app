@@ -327,6 +327,150 @@ export async function saveVoiceReference(input: {
   return { ok: true };
 }
 
+export type PreviewResult =
+  | { ok: true; preview: string }
+  | { ok: false; error: string };
+
+/**
+ * Server action: preview a 2-3 sentence credibility paragraph with Opus
+ * using the UNSAVED founder_bio + voice_reference_email textarea
+ * contents from the Voice Reference card. Pure in-memory — no DB read,
+ * no DB write.
+ *
+ * Why this exists (ux-audit-20260423.md item #11): today the only way
+ * to test a bio edit is Save → /tracker/[id]/draft → Refine Synthesis →
+ * wait. That round-trip is too slow when you're iterating on the bio
+ * itself. This action lets the card show the effect of a tweak inline,
+ * in a couple of seconds.
+ *
+ * The prompt is intentionally narrower than the full
+ * `draftSectionWithHaiku` credibility path: 2-3 sentences (not 2-4), no
+ * partner context, no per-investor synthesis — just the bio-and-voice
+ * preview. Same bracket-ban + voice rules as the full drafter so the
+ * preview is representative of what would ship.
+ *
+ * Despite the neighbouring `draftSectionWithHaiku` name, both that
+ * action and this one use `DRAFTER_MODEL = claude-opus-4-7`. The Haiku
+ * suffix is historical (pre 2026-04-23 upgrade).
+ */
+export async function previewCredibilityWithOpus(input: {
+  founderBio: string;
+  voiceReferenceEmail: string;
+  campaignName?: string;
+  campaignCompanyDescription?: string;
+  raiseSize?: string;
+}): Promise<PreviewResult> {
+  const {
+    founderBio,
+    voiceReferenceEmail,
+    campaignName,
+    campaignCompanyDescription,
+    raiseSize,
+  } = input;
+
+  if (!founderBio || founderBio.trim().length < 60) {
+    return {
+      ok: false,
+      error:
+        "Founder bio is too short to preview — write at least 60 characters of first-person bio before testing.",
+    };
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey.trim() === "") {
+    return {
+      ok: false,
+      error: "ANTHROPIC_API_KEY not set — add to .env.local",
+    };
+  }
+
+  // Auth gate — same posture as the other actions in this file. No DB
+  // read is performed (the inputs come from the client), but the action
+  // still only runs for a signed-in session so unauthenticated traffic
+  // can't burn Opus calls.
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Not signed in." };
+  }
+
+  const voiceFrame = voiceReferenceEmail && voiceReferenceEmail.trim()
+    ? `VOICE REFERENCE EMAIL (this is a real prior send by the founder — match its tone, rhythm, sentence length, and choice of concrete nouns; do NOT copy its specific facts into the preview):\n---\n${voiceReferenceEmail.trim()}\n---`
+    : "VOICE REFERENCE EMAIL: (not set — rely on the FOUNDER BIO and voice rules above).";
+
+  const campaignFrame = [
+    campaignName ? `CAMPAIGN NAME: ${campaignName}` : null,
+    campaignCompanyDescription
+      ? `COMPANY DESCRIPTION:\n${campaignCompanyDescription}`
+      : null,
+    raiseSize ? `RAISE / DEAL SIZE: ${raiseSize}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const system = [
+    "You are drafting on behalf of Tristan Fischer, founder of Fractional Forge. Voice: first-person, personal, British spelling (organise, behaviour, programme), specific numbers over adjectives, direct, no marketing verbs, no 'AI-powered' / 'Smart' / 'Intelligent'. Output only the drafted paragraph — no preamble, no explanation, no quotes around it, no opening line like 'Here is...'.",
+    "",
+    "You are drafting a PREVIEW of the CREDIBILITY paragraph of a first-contact email, so the founder can see the effect of the current (unsaved) founder bio + voice reference. Draft 2-3 sentences in the SAME voice as the VOICE REFERENCE EMAIL. Stick strictly to facts that appear in the FOUNDER BIO. Match the reference email's rhythm: a dated span (e.g. \"twenty-five years\"), named employers in sequence with short qualifiers, specific hard numbers, named backers where they add credibility, and a plain cause-and-effect transition to now.",
+    "",
+    "BANNED flattery tokens (never emit): congratulations, great to see, loved your, enjoyed your, impressive work, excited to see.",
+    "BANNED marketing verbs (never emit): AI-powered, Smart, Intelligent.",
+    "",
+    "HARD RULE — NO BRACKETED PLACEHOLDERS.",
+    "You MUST NOT emit square-bracket placeholders like [X years], [specific role], [company name], [sector], [achievement], [number], [TODO], etc. If you do not have a specific fact, you have two options — you MUST pick one:",
+    "  (A) Use a CONCRETE fact drawn from the FOUNDER BIO, COMPANY DESCRIPTION, RAISE SIZE, or VOICE REFERENCE EMAIL provided below.",
+    "  (B) Omit that clause entirely. A shorter, true paragraph beats a longer one with brackets.",
+    "You must NEVER invent facts that are not in the context.",
+  ].join("\n");
+
+  const userPrompt = [
+    `FOUNDER BIO (use as the source of truth for the credibility paragraph — do not invent beyond it):\n${founderBio.trim()}`,
+    "",
+    voiceFrame,
+    campaignFrame ? `\n${campaignFrame}` : null,
+    "",
+    "Draft the credibility paragraph as a 2-3 sentence preview. Do not copy the reference email's wording; match its rhythm while using the founder's actual facts. Output only the paragraph.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: DRAFTER_MODEL,
+      max_tokens: 1024,
+      system,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    const preview =
+      textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
+
+    if (!preview) {
+      return { ok: false, error: "Opus returned an empty preview." };
+    }
+
+    // Same bracket guard as the drafter — the whole point of this
+    // preview is to catch voice issues before Save, so a bracketed
+    // response is the exact thing Tristan needs to see rejected.
+    const bracketMatch = preview.match(/\[[^\]\n]{2,60}\]/);
+    if (bracketMatch) {
+      return {
+        ok: false,
+        error: `Opus emitted a bracketed placeholder (${bracketMatch[0]}) — extend the founder bio with the missing specific, then try Test draft again.`,
+      };
+    }
+
+    return { ok: true, preview };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Opus preview failed: ${msg}` };
+  }
+}
+
 export type AuditResult =
   | {
       ok: true;

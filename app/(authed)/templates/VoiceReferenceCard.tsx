@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveVoiceReference } from "./actions";
+import { previewCredibilityWithOpus, saveVoiceReference } from "./actions";
 
 /**
  * Voice Reference card on /templates — surfaces the per-campaign
@@ -28,6 +28,16 @@ export default function VoiceReferenceCard(props: {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Test-draft preview state — lives alongside save state so the two
+  // buttons don't clobber each other's feedback. Preview is cleared
+  // whenever bio/email change so the founder can't stare at a stale
+  // paragraph while they edit (ux-audit-20260423.md item #11).
+  const [isPreviewing, startPreviewTransition] = useTransition();
+  const [preview, setPreview] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const bioTooShort = bio.trim().length < 60;
+
   const bioSummary = props.initialFounderBio
     ? props.initialFounderBio.slice(0, 140) +
       (props.initialFounderBio.length > 140 ? "…" : "")
@@ -50,6 +60,23 @@ export default function VoiceReferenceCard(props: {
         setSavedAt(new Date().toISOString().slice(11, 19) + " UTC");
       } else {
         setError(out.error);
+      }
+    });
+  }
+
+  function onTestDraft() {
+    setPreviewError(null);
+    setPreview(null);
+    startPreviewTransition(async () => {
+      const out = await previewCredibilityWithOpus({
+        founderBio: bio,
+        voiceReferenceEmail: email,
+        campaignName: props.campaignName,
+      });
+      if (out.ok) {
+        setPreview(out.preview);
+      } else {
+        setPreviewError(out.error);
       }
     });
   }
@@ -181,7 +208,16 @@ export default function VoiceReferenceCard(props: {
             </div>
             <textarea
               value={bio}
-              onChange={(e) => setBio(e.target.value)}
+              onChange={(e) => {
+                setBio(e.target.value);
+                // Stale-preview guard: any bio/email edit clears the
+                // preview so the founder isn't staring at output from
+                // the previous input state.
+                if (preview || previewError) {
+                  setPreview(null);
+                  setPreviewError(null);
+                }
+              }}
               rows={6}
               placeholder="My name is Tristan Fischer. I have spent twenty-five years building, financing and scaling capital-intensive businesses — from..."
               style={{
@@ -220,7 +256,13 @@ export default function VoiceReferenceCard(props: {
             </div>
             <textarea
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (preview || previewError) {
+                  setPreview(null);
+                  setPreviewError(null);
+                }
+              }}
               rows={12}
               placeholder={
                 "Dear Christophe,\n\nMy name is Tristan Fischer. I have spent twenty-five years..."
@@ -239,7 +281,14 @@ export default function VoiceReferenceCard(props: {
               }}
             />
           </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <button
               type="button"
               className="btn sm primary"
@@ -256,6 +305,29 @@ export default function VoiceReferenceCard(props: {
             >
               {isPending ? "Saving…" : "Save voice reference"}
             </button>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={onTestDraft}
+              disabled={isPreviewing || bioTooShort}
+              title={
+                bioTooShort
+                  ? "Write at least 60 characters of founder bio to preview a draft."
+                  : "Preview a credibility paragraph using the current unsaved bio and reference."
+              }
+              style={{
+                fontSize: 12,
+                padding: "6px 14px",
+                background: "transparent",
+                borderColor: "var(--accent)",
+                color: "var(--accent)",
+                fontWeight: 600,
+                opacity: bioTooShort ? 0.55 : 1,
+                cursor: bioTooShort ? "not-allowed" : "pointer",
+              }}
+            >
+              {isPreviewing ? "Drafting preview…" : "Test draft"}
+            </button>
             {savedAt ? (
               <span style={{ fontSize: 11, color: "var(--green)" }}>
                 ✓ Saved at {savedAt} — next Redraft will use the new context.
@@ -264,7 +336,59 @@ export default function VoiceReferenceCard(props: {
             {error ? (
               <span style={{ fontSize: 11, color: "var(--red)" }}>{error}</span>
             ) : null}
+            {previewError ? (
+              <span style={{ fontSize: 11, color: "var(--red)" }}>
+                {previewError}
+              </span>
+            ) : null}
           </div>
+
+          {preview ? (
+            <div
+              style={{
+                marginTop: 4,
+                padding: 12,
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                background: "var(--surface-alt)",
+              }}
+              aria-label="Credibility paragraph preview with unsaved inputs"
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  color: "var(--text-faint)",
+                  marginBottom: 6,
+                  fontWeight: 600,
+                }}
+              >
+                Preview with these unsaved inputs
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  color: "var(--text)",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {preview}
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 11,
+                  color: "var(--text-dim)",
+                  fontStyle: "italic",
+                }}
+              >
+                (not saved — click Save voice reference to persist the
+                inputs; this paragraph is just a preview)
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </section>
