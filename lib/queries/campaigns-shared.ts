@@ -31,6 +31,33 @@ export function counterpartLabel(
   return "the counterpart";
 }
 
+/**
+ * Resolve the user-facing display label for a campaign. Returns
+ * `display_name` when set (migration 027, UX audit 2026-04-23 item #2)
+ * and falls back to `name` otherwise so nothing renders blank during
+ * rollout of new campaigns that haven't set a display label yet.
+ *
+ * Use this helper EVERYWHERE a campaign label crosses the founder /
+ * counterparty boundary — email subjects, approval sheet titles /
+ * filenames, weekly digest headers, outbound `[APPROVAL]` email
+ * subjects. Internal surfaces (tracker admin rows, sidebar chips,
+ * URL slugs, debug log lines) can keep using `.name` directly since
+ * the whole point of the split is that `.name` is the auditable
+ * internal token.
+ */
+export function displayNameFor(
+  campaign:
+    | { name: string | null; display_name: string | null }
+    | Pick<CampaignSummary, "name" | "display_name">
+    | null
+    | undefined,
+): string {
+  if (!campaign) return "Campaign";
+  const trimmed = campaign.display_name?.trim();
+  if (trimmed) return trimmed;
+  return campaign.name?.trim() || "Campaign";
+}
+
 /** Compute "Week N of M" from the campaign's week_started_at clock.
  *  Returns null if week_started_at isn't set — UI falls back to an
  *  honest "Week 1 · starting" or just the campaign name. */

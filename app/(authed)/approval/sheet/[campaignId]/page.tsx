@@ -42,7 +42,14 @@ export default async function ApprovalSheetPage({
 
   const rows = await getPendingApproval(campaignId);
   const todayLabel = formatDateHeader(new Date());
-  const campaignSlug = slugForFilename(meta.campaign_name ?? "campaign");
+  // UX audit 2026-04-23 item #2: the approver sees this page and the
+  // filename it suggests. Use `campaign_display_name` (migration 027)
+  // so "AUDIT · Wren Aerospace · Investor" becomes "Wren Aerospace"
+  // in the sheet title and the generated filename slug. Fall back to
+  // the internal `campaign_name` when the column is unset.
+  const displayName =
+    meta.campaign_display_name?.trim() || meta.campaign_name || "Campaign";
+  const campaignSlug = slugForFilename(displayName);
 
   return (
     <div
@@ -89,14 +96,14 @@ export default async function ApprovalSheetPage({
             </div>
           </div>
           <span className="ach-sub">
-            Campaign: {meta.campaign_name ?? "Untitled"}
+            Campaign: {displayName}
           </span>
         </div>
 
         <div className="sheet-head-strip">
           <div className="sh-left">
             <span className="sh-title">
-              {todayLabel} Outreach Summary for {meta.campaign_name ?? "Campaign"} v1
+              {todayLabel} Outreach Summary for {displayName} v1
             </span>
             <span className="sh-meta">
               {" · "}

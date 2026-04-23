@@ -43,6 +43,10 @@ export interface InvestorModalData {
   campaign: {
     id: string;
     name: string | null;
+    /** User-facing label — see `displayNameFor(campaign)` helper. Null
+     *  falls back to `name` at render time. Introduced by migration 027
+     *  (UX audit 2026-04-23 item #2). */
+    display_name: string | null;
     campaign_intent: "investor" | "customer" | "supplier" | null;
     company_description: string | null;
     raise_size: string | null;
@@ -173,6 +177,7 @@ export async function getInvestorModalData(
       campaign:campaigns (
         id,
         name,
+        display_name,
         campaign_intent,
         company_description,
         raise_size,
@@ -369,6 +374,7 @@ export async function getInvestorModalData(
       ? {
           id: campaignRow.id,
           name: campaignRow.name ?? null,
+          display_name: campaignRow.display_name ?? null,
           campaign_intent:
             campaignRow.campaign_intent === "investor" ||
             campaignRow.campaign_intent === "customer" ||

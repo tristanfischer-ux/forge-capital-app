@@ -5,6 +5,18 @@ import { getPendingApproval, getApprovalCampaignMeta } from "@/lib/queries/appro
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
+ * Resolve the user-facing label for the email subject + body. `meta` comes
+ * from getApprovalCampaignMeta which now carries both `campaign_name`
+ * (internal audit token) and `campaign_display_name` (migration 027, UX
+ * audit 2026-04-23 item #2). Prefer the display name — this email lands
+ * in a reviewer's inbox and "[APPROVAL] AUDIT · Wren Aerospace · Investor
+ * — …" is the exact leak we're fixing.
+ */
+function resolveDisplay(meta: { campaign_display_name: string | null; campaign_name: string | null }): string {
+  return meta.campaign_display_name?.trim() || meta.campaign_name || "Campaign";
+}
+
+/**
  * Email the outgoing approval sheet as a plain-text list to a review
  * address. Used when the founder is away from their desk and wants
  * to approve / reject rows from a phone — they reply to the email
@@ -45,13 +57,14 @@ export async function emailApprovalListToAddress(
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const subject = `[APPROVAL] ${meta.campaign_name ?? "Campaign"} — ${rows.length} investors for review · ${today}`;
+  const displayName = resolveDisplay(meta);
+  const subject = `[APPROVAL] ${displayName} — ${rows.length} investors for review · ${today}`;
 
   const lines: string[] = [];
   lines.push(
     `Hi,`,
     ``,
-    `Below are the ${rows.length} investors the pipeline has surfaced for ${meta.campaign_name ?? "the campaign"} as of ${today}.`,
+    `Below are the ${rows.length} investors the pipeline has surfaced for ${displayName} as of ${today}.`,
     ``,
     `For each row, reply with one of:`,
     `  ok     — approve, proceed to draft`,

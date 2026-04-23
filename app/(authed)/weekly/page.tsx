@@ -104,7 +104,10 @@ export default async function WeeklyPage({
   // useful. Header is now just the campaign name + intent. The ISO
   // calendar week number is kept as a subtle timestamp on the
   // generated line for reference, nothing more.
-  const weekHeading = `${summary.campaignName} · ${intentLabel}`;
+  // UX audit 2026-04-23 item #2: the weekly digest header goes to the
+  // counterpart, so render the user-facing `campaignDisplayName`
+  // (migration 027) — never the internal "AUDIT · …" tracker token.
+  const weekHeading = `${summary.campaignDisplayName} · ${intentLabel}`;
 
   const generatedHuman = formatGeneratedLabel(summary.generatedAt);
 

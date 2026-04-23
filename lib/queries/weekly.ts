@@ -83,7 +83,14 @@ export interface SteerCallout {
 
 export interface WeeklySummary {
   campaignId: string;
+  /** Internal auditable campaign name (e.g. "AUDIT · Wren Aerospace · Investor").
+   *  Kept so admin surfaces can read the raw identifier. UX surfaces must
+   *  render `campaignDisplayName` instead. UX audit 2026-04-23 item #2. */
   campaignName: string;
+  /** User-facing display label (migration 027). Falls back to
+   *  `campaignName` when unset. This is what renders in the weekly
+   *  digest header sent to the counterpart. */
+  campaignDisplayName: string;
   campaignIntent: "investor" | "customer" | "supplier";
   /** Calendar week number of this year (1-53). */
   weekNumber: number;
@@ -160,6 +167,7 @@ interface PartnerJoinRow {
 interface CampaignRow {
   id: string;
   name: string;
+  display_name?: string | null;
   campaign_intent: string;
   created_at: string | null;
 }
@@ -212,7 +220,7 @@ async function getWeeklySummaryForCampaign(
   const { data: campaignData, error: campaignErr } = await supabase
     .from("campaigns")
     .select(
-      "id, name, campaign_intent, created_at, counterpart_name, counterpart_email, week_started_at, week_count_target",
+      "id, name, display_name, campaign_intent, created_at, counterpart_name, counterpart_email, week_started_at, week_count_target",
     )
     .eq("id", campaignId)
     .single();
@@ -505,9 +513,16 @@ async function getWeeklySummaryForCampaign(
   }
   const weekCountTarget = campaignAny.week_count_target ?? 16;
 
+  // UX audit 2026-04-23 item #2: the counterpart-facing weekly digest
+  // header must use the display label, never the internal audit token.
+  const campaignDisplayName =
+    (campaign as { display_name?: string | null }).display_name?.trim() ||
+    campaign.name;
+
   return {
     campaignId: campaign.id,
     campaignName: campaign.name,
+    campaignDisplayName,
     campaignIntent: intent,
     weekNumber,
     weekOfCampaign,

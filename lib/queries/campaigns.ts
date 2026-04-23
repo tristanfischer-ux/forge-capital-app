@@ -8,6 +8,14 @@ import { createServerClient } from "@/lib/supabase/server";
 export interface CampaignSummary {
   id: string;
   name: string;
+  /** User-facing label used in email subjects, approval sheet titles,
+   *  weekly digest headers, and the outbound email-list subject. Null
+   *  when the column is unset for this campaign; use `displayNameFor`
+   *  to resolve to `name` as a fallback. Introduced by migration 027
+   *  (UX audit 2026-04-23 item #2) to stop internal tracker tokens
+   *  ("AUDIT · Wren Aerospace · Investor") leaking into real
+   *  counterparty-facing strings. */
+  display_name: string | null;
   campaign_intent: "investor" | "customer" | "supplier";
   status: string;
   /** How many campaign_partners rows belong to this campaign (0 if empty). */
@@ -40,7 +48,7 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
     supabase
       .from("campaigns")
       .select(
-        "id, name, campaign_intent, status, created_at, counterpart_name, counterpart_email, counterpart_role, week_started_at, week_count_target",
+        "id, name, display_name, campaign_intent, status, created_at, counterpart_name, counterpart_email, counterpart_role, week_started_at, week_count_target",
       )
       .neq("status", "archived")
       .order("name", { ascending: true }),
@@ -65,6 +73,7 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
   interface CampaignJoinRow {
     id: string;
     name: string;
+    display_name: string | null;
     campaign_intent: string;
     status: string;
     created_at: string | null;
@@ -78,6 +87,7 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
   return campaignRows.map((row) => ({
     id: row.id,
     name: row.name,
+    display_name: row.display_name ?? null,
     campaign_intent: row.campaign_intent as CampaignSummary["campaign_intent"],
     status: row.status,
     partner_count: counts.get(row.id) ?? 0,
@@ -97,5 +107,6 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
 export {
   counterpartLabel,
   computeCampaignWeek,
+  displayNameFor,
   resolveCurrentCampaignId,
 } from "./campaigns-shared";

@@ -1,3 +1,4 @@
+import { displayNameFor } from "@/lib/queries/campaigns-shared";
 import type { InvestorModalData } from "@/lib/queries/investorModal";
 
 /**
@@ -323,10 +324,13 @@ function deriveRecipientAngle(data: InvestorModalData): string | null {
 }
 
 function deriveSubject(data: InvestorModalData): string {
-  const campaignName = data.campaign?.name ?? "Campaign";
-  // Strip internal prefixes ("AUDIT · ") and workstream suffixes
-  // ("· Investor") so the subject reads as the company name, not the
-  // tracker filename.
+  // Source of truth is the campaign's user-facing `display_name` column
+  // (migration 027) — `displayNameFor` falls back to `name` when it's
+  // unset. The earlier regex strip (AUDIT prefix / workstream suffix)
+  // stays as a belt-and-braces fallback so campaigns that somehow haven't
+  // been backfilled still produce a clean subject line. UX audit 2026-04-23
+  // item #2: internal tracker tokens must never leak into outbound email.
+  const campaignName = displayNameFor(data.campaign);
   const displayName = campaignName
     .replace(/^audit\s*[·|:]?\s*/i, "")
     .replace(/\s*[·|]\s*(investor|customer|supplier)\s*$/i, "")
