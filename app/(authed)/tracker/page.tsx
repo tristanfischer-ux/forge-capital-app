@@ -9,9 +9,10 @@ import {
   isTrackerTierFilter,
   type TrackerTierFilter,
 } from "@/lib/queries/tracker";
+import { getTrackerActionPanel } from "@/lib/queries/tracker-action-panel";
 import { TrackerTable } from "./TrackerTable";
 import { StatusSummary } from "./StatusSummary";
-import { TrackerStatTilesStrip } from "./StatTilesStrip";
+import { TrackerActionPanel } from "./TrackerActionPanel";
 import { TrackerHealthCallout } from "./TrackerHealthCallout";
 import { TrackerDropZone } from "./TrackerDropZone";
 
@@ -92,7 +93,13 @@ export default async function TrackerPage({
   }
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
-  const rows = await getTrackerRows(campaignId, tierFilter);
+  const [rows, actionPanel] = await Promise.all([
+    getTrackerRows(campaignId, tierFilter),
+    // UX audit 2026-04-23 item #7: the old right-side chart + stat strip
+    // was static. The action panel shows Next step / Recent activity /
+    // Needs attention — all decision-oriented, all real data.
+    getTrackerActionPanel(campaignId),
+  ]);
 
   return (
     <section id="tracker" className="section" style={{ marginTop: 0 }}>
@@ -148,8 +155,12 @@ export default async function TrackerPage({
         <TierFilterBanner tier={tierFilter} campaignId={campaignId} />
       ) : null}
 
-      {/* Stat-tiles strip — 4 aggregate counts computed live from rows. */}
-      <TrackerStatTilesStrip rows={rows} />
+      {/* UX audit 2026-04-23 item #7: Next-step action panel replaces
+          the static stat-tiles strip. Three decision surfaces —
+          pending approval count with primary CTA, recent contact
+          events, and rows needing attention per the +6 / +7 / +10
+          thresholds. See TrackerActionPanel.tsx for the full spec. */}
+      <TrackerActionPanel campaignId={campaignId} data={actionPanel} />
 
       {rows.length === 0 ? (
         <EmptyState campaignName={activeCampaign?.name ?? ""} />
@@ -171,12 +182,32 @@ export default async function TrackerPage({
             <GmailSyncPendingBanner />
           ) : null}
 
-          <StatusSummary rows={rows} />
           <TrackerTable
             rows={rows}
             campaignName={activeCampaign?.name}
             counterpartName={activeCampaign?.counterpart_name ?? undefined}
           />
+
+          {/* UX audit 2026-04-23 item #7: the status-distribution strip
+              moves below the grid as a smaller widget — useful context,
+              not a decision surface, so no longer commands top-of-page
+              real estate. */}
+          <div style={{ marginTop: 16 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--text-dim)",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                marginBottom: 8,
+              }}
+            >
+              Status distribution
+            </div>
+            <StatusSummary rows={rows} />
+          </div>
+
           <TrackerHealthCallout />
         </>
       )}
