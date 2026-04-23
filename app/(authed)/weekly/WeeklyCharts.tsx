@@ -258,15 +258,18 @@ export function StatusDistributionChart({
 }: {
   distribution: StatusDistribution;
 }) {
-  // V4 viewbox is 380x220. Each bar is 40px wide; baseline is y=190.
+  // Widened from V4's 380x220 → 500x220 on 2026-04-23 so the Prior/This
+  // week labels and delta callouts don't crowd each other at this card's
+  // rendered width. Bars remain 40px wide; delta callouts anchored to
+  // the right gutter.
   const baseline = 190;
   const maxHeight = 170; // baseline - 20 for a small top gutter
   const maxTotal = Math.max(1, distribution.thisWeek.total, distribution.priorWeek.total);
   const scale = (v: number) => (v / maxTotal) * maxHeight;
 
-  const priorX = 80;
-  const thisX = 210;
-  const barW = 40;
+  const priorX = 110;
+  const thisX = 270;
+  const barW = 50;
 
   const deltaPct = (current: number, prior: number): string => {
     if (prior === 0 && current === 0) return "no activity";
@@ -316,6 +319,39 @@ export function StatusDistributionChart({
         </g>
       ) : null;
 
+    // Empty-state outline: when a week has zero activity, draw a dashed
+    // ghost rectangle so both columns are visibly present. Without this,
+    // "This week" collapses to just a text label and the chart looks
+    // asymmetric (Tristan's 2026-04-23 "two columns, writing is weird"
+    // report).
+    if (values.total === 0) {
+      return (
+        <g key={`empty-${x}`}>
+          <rect
+            x={x}
+            y={baseline - 30}
+            width={barW}
+            height={30}
+            fill="none"
+            stroke={CHART_COLOURS.baseline}
+            strokeWidth="1"
+            strokeDasharray="3 3"
+            rx="2"
+          />
+          <text
+            x={x + barW / 2}
+            y={baseline - 12}
+            fill={CHART_COLOURS.axisLabel}
+            fontSize="10"
+            textAnchor="middle"
+            fontFamily="-apple-system"
+          >
+            no activity
+          </text>
+        </g>
+      );
+    }
+
     return (
       <>
         {drawRect(posY, posH, colour.pos, values.positive, `pos-${x}`)}
@@ -352,16 +388,16 @@ export function StatusDistributionChart({
       </div>
       <svg
         className="chart-svg"
-        viewBox="0 0 380 220"
+        viewBox="0 0 500 220"
         xmlns="http://www.w3.org/2000/svg"
         role="img"
         aria-label="Status distribution this week versus prior week"
       >
         {/* baseline */}
         <line
-          x1="70"
+          x1="90"
           y1={baseline}
-          x2="360"
+          x2="470"
           y2={baseline}
           stroke={CHART_COLOURS.baseline}
           strokeWidth="1"
@@ -421,7 +457,7 @@ export function StatusDistributionChart({
 
         {/* Delta callouts */}
         <text
-          x="305"
+          x="400"
           y="90"
           fill={CHART_COLOURS.positive}
           fontSize="11"
@@ -431,7 +467,7 @@ export function StatusDistributionChart({
           {deltaPct(distribution.thisWeek.positive, distribution.priorWeek.positive)}
         </text>
         <text
-          x="305"
+          x="400"
           y="105"
           fill={CHART_COLOURS.priorLabel}
           fontSize="10"
@@ -440,7 +476,7 @@ export function StatusDistributionChart({
           positive
         </text>
         <text
-          x="305"
+          x="400"
           y="175"
           fill={CHART_COLOURS.priorLabel}
           fontSize="10"
@@ -449,7 +485,7 @@ export function StatusDistributionChart({
           negatives
         </text>
         <text
-          x="305"
+          x="400"
           y="190"
           fill={CHART_COLOURS.negative}
           fontSize="11"
