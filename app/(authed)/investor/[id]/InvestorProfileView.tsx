@@ -30,9 +30,78 @@ export function InvestorProfileView({
         <ThesisBlock profile={profile} />
         <SynthesisBlock profile={profile} />
         <PartnersBlock partners={profile.partners} />
+        <RelatedFirmsBlock relatedFirms={profile.related_firms} />
         <ActivityBlock campaignLinks={profile.campaign_links} />
       </div>
       <SideRail profile={profile} />
+    </div>
+  );
+}
+
+function RelatedFirmsBlock({
+  relatedFirms,
+}: {
+  relatedFirms: InvestorProfileData["related_firms"];
+}) {
+  if (relatedFirms.length === 0) {
+    return (
+      <div className="m-section">
+        <h3>Related firms</h3>
+        <p style={{ color: "var(--text-dim)" }}>
+          No portfolio overlap with other investors yet — fills in as the
+          nightly pipeline enriches more firms with their portfolio pages
+          (research/04-research-portfolio.js).
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="m-section">
+      <h3>Related firms · {relatedFirms.length}</h3>
+      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        {relatedFirms.map((r) => (
+          <li
+            key={r.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "8px 0",
+              borderBottom: "1px solid var(--border-soft)",
+              fontSize: 12,
+              gap: 10,
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <Link
+                href={`/investor/${r.id}`}
+                className="partner-link"
+                style={{ fontWeight: 500 }}
+                aria-label={`Open ${r.firm_name ?? "firm"} profile`}
+              >
+                {r.firm_name ?? "Unnamed firm"}
+              </Link>
+              {r.shared_examples.length > 0 ? (
+                <div
+                  style={{
+                    color: "var(--text-faint)",
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  Shared: {r.shared_examples.join(", ")}
+                </div>
+              ) : null}
+            </div>
+            <span
+              className="tag-chip tag-neutral"
+              style={{ flexShrink: 0 }}
+            >
+              {r.shared_count} shared
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -372,11 +441,77 @@ function SideRail({ profile }: { profile: InvestorProfileData }) {
     <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <FactsCard profile={profile} />
       <FocusCard profile={profile} />
-      {profile.portfolio_companies.length > 0 ? (
+      {profile.canonical_portfolio.length > 0 ? (
+        <CanonicalPortfolioCard rows={profile.canonical_portfolio} />
+      ) : profile.portfolio_companies.length > 0 ? (
         <PortfolioCard names={profile.portfolio_companies} />
       ) : null}
       <ProvenanceCard profile={profile} />
     </aside>
+  );
+}
+
+function CanonicalPortfolioCard({
+  rows,
+}: {
+  rows: InvestorProfileData["canonical_portfolio"];
+}) {
+  const cap = 24;
+  const shown = rows.slice(0, cap);
+  const remainder = Math.max(0, rows.length - cap);
+  return (
+    <div className="ms-card">
+      <h4>Portfolio · {rows.length}</h4>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {shown.map((r) => (
+          <div
+            key={r.slug}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 8,
+              fontSize: 12,
+            }}
+          >
+            <Link
+              href={`/portfolio/${r.slug}`}
+              className="partner-link"
+              style={{ fontWeight: 500, minWidth: 0 }}
+              aria-label={`Open portfolio company profile for ${r.name}`}
+            >
+              {r.name}
+            </Link>
+            {r.round || r.round_at || r.amount_raw ? (
+              <span
+                style={{
+                  color: "var(--text-faint)",
+                  fontSize: 11,
+                  flexShrink: 0,
+                  textAlign: "right",
+                }}
+              >
+                {[r.round, r.round_at, r.amount_raw]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {remainder > 0 ? (
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--text-faint)",
+            marginTop: 6,
+            fontStyle: "italic",
+          }}
+        >
+          + {remainder} more
+        </div>
+      ) : null}
+    </div>
   );
 }
 

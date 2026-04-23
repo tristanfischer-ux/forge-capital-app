@@ -59,7 +59,28 @@ export interface InvestorProfileData {
   data_quality_score: number | null;
   hardware_fit_score: number | null;
   last_enriched: string | null;
+  /** Legacy free-text portfolio names parsed from synthesis_data JSONB.
+   *  Kept as a fallback for firms whose canonical rows haven't landed
+   *  yet — gets hidden in the UI when `canonical_portfolio` has rows. */
   portfolio_companies: string[];
+  /** Canonical portfolio companies linked via the
+   *  `investor_portfolio_links` junction (migration 018). Each name
+   *  links to /portfolio/[slug] in the UI. */
+  canonical_portfolio: Array<{
+    slug: string;
+    name: string;
+    round: string | null;
+    round_at: string | null;
+    amount_raw: string | null;
+  }>;
+  /** Other investors who share portfolio companies with this one,
+   *  ranked by overlap count descending. Top 10. */
+  related_firms: Array<{
+    id: number;
+    firm_name: string | null;
+    shared_count: number;
+    shared_examples: string[];
+  }>;
   partners: InvestorProfilePartner[];
   campaign_links: InvestorProfileCampaignLink[];
 }
@@ -190,6 +211,111 @@ export async function getInvestorProfile(
     }
   }
 
+  // Canonical portfolio companies via the investor_portfolio_links
+  // junction (migration 018). These render in the UI as links to
+  // /portfolio/[slug]; the legacy free-text `portfolio_companies`
+  // is a fallback shown only when the canonical set is empty.
+  type CanonicalPortfolio = InvestorProfileData["canonical_portfolio"];
+  let canonicalPortfolio: CanonicalPortfolio = [];
+  const portfolioIds: number[] = [];
+  {
+    const { data: portRows, error: portErr } = await supabase
+      .from("investor_portfolio_links")
+      .select(
+        `portfolio_company_id, round, round_at, amount_raw,
+         portfolio_companies:portfolio_company_id ( id, slug, name )`,
+      )
+      .eq("investor_id", investorId)
+      .order("round_at", { ascending: false, nullsFirst: false })
+      .limit(500);
+    if (portErr) {
+      console.error("getInvestorProfile portfolio fetch failed:", portErr.message);
+    } else {
+      const rows = (portRows ?? []) as unknown as Array<{
+        portfolio_company_id: number;
+        round: string | null;
+        round_at: string | null;
+        amount_raw: string | null;
+        portfolio_companies: { id: number; slug: string; name: string } | null;
+      }>;
+      canonicalPortfolio = rows
+        .filter((r) => r.portfolio_companies)
+        .map((r) => ({
+          slug: r.portfolio_companies!.slug,
+          name: r.portfolio_companies!.name,
+          round: r.round,
+          round_at: r.round_at,
+          amount_raw: r.amount_raw,
+        }));
+      for (const r of rows) {
+        if (r.portfolio_company_id) portfolioIds.push(r.portfolio_company_id);
+      }
+    }
+  }
+
+  // Related firms = other investors sharing any portfolio company with
+  // this one. Grouped + ranked client-side (portfolioIds is bounded).
+  type RelatedFirms = InvestorProfileData["related_firms"];
+  let relatedFirms: RelatedFirms = [];
+  if (portfolioIds.length > 0) {
+    const { data: relRows, error: relErr } = await supabase
+      .from("investor_portfolio_links")
+      .select(
+        `investor_id, portfolio_company_id,
+         investors_mirror:investor_id ( id, firm_name, actively_deploying ),
+         portfolio_companies:portfolio_company_id ( name )`,
+      )
+      .in("portfolio_company_id", portfolioIds)
+      .neq("investor_id", investorId);
+    if (relErr) {
+      console.error("getInvestorProfile related firms fetch failed:", relErr.message);
+    } else {
+      const rows = (relRows ?? []) as unknown as Array<{
+        investor_id: number;
+        portfolio_company_id: number;
+        investors_mirror: {
+          id: number;
+          firm_name: string | null;
+          actively_deploying: boolean | null;
+        } | null;
+        portfolio_companies: { name: string } | null;
+      }>;
+      // Group by other investor_id, count shared companies, keep top 3
+      // example names for the hover-line.
+      const bucket = new Map<
+        number,
+        {
+          firm_name: string | null;
+          shared_count: number;
+          shared_examples: Set<string>;
+        }
+      >();
+      for (const r of rows) {
+        const im = r.investors_mirror;
+        if (!im || im.actively_deploying !== true) continue;
+        const b = bucket.get(r.investor_id) ?? {
+          firm_name: im.firm_name,
+          shared_count: 0,
+          shared_examples: new Set<string>(),
+        };
+        b.shared_count += 1;
+        if (r.portfolio_companies?.name && b.shared_examples.size < 3) {
+          b.shared_examples.add(r.portfolio_companies.name);
+        }
+        bucket.set(r.investor_id, b);
+      }
+      relatedFirms = Array.from(bucket.entries())
+        .map(([id, b]) => ({
+          id,
+          firm_name: b.firm_name,
+          shared_count: b.shared_count,
+          shared_examples: Array.from(b.shared_examples),
+        }))
+        .sort((a, b) => b.shared_count - a.shared_count || (a.firm_name ?? "").localeCompare(b.firm_name ?? ""))
+        .slice(0, 10);
+    }
+  }
+
   const firmRow = firm as unknown as {
     id: number;
     firm_name: string | null;
@@ -248,6 +374,8 @@ export async function getInvestorProfile(
     hardware_fit_score: firmRow.hardware_fit_score,
     last_enriched: firmRow.last_enriched,
     portfolio_companies: parsePortfolioCompanies(firmRow.synthesis_data),
+    canonical_portfolio: canonicalPortfolio,
+    related_firms: relatedFirms,
     partners,
     campaign_links: campaignLinks,
   };
