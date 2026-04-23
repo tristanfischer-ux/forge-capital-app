@@ -38,9 +38,18 @@ export default async function InvestorProfilePage(props: {
             Investor profile · firm id {profile.id}
           </p>
         </div>
-        <Link href="/match" className="as-link" style={{ fontSize: 13 }}>
-          ← Back to Find a Match
-        </Link>
+        <div style={{ display: "flex", gap: 14, alignItems: "baseline" }}>
+          <Link
+            href={`/graph/investor/${profile.id}`}
+            className="as-link"
+            style={{ fontSize: 13 }}
+          >
+            View as graph →
+          </Link>
+          <Link href="/match" className="as-link" style={{ fontSize: 13 }}>
+            ← Back to Find a Match
+          </Link>
+        </div>
       </div>
 
       <InvestorProfileView profile={profile} />

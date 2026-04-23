@@ -35,9 +35,18 @@ export default async function PortfolioProfilePage(props: {
             Portfolio company · slug <code>{company.slug}</code>
           </p>
         </div>
-        <Link href="/match" className="as-link" style={{ fontSize: 13 }}>
-          ← Back to Find a Match
-        </Link>
+        <div style={{ display: "flex", gap: 14, alignItems: "baseline" }}>
+          <Link
+            href={`/graph/portfolio/${company.slug}`}
+            className="as-link"
+            style={{ fontSize: 13 }}
+          >
+            View as graph →
+          </Link>
+          <Link href="/match" className="as-link" style={{ fontSize: 13 }}>
+            ← Back to Find a Match
+          </Link>
+        </div>
       </div>
 
       <PortfolioView company={company} />

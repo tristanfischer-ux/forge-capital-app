@@ -106,6 +106,17 @@ export const DYNAMIC_TRAILS: DynamicTrailMatcher[] = [
       { label: "Sheet" },
     ],
   },
+  {
+    // /graph/[entity]/[id] → Home · Find a Match · <centre label> · graph
+    // Label overridden by the page via <BreadcrumbsOverride> with the
+    // centre entity's human-readable name + " · graph" suffix.
+    match: /^\/graph\/(?<entity>[^/]+)\/(?<id>[^/]+)$/,
+    build: () => [
+      { label: "Home", href: "/home" },
+      { label: "Find a Match", href: "/match" },
+      { label: "Graph" },
+    ],
+  },
 ];
 
 /**

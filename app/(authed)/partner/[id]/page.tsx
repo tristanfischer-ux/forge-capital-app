@@ -45,9 +45,18 @@ export default async function PartnerProfilePage(props: {
             Partner profile · partner id {partner.id}
           </p>
         </div>
-        <Link href={backHref} className="as-link" style={{ fontSize: 13 }}>
-          {backLabel}
-        </Link>
+        <div style={{ display: "flex", gap: 14, alignItems: "baseline" }}>
+          <Link
+            href={`/graph/partner/${partner.id}`}
+            className="as-link"
+            style={{ fontSize: 13 }}
+          >
+            View as graph →
+          </Link>
+          <Link href={backHref} className="as-link" style={{ fontSize: 13 }}>
+            {backLabel}
+          </Link>
+        </div>
       </div>
 
       <PartnerProfileView partner={partner} />
