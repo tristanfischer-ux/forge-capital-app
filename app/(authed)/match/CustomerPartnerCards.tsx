@@ -75,120 +75,153 @@ function CustomerCard({
     .filter((s): s is string => !!s && s.trim().length > 0)
     .join(" · ");
 
+  // Primary drill-in: the draft preview page. That page shows the
+  // composed email + test-send affordance + contact picker + Gmail
+  // create-draft button. Tristan 2026-04-24: "Open in approval →"
+  // just scrolled to the sheet row — useless. Card click now opens
+  // the row's draft so he can see what would go out, edit the
+  // contact, test-send to his mac.com inbox, etc. Matches the
+  // investor double-click-to-profile pattern, just routed at the
+  // draft surface (the customer profile page at /customer/[id] is
+  // a follow-up).
+  const draftHref = `/tracker/${card.campaign_partner_id}/draft`;
+
   return (
-    <div
+    <Link
+      href={draftHref}
       className="result-card"
       style={{
+        display: "block",
         border: "1px solid var(--border)",
         borderRadius: 10,
-        padding: "12px 16px",
+        padding: "14px 16px",
         background: "var(--surface)",
-        display: "grid",
-        gridTemplateColumns: "1fr auto",
-        gap: 10,
+        textDecoration: "none",
+        color: "inherit",
+        transition: "border-color 120ms ease, box-shadow 120ms ease",
       }}
     >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          {flag ? <span style={{ fontSize: 14 }}>{flag}</span> : null}
-          <span
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div
             style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "var(--text)",
+              display: "flex",
+              alignItems: "baseline",
+              gap: 8,
+              flexWrap: "wrap",
             }}
           >
-            {card.firm_name ?? "— unnamed customer —"}
-          </span>
-          {card.website ? (
-            <a
-              href={`https://${card.website.replace(/^https?:\/\//, "")}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            {flag ? <span style={{ fontSize: 14 }}>{flag}</span> : null}
+            <span
               style={{
-                fontSize: 11,
-                color: "var(--text-faint)",
-                textDecoration: "none",
+                fontSize: 14,
+                fontWeight: 600,
+                color: "var(--text)",
               }}
             >
-              {card.website} ↗
-            </a>
-          ) : null}
-          <WaveChip wave={card.wave} />
-          <StatusChip code={card.status_code} label={card.status_label} />
-        </div>
+              {card.firm_name ?? "— unnamed customer —"}
+            </span>
+            {card.website ? (
+              <a
+                href={`https://${card.website.replace(/^https?:\/\//, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-faint)",
+                  textDecoration: "none",
+                }}
+              >
+                {card.website} ↗
+              </a>
+            ) : null}
+            <WaveChip wave={card.wave} />
+            <StatusChip code={card.status_code} label={card.status_label} />
+          </div>
 
-        {card.pitch_hook ? (
-          <p
+          {/* Why them — the pitch_hook from the briefing. Raised to
+              13.5px + near-black so it reads as the primary content
+              of the card, not a footnote (Tristan 2026-04-24: "the
+              whole why them synthesis would make sense to see higher
+              up"). The metadata row below uses smaller muted type so
+              the eye lands on the why-them first. */}
+          {card.pitch_hook ? (
+            <p
+              style={{
+                margin: "8px 0 0 0",
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "var(--text)",
+                fontWeight: 500,
+              }}
+            >
+              {card.pitch_hook}
+            </p>
+          ) : null}
+
+          <div
             style={{
-              margin: "6px 0 0 0",
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: "var(--text-dim)",
+              marginTop: 8,
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              fontSize: 11,
+              color: "var(--text-faint)",
             }}
           >
-            {card.pitch_hook}
-          </p>
-        ) : null}
+            {card.type ? <span>{card.type}</span> : null}
+            {card.hq_location ? <span>· {card.hq_location}</span> : null}
+            {ebitda ? <span>· {ebitda}</span> : null}
+            {contactLine ? <span>· {contactLine}</span> : null}
+            <span
+              style={{
+                color:
+                  card.contact_count > 1
+                    ? "var(--accent)"
+                    : "var(--text-faint)",
+              }}
+            >
+              · {card.contact_count}{" "}
+              {card.contact_count === 1 ? "contact" : "contacts"}
+            </span>
+          </div>
+        </div>
 
         <div
           style={{
-            marginTop: 6,
             display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            fontSize: 11,
-            color: "var(--text-faint)",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 6,
           }}
         >
-          {card.type ? <span>{card.type}</span> : null}
-          {card.hq_location ? <span>· {card.hq_location}</span> : null}
-          {ebitda ? <span>· {ebitda}</span> : null}
-          {contactLine ? <span>· {contactLine}</span> : null}
           <span
             style={{
-              color:
-                card.contact_count > 1
-                  ? "var(--accent)"
-                  : "var(--text-faint)",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--accent)",
+              whiteSpace: "nowrap",
             }}
           >
-            · {card.contact_count}{" "}
-            {card.contact_count === 1 ? "contact" : "contacts"}
+            Open draft →
           </span>
+          <Link
+            href={`/approval?c=${campaignId}#${card.campaign_partner_id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontSize: 10,
+              color: "var(--text-faint)",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Jump to approval row
+          </Link>
         </div>
       </div>
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: 6,
-        }}
-      >
-        <Link
-          href={`/approval?c=${campaignId}#${card.campaign_partner_id}`}
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "var(--accent)",
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Open in approval →
-        </Link>
-      </div>
-    </div>
+    </Link>
   );
 }
 
