@@ -811,7 +811,7 @@ export function FindAMatch({
         <>
           {/* V4 `.result-card` stack (lines 1000-1140). */}
           {archetype !== "investor" ? (
-            <ArchetypePoolEmpty archetype={archetype} />
+            <ArchetypePoolEmpty archetype={archetype} campaignId={campaignId} />
           ) : rows.length === 0 ? (
             <EmptyResults />
           ) : (
@@ -1028,33 +1028,62 @@ function AutoSuggestBanner({
   const label =
     detected === "investor" ? "Investor" : detected === "customer" ? "Customer" : "Supplier";
   const signalsText = signals.map((s) => `“${s}”`).join(", ");
+
+  // When the detected archetype matches the selected one, the banner
+  // is just noise confirming the user already picked right — suppress
+  // the "signal" framing. When it DIFFERS (e.g. pasting an investor
+  // pitch into a customer campaign), frame it as a suggestion, NOT as
+  // a declarative classification — the user's explicit selection
+  // always wins. The £30K-is-an-investor-cheque heuristic fires on
+  // the Fischer Farms container-rental deposit too; we can't silence
+  // it but we can stop the banner pretending it's authoritative.
+  if (!differs) {
+    return (
+      <div className="arch-suggest">
+        <span className="as-ico">✓</span>
+        <span>
+          Your text matches the selected <b>{label}</b> archetype.
+          {signals.length > 0 ? (
+            <>
+              {" "}
+              <span style={{ color: "var(--text-faint)" }}>
+                Signal words: {signalsText}.
+              </span>
+            </>
+          ) : null}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="arch-suggest">
-      <span className="as-ico">✓</span>
+      <span className="as-ico">!</span>
       <span>
-        Auto-suggested archetype from your text: <b>{label}</b> &middot; signal
-        words detected: <span>{signalsText}</span>.
+        Your text reads <b>{label}</b>-shaped
+        {signals.length > 0 ? (
+          <>
+            {" "}
+            (signal words: <span>{signalsText}</span>)
+          </>
+        ) : null}
+        , but you’re on a different archetype. Leave as-is if you
+        meant the current one, or switch below.
       </span>
-      {differs ? (
-        <span
-          className="as-link"
-          onClick={onOverride}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onOverride();
-            }
-          }}
-          role="button"
-          tabIndex={0}
-        >
-          Override →
-        </span>
-      ) : (
-        <span className="as-link" style={{ visibility: "hidden" }}>
-          Override →
-        </span>
-      )}
+      <span
+        className="as-link"
+        onClick={onOverride}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOverride();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        Switch to {label} →
+      </span>
     </div>
   );
 }
@@ -1289,7 +1318,12 @@ function ResultsHead({
             </>
           ) : (
             <>
-              Matched investors{" "}
+              Matched{" "}
+              {archetype === "customer"
+                ? "customers"
+                : archetype === "supplier"
+                  ? "suppliers"
+                  : "investors"}{" "}
               <span className="count">
                 &middot; showing {visibleCount} of {scoredLabel} scored
               </span>
@@ -1990,7 +2024,67 @@ function EmptyResults() {
   );
 }
 
-function ArchetypePoolEmpty({ archetype }: { archetype: Archetype }) {
+function ArchetypePoolEmpty({
+  archetype,
+  campaignId,
+}: {
+  archetype: Archetype;
+  campaignId: string;
+}) {
+  const label = archetype === "customer" ? "Customer" : "Supplier";
+  const labelLower = label.toLowerCase();
+
+  // Customer outreach doesn't flow through semantic match-scoring —
+  // the customer list is a curated set (e.g. the 93 Fischer Farms
+  // prospects from the V4 briefing), not a 50K-row pool. Point the
+  // founder at /approval where the actual customer partners live.
+  if (archetype === "customer") {
+    return (
+      <div
+        style={{
+          padding: "40px 24px",
+          textAlign: "center",
+          background: "var(--surface-alt)",
+          border: "1px dashed var(--border)",
+          borderRadius: 10,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+          Customer outreach doesn’t use semantic matching.
+        </div>
+        <p
+          style={{
+            margin: "6px auto 8px auto",
+            maxWidth: 460,
+            fontSize: 11,
+            lineHeight: 1.5,
+            color: "var(--text-dim)",
+          }}
+        >
+          Your customer list is a curated set (named retailers, growers,
+          DIY chains, DTC brands) — not a pool to score. Your Wave 1 / 2 / 3
+          / Niche prospects live on the approval sheet below.
+        </p>
+        <Link
+          href={`/approval?c=${campaignId}`}
+          style={{
+            display: "inline-block",
+            padding: "7px 14px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--accent)",
+            background: "var(--surface)",
+            border: "1px solid var(--accent)",
+            borderRadius: 999,
+            textDecoration: "none",
+          }}
+        >
+          Go to approval sheet →
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -2002,7 +2096,7 @@ function ArchetypePoolEmpty({ archetype }: { archetype: Archetype }) {
       }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-        {archetype === "customer" ? "Customer" : "Supplier"} pool lands in a later section.
+        {label} pool lands in a later section.
       </div>
       <p
         style={{
@@ -2014,8 +2108,8 @@ function ArchetypePoolEmpty({ archetype }: { archetype: Archetype }) {
         }}
       >
         Switch to <b>Investor</b> above to see the live investor pool, or wait
-        for the next Forge Capital pipeline release to populate the {archetype}{" "}
-        mirror.
+        for the next Forge Capital pipeline release to populate the{" "}
+        {labelLower} mirror.
       </p>
     </div>
   );
