@@ -36,6 +36,9 @@ export function HunterRow({
     "idle" | "ranking" | "done" | "failed"
   >("idle");
   const [rankingError, setRankingError] = useState<string | null>(null);
+  const [rankerModel, setRankerModel] = useState<
+    "deepseek-v4-flash" | "haiku-4-5" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [savingEmail, setSavingEmail] = useState<string | null>(null);
@@ -66,7 +69,7 @@ export function HunterRow({
           return;
         }
         // Show the raw list first so the user sees progress, then
-        // replace with the Opus-ranked list once it returns.
+        // replace with the model-ranked list once it returns.
         setCandidates(r.candidates);
         if (r.candidates.length === 0) {
           setError(
@@ -74,7 +77,7 @@ export function HunterRow({
           );
           return;
         }
-        // Fire the Opus role-relevance ranker.
+        // Fire the role-fit ranker (DeepSeek Flash primary, Haiku fallback).
         setRankingStatus("ranking");
         setRankingError(null);
         const ranked = await rankCandidatesForCampaignPartner(
@@ -87,6 +90,7 @@ export function HunterRow({
           return;
         }
         setCandidates(ranked.ranked);
+        setRankerModel(ranked.model);
         setRankingStatus("done");
       })
       .catch((e) =>
@@ -196,7 +200,7 @@ export function HunterRow({
             borderRadius: 4,
           }}
         >
-          Asking Opus who's the right person for this pitch…
+          Checking who's the right person for this pitch…
         </div>
       ) : rankingStatus === "failed" ? (
         <div
@@ -210,7 +214,7 @@ export function HunterRow({
             borderRadius: 4,
           }}
         >
-          Opus ranker unavailable — showing Hunter's native order.
+          Role-fit ranker unavailable — showing Hunter's native order.
           {rankingError ? ` (${rankingError})` : ""}
         </div>
       ) : rankingStatus === "done" && candidates && candidates.length > 0 ? (
@@ -226,8 +230,9 @@ export function HunterRow({
             lineHeight: 1.4,
           }}
         >
-          ✓ Opus ranked these by role-pitch fit. Top candidates most
-          likely the right person for your specific hook — pin & compare.
+          ✓ Ranked by role-pitch fit{rankerModel === "haiku-4-5" ? " (Haiku fallback)" : ""}. Top
+          candidates most likely the right person for your specific hook —
+          pin & compare.
         </div>
       ) : null}
       {loading ? (
@@ -255,9 +260,9 @@ export function HunterRow({
               const ap = pinned.has(a.email) ? 1 : 0;
               const bp = pinned.has(b.email) ? 1 : 0;
               if (ap !== bp) return bp - ap; // pinned first
-              // Then Opus rank when available (lower rank = better fit).
-              const ar = a.opus_rank ?? Number.MAX_SAFE_INTEGER;
-              const br = b.opus_rank ?? Number.MAX_SAFE_INTEGER;
+              // Then ranker output when available (lower rank = better fit).
+              const ar = a.rank ?? Number.MAX_SAFE_INTEGER;
+              const br = b.rank ?? Number.MAX_SAFE_INTEGER;
               if (ar !== br) return ar - br;
               return 0; // fall back to array order (Hunter's native ranking)
             })
@@ -311,7 +316,7 @@ export function HunterRow({
                 </button>
                 <div style={{ minWidth: 0, fontSize: 11 }}>
                   <div style={{ fontWeight: 600, color: "var(--text)" }}>
-                    {c.opus_rank != null ? (
+                    {c.rank != null ? (
                       <span
                         style={{
                           display: "inline-block",
@@ -319,17 +324,17 @@ export function HunterRow({
                           padding: "1px 5px",
                           fontSize: 9,
                           fontWeight: 700,
-                          color: c.opus_rank === 1 ? "white" : "var(--accent)",
+                          color: c.rank === 1 ? "white" : "var(--accent)",
                           background:
-                            c.opus_rank === 1
+                            c.rank === 1
                               ? "var(--accent)"
                               : "var(--accent-softer)",
                           borderRadius: 3,
                           verticalAlign: 1,
                         }}
-                        title={`Opus rank ${c.opus_rank}`}
+                        title={`Role-fit rank ${c.rank}${c.ranker_model ? ` (${c.ranker_model})` : ""}`}
                       >
-                        #{c.opus_rank}
+                        #{c.rank}
                       </span>
                     ) : null}
                     {c.email}{" "}
@@ -350,7 +355,7 @@ export function HunterRow({
                     {c.department ? ` · ${c.department}` : ""}
                     {ranking ? ` · ${ranking}` : ""}
                   </div>
-                  {c.opus_reason ? (
+                  {c.reason ? (
                     <div
                       style={{
                         fontSize: 11,
@@ -365,7 +370,7 @@ export function HunterRow({
                         borderRadius: 3,
                       }}
                     >
-                      {c.opus_reason}
+                      {c.reason}
                     </div>
                   ) : null}
                 </div>

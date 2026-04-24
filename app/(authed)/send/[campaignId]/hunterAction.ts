@@ -31,12 +31,17 @@ export interface HunterCandidate {
   sources_count: number | null;
   type: "personal" | "generic" | null;
   verification_status: string | null;
-  /** Opus-assigned relevance rank (1 = most likely right person for
-   *  THIS specific pitch). Null before the ranker has run. */
-  opus_rank: number | null;
-  /** One-sentence reasoning from Opus for this candidate. Null before
-   *  the ranker has run. */
-  opus_reason: string | null;
+  /** Role-fit rank (1 = most likely right person for THIS specific
+   *  pitch). Null before the ranker has run. */
+  rank: number | null;
+  /** One-sentence reasoning for why this candidate fits (or doesn't)
+   *  this specific pitch. Null before the ranker has run. */
+  reason: string | null;
+  /** Which model produced the rank — "deepseek-v4-flash" (primary via
+   *  OpenRouter) or "haiku-4-5" (fallback via Anthropic). Null before
+   *  the ranker has run. Displayed in the UI so Tristan knows when
+   *  we've fallen back. */
+  ranker_model: "deepseek-v4-flash" | "haiku-4-5" | null;
 }
 
 export type HunterHuntResult =
@@ -212,8 +217,9 @@ export async function huntCandidatesForCampaignPartner(
         typeof e.verification?.status === "string"
           ? e.verification.status
           : null,
-      opus_rank: null,
-      opus_reason: null,
+      rank: null,
+      reason: null,
+      ranker_model: null,
     }))
     .sort((a, b) => {
       // Ranking: personal > generic; confidence desc; position-filled
@@ -238,35 +244,42 @@ export async function huntCandidatesForCampaignPartner(
   };
 }
 
-/* ───────────────────────── Opus role-relevance ranker ─────────────────────── */
+/* ─────────────────────── Role-fit ranker (DeepSeek + Haiku) ──────────────── */
 
 export type RankCandidatesResult =
   | {
       ok: true;
       ranked: HunterCandidate[];
+      /** Which model produced the rank. Surfaced to the UI banner so
+       *  Tristan can tell when we've fallen back to Haiku. */
+      model: "deepseek-v4-flash" | "haiku-4-5";
     }
   | { ok: false; error: string };
 
 /**
- * Thin Opus layer between Hunter and the picker.
+ * Thin LLM layer between Hunter and the picker.
  *
  * Tristan 2026-04-24: "This Hunter thing is basically who has an
  * email — not very helpful. What we really want to figure out is
  * who's the right person to be speaking to."
  *
  * Given the campaign's product brief + hunting criteria + the
- * customer's pitch hook + the Hunter candidate list, asks Opus to
- * rank the candidates by role-pitch fit and return one-sentence
- * reasoning per candidate. The picker then displays them in rank
- * order with the reasoning below each.
+ * customer's pitch hook + the Hunter candidate list, asks a small
+ * model to rank the candidates by role-pitch fit and return
+ * one-sentence reasoning per candidate. The picker then displays
+ * them in rank order with the reasoning below each.
  *
- * Cost: one Opus call per customer per Hunter expansion. ~1K
- * input tokens + ~500 output tokens → around £0.01 per call.
+ * Two-tier model routing (2026-04-24):
+ *   PRIMARY — `deepseek/deepseek-v4-flash` via OpenRouter. ~£0.0002
+ *     per 23-candidate call (~1K in + ~500 out tokens). ~15× cheaper
+ *     than Haiku, ~300× cheaper than Opus 4.7. Structured-JSON tasks
+ *     with explicit rules don't need heavier reasoning.
+ *   FALLBACK — `claude-haiku-4-5` via Anthropic. Used when OpenRouter
+ *     errors, times out, or returns malformed JSON. ~£0.005 per call.
  *
- * Robustness: if Opus response is malformed JSON or the candidates
- * are empty, we return the original list unchanged with opus_rank
- * left null — the picker still renders with Hunter's native
- * ordering.
+ * Robustness: if BOTH models fail the candidate list is returned
+ * unchanged with rank/reason left null, and the picker falls back to
+ * Hunter's native ordering.
  */
 export async function rankCandidatesForCampaignPartner(
   campaignPartnerId: string,
@@ -276,15 +289,16 @@ export async function rankCandidatesForCampaignPartner(
     return { ok: false, error: "campaignPartnerId is required." };
   }
   if (!Array.isArray(candidates) || candidates.length === 0) {
-    return { ok: true, ranked: candidates };
+    return { ok: true, ranked: candidates, model: "deepseek-v4-flash" };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!openRouterKey && !anthropicKey) {
     return {
       ok: false,
       error:
-        "ANTHROPIC_API_KEY missing — cannot call the Opus ranker. Falling back to Hunter's native order.",
+        "Neither OPENROUTER_API_KEY nor ANTHROPIC_API_KEY is set — cannot rank candidates. Falling back to Hunter's native order.",
     };
   }
 
@@ -384,45 +398,129 @@ ${candidateLines}
 
 Return the JSON object now.`;
 
-  const client = new Anthropic({ apiKey });
-  let raw: string;
-  try {
-    const msg = await client.messages.create({
-      model: "claude-opus-4-7",
-      max_tokens: 4000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-    raw = msg.content
-      .map((c) => (c.type === "text" ? c.text : ""))
-      .join("")
+  // Try DeepSeek v4 Flash first (primary), fall back to Haiku 4.5.
+  // Each attempt returns either parsed JSON or a failure reason; we
+  // try Haiku only if DeepSeek fails (network error, HTTP non-200, or
+  // unparseable response).
+  type RankerAttempt =
+    | { ok: true; raw: string; model: "deepseek-v4-flash" | "haiku-4-5" }
+    | { ok: false; error: string };
+
+  async function tryDeepSeek(): Promise<RankerAttempt> {
+    if (!openRouterKey) {
+      return { ok: false, error: "OPENROUTER_API_KEY missing" };
+    }
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openRouterKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "deepseek/deepseek-v4-flash",
+          // JSON-mode keeps Flash from wrapping output in prose.
+          response_format: { type: "json_object" },
+          max_tokens: 4000,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return {
+          ok: false,
+          error: `DeepSeek HTTP ${res.status}: ${text.slice(0, 200)}`,
+        };
+      }
+      const payload = (await res.json()) as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+      };
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || content.trim().length === 0) {
+        return { ok: false, error: "DeepSeek returned empty content." };
+      }
+      return { ok: true, raw: content.trim(), model: "deepseek-v4-flash" };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? `DeepSeek fetch failed: ${err.message}` : "DeepSeek fetch failed.",
+      };
+    }
+  }
+
+  async function tryHaiku(): Promise<RankerAttempt> {
+    if (!anthropicKey) {
+      return { ok: false, error: "ANTHROPIC_API_KEY missing (no fallback available)" };
+    }
+    try {
+      const client = new Anthropic({ apiKey: anthropicKey });
+      const msg = await client.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+      const raw = msg.content
+        .map((c) => (c.type === "text" ? c.text : ""))
+        .join("")
+        .trim();
+      if (!raw) return { ok: false, error: "Haiku returned empty content." };
+      return { ok: true, raw, model: "haiku-4-5" };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? `Haiku call failed: ${err.message}` : "Haiku call failed.",
+      };
+    }
+  }
+
+  function parseRankerJson(raw: string):
+    | { ok: true; rankedRaw: Array<{ email?: unknown; rank?: unknown; reason?: unknown }> }
+    | { ok: false; error: string } {
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/```\s*$/i, "")
       .trim();
-  } catch (err) {
-    return {
-      ok: false,
-      error:
-        err instanceof Error
-          ? `Opus call failed: ${err.message}`
-          : "Opus call failed.",
-    };
+    try {
+      const parsed = JSON.parse(cleaned) as {
+        ranked?: Array<{ email?: unknown; rank?: unknown; reason?: unknown }>;
+      };
+      return {
+        ok: true,
+        rankedRaw: Array.isArray(parsed?.ranked) ? parsed.ranked : [],
+      };
+    } catch {
+      return {
+        ok: false,
+        error: `Ranker returned malformed JSON (first 200 chars): ${cleaned.slice(0, 200)}`,
+      };
+    }
   }
 
-  // Strip any accidental fences.
-  const cleaned = raw
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-
-  let parsed: { ranked?: Array<{ email?: unknown; rank?: unknown; reason?: unknown }> };
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return {
-      ok: false,
-      error: `Opus returned malformed JSON (first 200 chars): ${cleaned.slice(0, 200)}`,
-    };
+  // Attempt DeepSeek, parse; if anything fails, retry with Haiku.
+  let attempt = await tryDeepSeek();
+  let parsedResult = attempt.ok ? parseRankerJson(attempt.raw) : null;
+  if (!attempt.ok || (parsedResult && !parsedResult.ok)) {
+    const firstError = !attempt.ok ? attempt.error : (parsedResult as { ok: false; error: string }).error;
+    console.warn("[ranker] DeepSeek failed, falling back to Haiku:", firstError);
+    attempt = await tryHaiku();
+    parsedResult = attempt.ok ? parseRankerJson(attempt.raw) : null;
+    if (!attempt.ok) {
+      return { ok: false, error: `Both models failed. Last error: ${attempt.error}` };
+    }
+    if (!parsedResult || !parsedResult.ok) {
+      return {
+        ok: false,
+        error: (parsedResult as { ok: false; error: string } | null)?.error ?? "Haiku parse failed.",
+      };
+    }
   }
-  const rankedRaw = Array.isArray(parsed?.ranked) ? parsed.ranked : [];
+  const modelUsed = attempt.model;
+  const rankedRaw = (parsedResult as { ok: true; rankedRaw: Array<{ email?: unknown; rank?: unknown; reason?: unknown }> }).rankedRaw;
 
   // Build rank + reason lookup by email.
   const rankByEmail = new Map<string, { rank: number; reason: string | null }>();
@@ -436,22 +534,23 @@ Return the JSON object now.`;
   }
 
   // Enrich the original candidates. Any candidate the model missed
-  // keeps opus_rank=null and falls to the end of the list via a
-  // sentinel rank (Number.MAX_SAFE_INTEGER).
+  // keeps rank=null and falls to the end of the list via a sentinel
+  // rank (Number.MAX_SAFE_INTEGER).
   const ranked = candidates
     .map((c) => {
       const hit = rankByEmail.get(c.email);
       return {
         ...c,
-        opus_rank: hit?.rank ?? null,
-        opus_reason: hit?.reason ?? null,
+        rank: hit?.rank ?? null,
+        reason: hit?.reason ?? null,
+        ranker_model: hit ? modelUsed : null,
       };
     })
     .sort((a, b) => {
-      const ar = a.opus_rank ?? Number.MAX_SAFE_INTEGER;
-      const br = b.opus_rank ?? Number.MAX_SAFE_INTEGER;
+      const ar = a.rank ?? Number.MAX_SAFE_INTEGER;
+      const br = b.rank ?? Number.MAX_SAFE_INTEGER;
       return ar - br;
     });
 
-  return { ok: true, ranked };
+  return { ok: true, ranked, model: modelUsed };
 }
