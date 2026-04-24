@@ -318,6 +318,28 @@ export function FindAMatch({
     | null
   >(null);
 
+  // Sync client state to server-rendered props when the server
+  // re-renders with a different campaign. useState(initialX) only
+  // reads the prop on mount — switching campaigns via the top-bar
+  // gives us new props but leaves the client state stale. 2026-04-24:
+  // Tristan switched Fischer Farms Customer → SkySails Power and the
+  // archetype card stayed highlighted on Customer with the Fischer
+  // Farms seed text in the box AND stale Matched-customers cards.
+  // Three pieces of state need to follow initialArchetype/initialData:
+  //   (1) archetype
+  //   (2) the scored `data` (for investor archetype)
+  //   (3) hero text + selected + lookalike (handled by the
+  //       campaignId effect below)
+  useEffect(() => {
+    setArchetype(initialArchetype);
+  }, [initialArchetype]);
+  useEffect(() => {
+    setData(initialData);
+    setTab("best");
+    setRequestedLimit(PAGE_SIZE);
+    setVisibleCount(PAGE_SIZE);
+  }, [initialData]);
+
   // Hero text must follow the active campaign + its archetype.
   // Previous bugs:
   //   (a) switching SkySails → FishFrom left stale SkySails text
@@ -326,6 +348,10 @@ export function FindAMatch({
   //   (b) switching investor → customer campaign left the SkySails
   //       investor pitch in place (Tristan 2026-04-24) because the
   //       fallback default was hard-coded investor-shaped.
+  //   (c) switching Fischer Farms Customer → SkySails left the
+  //       Fischer Farms container text + customer archetype
+  //       (2026-04-24) because the client state was pinned at
+  //       mount (see the sync effect above).
   // Now we always set the text when campaignId OR archetype changes:
   // stored value if present, else the archetype-appropriate default.
   useEffect(() => {
