@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 /**
  * Re-embed every investor in `investors_mirror` using OpenAI
- * text-embedding-3-small (dimensions=768). Writes back to the existing
+ * text-embedding-3-small (dimensions=1536). Writes back to the existing
  * `embedding` column so query-time semantic search (via
  * `lib/embeddings/openai.ts`) retrieves against a matching vector
  * space.
+ *
+ * NOTE: was 768 dims pre 2026-04-23 (nomic-compat era). Switched to 1536
+ * when the Supabase pgvector column was migrated. Bug-fix 2026-04-24:
+ * the dimensions param in this script lagged the schema migration by 1
+ * day, causing every batch to fail with "expected 1536 dimensions, not
+ * 768" and breaking investor search end-to-end. Don't drift again.
  *
  * Why we're doing this one-off: the pipeline seeded `embedding` with
  * nomic-embed-text vectors from local Ollama. Those are incompatible
@@ -100,7 +106,7 @@ async function embedBatch(texts) {
     },
     body: JSON.stringify({
       model: "text-embedding-3-small",
-      dimensions: 768,
+      dimensions: 1536,
       input: texts,
     }),
   });
