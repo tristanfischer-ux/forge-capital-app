@@ -699,24 +699,42 @@ function Step5EmailResolve({
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
+  // Dep on a stable STRING derived from the selected ids, not the
+  // customers array itself. Previously the effect dep'd on `customers`
+  // which is re-created on every parent render by Array.filter — so
+  // the effect looped: setLoading(true) → process → setLoading(false)
+  // → re-render → new `customers` reference → effect reruns → …
+  // Tristan 2026-04-24: "for a glimmer of a second, it looked as
+  // though the emails popped up" was the flicker between loops.
+  const cpIdsKey = useMemo(
+    () =>
+      customers
+        .map((c) => c.campaign_partner_id)
+        .sort()
+        .join(","),
+    [customers],
+  );
   useEffect(() => {
     let cancelled = false;
     async function loadAll() {
       setLoading(true);
       const nextEmail = new Map<string, string | null>();
       const nextPartner = new Map<string, number | null>();
-      for (const c of customers) {
+      // Re-read customers from the closure via cpIdsKey — we rely on
+      // the key being stable when the selection hasn't changed.
+      const ids = cpIdsKey ? cpIdsKey.split(",") : [];
+      for (const id of ids) {
         try {
-          const dir = await loadContactDirectory(c.campaign_partner_id);
+          const dir = await loadContactDirectory(id);
           if (!dir) continue;
           const current = dir.contacts.find((x) => x.is_current);
           nextEmail.set(
-            c.campaign_partner_id,
+            id,
             current?.email && current.email.trim().length > 0
               ? current.email
               : null,
           );
-          nextPartner.set(c.campaign_partner_id, current?.partner_id ?? null);
+          nextPartner.set(id, current?.partner_id ?? null);
         } catch {
           // ignore per-row errors — row just shows "unknown"
         }
@@ -731,7 +749,7 @@ function Step5EmailResolve({
     return () => {
       cancelled = true;
     };
-  }, [customers]);
+  }, [cpIdsKey]);
 
   const withEmail = customers.filter(
     (c) =>
