@@ -6,6 +6,7 @@ import {
 import { getMatchScore, type Archetype } from "@/lib/queries/match-score";
 import { FindAMatch } from "./FindAMatch";
 import { heroTextForArchetype } from "./match-constants";
+import { listCustomerCampaignPartners } from "@/lib/queries/customer-partners";
 
 /**
  * Match page — §3 Find-a-Match. Ports Phase2-Mockup-V4.html §"Find a
@@ -77,13 +78,18 @@ export default async function MatchPage({
   // component persists whatever the user types in localStorage per
   // campaign and hydrates from there on subsequent mounts.
   const seedText = heroTextForArchetype(archetype);
-  const initialData = await getMatchScore({
-    heroText: seedText,
-    archetype,
-    campaignId,
-    limit: 25,
-    tab: "best",
-  });
+  const [initialData, customerPartners] = await Promise.all([
+    getMatchScore({
+      heroText: seedText,
+      archetype,
+      campaignId,
+      limit: 25,
+      tab: "best",
+    }),
+    archetype === "customer"
+      ? listCustomerCampaignPartners(campaignId)
+      : Promise.resolve(null),
+  ]);
 
   return (
     <FindAMatch
@@ -91,6 +97,7 @@ export default async function MatchPage({
       campaignName={activeCampaign?.name ?? "this campaign"}
       initialData={initialData}
       initialArchetype={archetype}
+      customerPartners={customerPartners}
     />
   );
 }

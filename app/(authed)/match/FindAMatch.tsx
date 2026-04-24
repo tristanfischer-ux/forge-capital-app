@@ -12,6 +12,8 @@ import type {
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
 import { findMatches, findLookalikes, shortlistSelected } from "./match-v4-actions";
 import { heroTextForArchetype } from "./match-constants";
+import { CustomerPartnerCards } from "./CustomerPartnerCards";
+import type { CustomerCampaignPartnerCard } from "@/lib/queries/customer-partners";
 // NOTE: EmailHuntModal is now mounted at the authed shell level
 // (`app/(authed)/layout.tsx`) so the verification-gate buttons and
 // any future surface can also dispatch `fc:resolve-email`. The modal
@@ -70,6 +72,10 @@ export interface FindAMatchProps {
   campaignName: string;
   initialData: GetMatchScoreResult;
   initialArchetype: Archetype;
+  /** Customer-side partner cards — rendered in place of the
+   *  pool-empty placeholder when archetype === "customer". Null on
+   *  investor / supplier campaigns. */
+  customerPartners?: CustomerCampaignPartnerCard[] | null;
 }
 
 type Tab = "best" | "thesis" | "near_miss" | "lookalike";
@@ -266,6 +272,7 @@ export function FindAMatch({
   campaignName,
   initialData,
   initialArchetype,
+  customerPartners,
 }: FindAMatchProps) {
   const router = useRouter();
 
@@ -810,7 +817,16 @@ export function FindAMatch({
       ) : (
         <>
           {/* V4 `.result-card` stack (lines 1000-1140). */}
-          {archetype !== "investor" ? (
+          {archetype === "customer" ? (
+            customerPartners && customerPartners.length > 0 ? (
+              <CustomerPartnerCards
+                cards={customerPartners}
+                campaignId={campaignId}
+              />
+            ) : (
+              <ArchetypePoolEmpty archetype={archetype} campaignId={campaignId} />
+            )
+          ) : archetype !== "investor" ? (
             <ArchetypePoolEmpty archetype={archetype} campaignId={campaignId} />
           ) : rows.length === 0 ? (
             <EmptyResults />

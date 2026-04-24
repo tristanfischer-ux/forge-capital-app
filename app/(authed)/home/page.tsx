@@ -7,6 +7,7 @@ import {
 import { getMatchScore, type Archetype } from "@/lib/queries/match-score";
 import { FindAMatch } from "../match/FindAMatch";
 import { heroTextForArchetype } from "../match/match-constants";
+import { listCustomerCampaignPartners } from "@/lib/queries/customer-partners";
 
 import ApprovalPage from "../approval/page";
 import PipelinePage from "../pipeline/page";
@@ -119,13 +120,18 @@ export default async function HomePage({
   // cards on investor campaigns and a Fischer Farms-shaped description
   // on customer campaigns. Client-side edits re-run the query via the
   // shared server action (see match/match-v4-actions.ts).
-  const findMatchInitial = await getMatchScore({
-    heroText: heroTextForArchetype(archetype),
-    archetype,
-    campaignId,
-    limit: 10,
-    tab: "best",
-  });
+  const [findMatchInitial, customerPartners] = await Promise.all([
+    getMatchScore({
+      heroText: heroTextForArchetype(archetype),
+      archetype,
+      campaignId,
+      limit: 10,
+      tab: "best",
+    }),
+    archetype === "customer"
+      ? listCustomerCampaignPartners(campaignId)
+      : Promise.resolve(null),
+  ]);
 
   // Each section's existing page component takes the same `searchParams`
   // promise. We forward ours so they see the same `?c=` and can resolve
@@ -151,6 +157,7 @@ export default async function HomePage({
         campaignName={activeCampaign?.name ?? "this campaign"}
         initialData={findMatchInitial}
         initialArchetype={archetype}
+        customerPartners={customerPartners}
       />
 
       {/* ──────────────── 2. Approval ──────────────── */}
