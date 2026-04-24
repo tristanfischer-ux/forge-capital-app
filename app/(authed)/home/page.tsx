@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
@@ -160,59 +161,87 @@ export default async function HomePage({
         customerPartners={customerPartners}
       />
 
+      {/* Each section below is wrapped in its own <Suspense> boundary
+          so the RSC stream flushes them independently. Pre-2026-04-24
+          behaviour: the whole /home tree awaited every section's data
+          fetch before flushing a byte, so a campaign switch blocked
+          for ~2-5s on the slowest section. Now Find-a-Match renders
+          first (it's synchronous), then every other section paints as
+          its fetch resolves. Total wall-clock is similar but the
+          page is visibly alive in <1s instead of feeling frozen.
+          Fallback is a simple section-height placeholder — same
+          rough height as the loaded section so the scroll position
+          doesn't jump as sections fill in. */}
+
       {/* ──────────────── 2. Approval ──────────────── */}
-      <ApprovalPage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Approval" height={480} />}>
+        <ApprovalPage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
 
       {/* ──────────────── 3. Automation pipeline ──────────────── */}
-      <PipelinePage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Automation pipeline" height={320} />}>
+        <PipelinePage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
 
       {/* ──────────────── 4. Templates ──────────────── */}
-      <TemplatesPage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Templates" height={260} />}>
+        <TemplatesPage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
 
       {/* ──────────────── 5. Eyeball review ──────────────── */}
-      <ReviewPage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Review" height={380} />}>
+        <ReviewPage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
 
       {/* ──────────────── 6. Email verification gate ──────────────── */}
-      <VerificationPage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Verification" height={320} />}>
+        <VerificationPage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
 
       {/* ──────────────── 7. Gmail drafts ──────────────── */}
       {/* DraftsPage default export takes no props — it queries across
           every campaign by design (drafts surface per-campaign chips). */}
-      <DraftsPage />
+      <Suspense fallback={<SectionSkeleton label="Drafts" height={260} />}>
+        <DraftsPage />
+      </Suspense>
 
       {/* ──────────────── 8. Tracker ──────────────── */}
-      <TrackerPage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Tracker" height={520} />}>
+        <TrackerPage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
 
       {/* ──────────────── 9. Weekly counterpart update ──────────────── */}
-      <WeeklyPage
-        searchParams={searchParams}
-        initialCampaigns={campaigns}
-        initialCampaignId={campaignId}
-      />
+      <Suspense fallback={<SectionSkeleton label="Weekly" height={460} />}>
+        <WeeklyPage
+          searchParams={searchParams}
+          initialCampaigns={campaigns}
+          initialCampaignId={campaignId}
+        />
+      </Suspense>
     </>
   );
 }
@@ -258,5 +287,50 @@ function NoCampaignsState() {
         Go to sign-in
       </Link>
     </div>
+  );
+}
+
+/**
+ * Placeholder shown while a section is still fetching on the server.
+ * Renders a greyed-out section-height box with a subtle label so the
+ * scroll position doesn't jump as Suspense boundaries resolve. Keep
+ * the look quiet — no spinners, no pulsing — the point is that the
+ * page feels alive, not loud. Heights are eyeballed from the real
+ * section renders; they don't need to be pixel-perfect.
+ */
+function SectionSkeleton({
+  label,
+  height,
+}: {
+  label: string;
+  height: number;
+}) {
+  return (
+    <section
+      className="section"
+      style={{
+        minHeight: height,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background:
+          "repeating-linear-gradient(45deg, var(--surface-alt) 0 10px, var(--surface) 10px 20px)",
+        border: "1px dashed var(--border)",
+      }}
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          textTransform: "uppercase",
+          letterSpacing: 0.8,
+          color: "var(--text-faint)",
+        }}
+      >
+        {label} · loading…
+      </span>
+    </section>
   );
 }
