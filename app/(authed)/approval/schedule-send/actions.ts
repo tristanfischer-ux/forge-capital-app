@@ -101,20 +101,25 @@ export async function queueScheduledBatch(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  // Pick `capped + buffer` pending rows (same pattern as sendTestBatch) —
-  // we allow skipping rows whose synthesis can't be generated.
+  // HARD RULE (Tristan 2026-04-24): "there is no permission to
+  // automatically send things until they have been approved. That has
+  // to be a very fast rule that cannot be broken." Rows must sit at
+  // +1 (Approved — awaiting draft) or +2 (Drafted — ready to send)
+  // before they can be queued. +0 (Pending approval) is explicitly
+  // ineligible and older code paths that queued +0 rows have been
+  // closed.
   const { data: pending, error: pendingErr } = await supabase
     .from("campaign_partners")
-    .select("id")
+    .select("id, status_code")
     .eq("campaign_id", campaignId)
-    .eq("status_code", "+0")
+    .in("status_code", ["+1", "+2"])
     .order("created_at", { ascending: true })
     .limit(capped + 10);
 
   if (pendingErr) {
     return {
       ok: false,
-      error: `Pending-rows read failed: ${pendingErr.message}`,
+      error: `Approved-rows read failed: ${pendingErr.message}`,
     };
   }
 
@@ -122,7 +127,8 @@ export async function queueScheduledBatch(
   if (pendingIds.length === 0) {
     return {
       ok: false,
-      error: "No +0 Pending approval rows on this campaign — shortlist first.",
+      error:
+        "No approved rows on this campaign. Rows must be at +1 (Approved — awaiting draft) or +2 (Drafted — ready to send) before they can be scheduled. Ingest approval decisions on /approval first.",
     };
   }
 

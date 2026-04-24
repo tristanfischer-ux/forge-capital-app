@@ -5,6 +5,49 @@ rule below is load-bearing. Violations are what produced the mess
 Tristan called out on 2026-04-21 evening. The rules exist because we
 already paid the cost of ignoring them.
 
+## HARD RULE — nothing sends without approval (2026-04-24)
+
+Tristan, verbatim: *"there is no permission to automatically send
+things until they have been approved. That has to be a very fast rule
+that cannot be broken."*
+
+This is the single highest-priority rule in this repo. It overrides
+feature speed, convenience, backlog pressure, and any clever shortcut.
+If a change you are about to make COULD bypass the approval gate,
+STOP and re-plan.
+
+**Approved** means the referenced `campaign_partners` row has been
+promoted to `status_code` `+1` (Approved — awaiting draft) or `+2`
+(Drafted — ready to send). `+0` (Pending approval) is ineligible. The
+only paths to `+1` today are: (a) Tristan ingesting an `ok` verdict on
+`/approval`, (b) Tristan explicitly flipping the code in the tracker
+drawer, (c) a future approver-email pipeline that writes the verdict.
+
+**Enforcement layers (defence in depth):**
+1. DB-level trigger `enforce_scheduled_send_approval_gate()` on
+   `public.scheduled_sends` (migration 029). INSERTs of rows whose
+   referenced CP is at any status other than +1 / +2 raise
+   `P0001: scheduled_sends insert rejected: ...` and fail the insert.
+   This catches every code path — server actions, scripts, admin SQL.
+2. Server action `queueScheduledBatch` selects `status_code IN ('+1','+2')`
+   only — never `+0`.
+3. Reviewer checklist for any new send-adjacent code: does this touch
+   `scheduled_sends`, `sendGmailMessage`, the dispatcher daemon, or
+   any path that produces outbound email? If yes, you MUST add an
+   approval-gate check in the code AND verify migration 029 is still
+   the right gate for the new path.
+
+**Permitted auto-sends that are NOT regulated by this rule:**
+- `scripts/weekly-digest-cron.mjs` — sends a digest TO Tristan's own
+  inbox. Destination is Tristan, not a prospect. Not outreach.
+- `scripts/gmail-sync.mjs` / `scripts/calendar-sync.mjs` — read-only
+  ingesters. Never send.
+- `/approval/test-send` — sends ONLY to `tristan.fischer@mac.com` (test
+  inbox) with a `[TEST]` subject prefix. Never to a prospect email.
+
+Any new background daemon that sends is suspicious by default. The
+burden of proof is on the author to show it cannot violate the rule.
+
 ## Phase — we are past the port, now enhancing (2026-04-22)
 
 Tristan called this explicitly: *"I think we've reached a stage where
