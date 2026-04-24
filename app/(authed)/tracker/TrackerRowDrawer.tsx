@@ -5,6 +5,7 @@ import { STATUS_CODES } from "@/lib/status-codes";
 import { statusCodesVisibleFor } from "@/lib/queries/self-managed";
 import { fetchContactEvents, updateCampaignPartnerStatus } from "./actions";
 import type { ContactEventRow } from "@/lib/queries/campaignPartner";
+import { ContactPicker } from "../ContactPicker";
 
 /**
  * Expanded-row drawer on the tracker grid. Two jobs:
@@ -114,6 +115,20 @@ export function TrackerRowDrawer({
         <div>
           <div className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-accent">
             Update status{firmName ? ` · ${firmName}` : ""}
+          </div>
+
+          {/* Contact picker — swap which person at the firm this row is
+              addressed to. Swap clears the cached draft + cancels any
+              pending scheduled_sends so the composer regenerates for
+              the new person (Tristan 2026-04-24 direction). */}
+          <div className="mb-3">
+            <span className="mb-1 block text-[11px] font-medium text-text-dim">
+              Reaching out to
+            </span>
+            <ContactPicker
+              campaignPartnerId={campaignPartnerId}
+              currentLabel="View / switch contact"
+            />
           </div>
 
           <div className="space-y-3">

@@ -22,6 +22,7 @@ import {
 import ApprovalReturnDropZone from "./ApprovalReturnDropZone";
 import { EmailApprovalListButton } from "./EmailApprovalListButton";
 import { IncomingDecisionCell } from "./IncomingDecisionCell";
+import { ContactPicker } from "../ContactPicker";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -420,17 +421,33 @@ function OutgoingColumn({
  * One outgoing-sheet row — firm + primary contact on the left, synthesis
  * in the middle, em-dash in the "Comment SW" slot (the approver fills
  * that in on reply).
+ *
+ * The contact line is now a ContactPicker chip — click to see every
+ * known contact at the firm (multi-contact-per-org support, Tristan
+ * 2026-04-24). Swapping the contact clears the cached draft +
+ * cancels any pending scheduled_sends (regenerate-from-scratch on
+ * swap, per Tristan's instruction).
  */
 function OutgoingRow({ row }: { row: OutgoingApprovalRow }) {
-  const contactLine = [row.partner_name, row.partner_title, row.hq_location]
-    .filter((s): s is string => !!s && s.trim().length > 0)
-    .join(" · ");
+  const chipLabel =
+    [row.partner_name, row.partner_title]
+      .filter((s): s is string => !!s && s.trim().length > 0)
+      .join(" · ") || "— no contact —";
+  const hqSuffix = row.hq_location ? ` · ${row.hq_location}` : "";
 
   return (
     <tr>
       <td>
         <div className="firm-c">{row.firm_name ?? "—"}</div>
-        <div className="contact-c">{contactLine || "—"}</div>
+        <div className="contact-c">
+          <ContactPicker
+            campaignPartnerId={row.campaign_partner_id}
+            currentLabel={chipLabel}
+          />
+          {hqSuffix ? (
+            <span style={{ color: "var(--text-faint)" }}>{hqSuffix}</span>
+          ) : null}
+        </div>
       </td>
       <td className="synth">
         {row.why_them ?? (
