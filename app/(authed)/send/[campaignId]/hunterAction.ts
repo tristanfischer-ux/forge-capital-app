@@ -421,13 +421,21 @@ Return the JSON object now.`;
           model: "deepseek/deepseek-v4-flash",
           // JSON-mode keeps Flash from wrapping output in prose.
           response_format: { type: "json_object" },
-          max_tokens: 4000,
+          // DeepSeek v4 Flash is a reasoning model — it emits thinking
+          // tokens into the `reasoning` field BEFORE producing the
+          // actual `content`. At max_tokens: 4000 a 23-candidate rank
+          // blew the budget on reasoning and returned content=null,
+          // silently falling through to Haiku. 16K gives enough
+          // headroom for any realistic candidate list. Per
+          // `v4_flash_production_gotchas.md` memory.
+          max_tokens: 16_000,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
         }),
-        signal: AbortSignal.timeout(25_000),
+        // Longer timeout too — reasoning tokens add latency.
+        signal: AbortSignal.timeout(45_000),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
