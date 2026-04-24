@@ -7,6 +7,7 @@ import { getGmailThread } from "@/lib/gmail/read-thread";
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
 import { getInvestorModalData } from "@/lib/queries/investorModal";
 import { isSelfManaged } from "@/lib/queries/self-managed";
+import { STATUS_BY_CODE } from "@/lib/status-codes";
 
 /**
  * Reply-ingestion + response-drafting surface actions.
@@ -762,6 +763,22 @@ export async function sendResponseAndUpdateStatus(
         : effectiveSentiment === "handover"
           ? "Handover to company"
           : "Follow-up sent";
+
+  // Defensive guard: never write a status_code that isn't in the
+  // canonical legend. This catches the 2026-04-23 class of bug where
+  // "+6.5" was dispatched but missing from lib/status-codes.ts, so
+  // labelFor() returned null and the tracker drawer couldn't render it.
+  const registered = STATUS_BY_CODE[newStatusCode];
+  if (!registered) {
+    throw new Error(
+      `status_code "${newStatusCode}" (sentiment=${effectiveSentiment}) is not in STATUS_CODES — add it to lib/status-codes.ts before dispatching.`,
+    );
+  }
+  if (registered.label !== newStatusLabel) {
+    throw new Error(
+      `status_code "${newStatusCode}" label mismatch: dispatcher wrote "${newStatusLabel}" but registry says "${registered.label}".`,
+    );
+  }
 
   await supabase
     .from("campaign_partners")
