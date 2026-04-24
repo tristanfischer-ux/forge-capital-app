@@ -105,6 +105,73 @@ export async function setPartnerEmail(
   return { ok: true };
 }
 
+/* ───────────────────────── Step 7 pre-flight — who has an email? ─────────── */
+
+/**
+ * Returns the subset of campaign_partner ids that have a usable email
+ * on file — either on partners_mirror.email or an override in
+ * partner_email_overrides. Used by Step 7 to filter ticked rows down
+ * to "worth drafting" before firing Opus. Tristan 2026-04-24: "I
+ * don't want to draft all of them; I want to draft the ones which I
+ * got emails for." Saves Opus tokens + user time.
+ */
+export async function getEmailedCampaignPartnerIds(
+  campaignPartnerIds: string[],
+): Promise<{ ok: true; emailed: string[] } | { ok: false; error: string }> {
+  if (!Array.isArray(campaignPartnerIds) || campaignPartnerIds.length === 0) {
+    return { ok: true, emailed: [] };
+  }
+  const { supabase } = await assertAuthed();
+
+  // Pull the campaign_partner → partner mirror join, plus any
+  // overrides. A row is "emailed" if either the mirror or the
+  // override carries a non-blank email.
+  const { data: cps, error: cpErr } = await supabase
+    .from("campaign_partners")
+    .select(
+      `
+      id, partner_id,
+      partners_mirror:partner_id ( id, email )
+      `,
+    )
+    .in("id", campaignPartnerIds);
+  if (cpErr) return { ok: false, error: cpErr.message };
+  const rows = (cps ?? []) as unknown as Array<{
+    id: string;
+    partner_id: number | null;
+    partners_mirror: { id: number; email: string | null } | null;
+  }>;
+  const partnerIds = rows
+    .map((r) => r.partners_mirror?.id)
+    .filter((id): id is number => typeof id === "number");
+
+  const overrideByPartner = new Map<number, string>();
+  if (partnerIds.length > 0) {
+    const { data: overrides } = await supabase
+      .from("partner_email_overrides")
+      .select("partner_id, email")
+      .in("partner_id", partnerIds);
+    for (const row of (overrides ?? []) as Array<{
+      partner_id: number;
+      email: string | null;
+    }>) {
+      if (row.email && row.email.trim().length > 0) {
+        overrideByPartner.set(row.partner_id, row.email.trim());
+      }
+    }
+  }
+
+  const emailed: string[] = [];
+  for (const r of rows) {
+    const partnerId = r.partners_mirror?.id;
+    const mirrorEmail = r.partners_mirror?.email;
+    const override = partnerId != null ? overrideByPartner.get(partnerId) : null;
+    const eff = override ?? (mirrorEmail?.trim() ? mirrorEmail.trim() : null);
+    if (eff && eff.length > 0) emailed.push(r.id);
+  }
+  return { ok: true, emailed };
+}
+
 /* ───────────────────────── Step 7 — batch-draft via Opus ──────────────────── */
 
 /**

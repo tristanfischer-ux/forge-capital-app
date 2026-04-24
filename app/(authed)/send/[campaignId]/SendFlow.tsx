@@ -12,6 +12,7 @@ import {
   draftSelected,
   approveBatch,
   queueBatch,
+  getEmailedCampaignPartnerIds,
 } from "./actions";
 import { loadContactDirectory } from "../../approval/loadContactDirectoryAction";
 import { HunterRow } from "./HunterRow";
@@ -266,10 +267,18 @@ export function SendFlow({
         {step === "7" && (
           <Step7Draft
             selectedCount={selectedCount}
-            onDraftAll={() =>
+            onDraftAll={(emailedIds) =>
               startTransition(async () => {
-                setToast("Drafting via Opus — this takes ~10s per row…");
-                const r = await draftSelected(Array.from(selectedIds));
+                if (emailedIds.length === 0) {
+                  setToast(
+                    "No rows have an email yet — go back to Step 5 to resolve emails first.",
+                  );
+                  return;
+                }
+                setToast(
+                  `Drafting ${emailedIds.length} via Opus — this takes ~10s per row…`,
+                );
+                const r = await draftSelected(emailedIds);
                 if (!r.ok) {
                   setToast(`Error: ${r.error}`);
                   return;
@@ -1095,15 +1104,62 @@ function Step7Draft({
   selectedCount: number;
   selectedIds: Set<string>;
   campaignId: string;
-  onDraftAll: () => void;
+  /** Called with the ids that actually have an email — not all ticked. */
+  onDraftAll: (emailedIds: string[]) => void;
   onContinue: () => void;
   isPending: boolean;
 }) {
+  // Tristan 2026-04-24: "I don't want to draft all of them; I want
+  // to draft the ones which I got emails for." Pre-flight check —
+  // server returns the subset of selectedIds with a usable email so
+  // we can quote the real draft count in the intro + action button.
+  const [emailedIds, setEmailedIds] = useState<string[] | null>(null);
+  const [emailedErr, setEmailedErr] = useState<string | null>(null);
+  const selectedKey = useMemo(
+    () => Array.from(selectedIds).sort().join(","),
+    [selectedIds],
+  );
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      setEmailedIds(null);
+      setEmailedErr(null);
+      const ids = selectedKey ? selectedKey.split(",").filter(Boolean) : [];
+      if (ids.length === 0) {
+        if (!cancelled) setEmailedIds([]);
+        return;
+      }
+      const r = await getEmailedCampaignPartnerIds(ids);
+      if (cancelled) return;
+      if (!r.ok) {
+        setEmailedErr(r.error);
+        setEmailedIds([]);
+        return;
+      }
+      setEmailedIds(r.emailed);
+    }
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedKey]);
+
+  const emailedCount = emailedIds?.length ?? 0;
+  const withoutEmailCount = selectedCount - emailedCount;
+  const draftable = emailedIds ?? [];
+  const loading = emailedIds === null;
+
   return (
     <StepCard
       number={7}
-      title="Draft all"
-      intro={`Opus produces a per-customer draft for each of the ${selectedCount} ticked rows, using the template from Step 6 as the voice reference and the customer's pitch hook + bio + channel + country as the personalisation inputs. Takes ~10s per row — 10 rows ≈ 100s.`}
+      title="Draft"
+      intro={
+        loading
+          ? `Checking which of the ${selectedCount} ticked rows have an email…`
+          : emailedCount === selectedCount
+            ? `All ${emailedCount} ticked rows have an email. Opus will draft a tailored "why them" + 2-5 word subject angle per row (~10s each, so ${emailedCount} rows ≈ ${Math.round(emailedCount * 10)}s). The template from Step 6 is the voice reference.`
+            : `${emailedCount} of ${selectedCount} ticked rows have an email on file — those are the ones Opus will draft. The other ${withoutEmailCount} will be skipped until you resolve an email for them (back up to Step 5 to add or Hunter-hunt). Draft time ≈ ${Math.round(emailedCount * 10)}s.`
+      }
     >
       <div
         style={{
@@ -1122,9 +1178,52 @@ function Step7Draft({
         you can open any row on <code>/tracker/[id]/draft</code> to see
         the full composed email before approving.
       </div>
+      {emailedErr ? (
+        <div
+          style={{
+            padding: 10,
+            fontSize: 11,
+            color: "var(--accent-danger, #b91c1c)",
+            background: "var(--surface-alt)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            marginBottom: 10,
+          }}
+        >
+          Could not pre-check emails: {emailedErr}
+        </div>
+      ) : null}
+      {!loading && withoutEmailCount > 0 ? (
+        <div
+          style={{
+            padding: 10,
+            fontSize: 11,
+            color: "var(--text-dim)",
+            background: "var(--surface-alt)",
+            border: "1px dashed var(--border)",
+            borderRadius: 6,
+            marginBottom: 10,
+            lineHeight: 1.5,
+          }}
+        >
+          ⚠ {withoutEmailCount} ticked row
+          {withoutEmailCount === 1 ? "" : "s"} without an email on file — not
+          drafting those. Back up to Step 5 to resolve emails first, then
+          return here and we'll draft them too.
+        </div>
+      ) : null}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <PrimaryButton onClick={onDraftAll} pending={isPending}>
-          {isPending ? "Drafting…" : `Draft all ${selectedCount} →`}
+        <PrimaryButton
+          onClick={() => onDraftAll(draftable)}
+          pending={isPending || loading}
+        >
+          {loading
+            ? "Checking…"
+            : isPending
+              ? "Drafting…"
+              : emailedCount === 0
+                ? "Nothing to draft"
+                : `Draft ${emailedCount} →`}
         </PrimaryButton>
         <button type="button" onClick={onContinue} style={presetBtn}>
           Skip (already drafted)

@@ -34,6 +34,19 @@ export function HunterRow({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [savingEmail, setSavingEmail] = useState<string | null>(null);
+  // Pin-to-top so Tristan can compare 2-3 candidates side-by-side
+  // without losing them in a long list (Tristan 2026-04-24:
+  // "It would be useful to have the ability to click one you might
+  // want to go for and then that jumps to the top").
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  function togglePin(email: string) {
+    setPinned((prev) => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email);
+      else next.add(email);
+      return next;
+    });
+  }
 
   function onOpen() {
     setExpanded(true);
@@ -169,7 +182,14 @@ export function HunterRow({
         </div>
       ) : candidates && candidates.length > 0 ? (
         <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-          {candidates.map((c) => {
+          {[...candidates]
+            .sort((a, b) => {
+              const ap = pinned.has(a.email) ? 1 : 0;
+              const bp = pinned.has(b.email) ? 1 : 0;
+              if (ap !== bp) return bp - ap; // pinned first
+              return 0; // preserve original ranking otherwise
+            })
+            .map((c) => {
             const ranking = [
               c.type === "personal" ? "personal" : "generic",
               c.confidence != null ? `score ${c.confidence}` : null,
@@ -180,18 +200,43 @@ export function HunterRow({
               .join(" · ");
             const name =
               [c.first_name, c.last_name].filter(Boolean).join(" ") || null;
+            const isPinned = pinned.has(c.email);
             return (
               <li
                 key={c.email}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr auto",
+                  gridTemplateColumns: "auto 1fr auto",
                   gap: 10,
-                  padding: "6px 0",
+                  padding: "6px 4px",
                   borderBottom: "1px solid var(--border-soft, var(--border))",
                   alignItems: "center",
+                  background: isPinned
+                    ? "var(--accent-softer)"
+                    : "transparent",
                 }}
               >
+                <button
+                  type="button"
+                  onClick={() => togglePin(c.email)}
+                  title={
+                    isPinned
+                      ? "Pinned to top — click to unpin"
+                      : "Pin to top for comparison"
+                  }
+                  aria-label={isPinned ? "Unpin" : "Pin to top"}
+                  style={{
+                    padding: "2px 4px",
+                    fontSize: 12,
+                    lineHeight: 1,
+                    color: isPinned ? "var(--accent)" : "var(--text-faint)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {isPinned ? "★" : "☆"}
+                </button>
                 <div style={{ minWidth: 0, fontSize: 11 }}>
                   <div style={{ fontWeight: 600, color: "var(--text)" }}>
                     {c.email}{" "}
