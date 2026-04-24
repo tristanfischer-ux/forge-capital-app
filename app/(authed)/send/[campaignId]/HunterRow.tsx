@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   huntCandidatesForCampaignPartner,
+  rankCandidatesForCampaignPartner,
   type HunterCandidate,
 } from "./hunterAction";
 import { setPartnerEmail } from "./actions";
@@ -31,6 +32,10 @@ export function HunterRow({
   const [expanded, setExpanded] = useState(false);
   const [candidates, setCandidates] = useState<HunterCandidate[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rankingStatus, setRankingStatus] = useState<
+    "idle" | "ranking" | "done" | "failed"
+  >("idle");
+  const [rankingError, setRankingError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [savingEmail, setSavingEmail] = useState<string | null>(null);
@@ -54,18 +59,35 @@ export function HunterRow({
     setLoading(true);
     setError(null);
     huntCandidatesForCampaignPartner(campaignPartnerId)
-      .then((r) => {
+      .then(async (r) => {
         if (!r.ok) {
           setError(r.error);
           setCandidates([]);
           return;
         }
+        // Show the raw list first so the user sees progress, then
+        // replace with the Opus-ranked list once it returns.
         setCandidates(r.candidates);
         if (r.candidates.length === 0) {
           setError(
             `Hunter returned no emails for ${r.domain} (${r.organisation ?? firmName ?? "this firm"}). Hunter sometimes knows the domain but has no contacts indexed yet. Enter an email manually above if you have one, or skip this row for now.`,
           );
+          return;
         }
+        // Fire the Opus role-relevance ranker.
+        setRankingStatus("ranking");
+        setRankingError(null);
+        const ranked = await rankCandidatesForCampaignPartner(
+          campaignPartnerId,
+          r.candidates,
+        );
+        if (!ranked.ok) {
+          setRankingError(ranked.error);
+          setRankingStatus("failed");
+          return;
+        }
+        setCandidates(ranked.ranked);
+        setRankingStatus("done");
       })
       .catch((e) =>
         setError(e instanceof Error ? e.message : String(e)),
@@ -162,6 +184,52 @@ export function HunterRow({
           Close ✕
         </button>
       </div>
+      {rankingStatus === "ranking" ? (
+        <div
+          style={{
+            marginBottom: 8,
+            padding: "6px 8px",
+            fontSize: 11,
+            color: "var(--accent)",
+            background: "var(--accent-softer)",
+            border: "1px solid var(--accent)",
+            borderRadius: 4,
+          }}
+        >
+          Asking Opus who's the right person for this pitch…
+        </div>
+      ) : rankingStatus === "failed" ? (
+        <div
+          style={{
+            marginBottom: 8,
+            padding: "6px 8px",
+            fontSize: 11,
+            color: "var(--text-dim)",
+            background: "var(--surface-alt)",
+            border: "1px dashed var(--border)",
+            borderRadius: 4,
+          }}
+        >
+          Opus ranker unavailable — showing Hunter's native order.
+          {rankingError ? ` (${rankingError})` : ""}
+        </div>
+      ) : rankingStatus === "done" && candidates && candidates.length > 0 ? (
+        <div
+          style={{
+            marginBottom: 8,
+            padding: "6px 8px",
+            fontSize: 11,
+            color: "var(--accent)",
+            background: "var(--accent-softer)",
+            border: "1px solid var(--accent)",
+            borderRadius: 4,
+            lineHeight: 1.4,
+          }}
+        >
+          ✓ Opus ranked these by role-pitch fit. Top candidates most
+          likely the right person for your specific hook — pin & compare.
+        </div>
+      ) : null}
       {loading ? (
         <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
           Asking Hunter…
@@ -187,7 +255,11 @@ export function HunterRow({
               const ap = pinned.has(a.email) ? 1 : 0;
               const bp = pinned.has(b.email) ? 1 : 0;
               if (ap !== bp) return bp - ap; // pinned first
-              return 0; // preserve original ranking otherwise
+              // Then Opus rank when available (lower rank = better fit).
+              const ar = a.opus_rank ?? Number.MAX_SAFE_INTEGER;
+              const br = b.opus_rank ?? Number.MAX_SAFE_INTEGER;
+              if (ar !== br) return ar - br;
+              return 0; // fall back to array order (Hunter's native ranking)
             })
             .map((c) => {
             const ranking = [
@@ -239,6 +311,27 @@ export function HunterRow({
                 </button>
                 <div style={{ minWidth: 0, fontSize: 11 }}>
                   <div style={{ fontWeight: 600, color: "var(--text)" }}>
+                    {c.opus_rank != null ? (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          marginRight: 6,
+                          padding: "1px 5px",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: c.opus_rank === 1 ? "white" : "var(--accent)",
+                          background:
+                            c.opus_rank === 1
+                              ? "var(--accent)"
+                              : "var(--accent-softer)",
+                          borderRadius: 3,
+                          verticalAlign: 1,
+                        }}
+                        title={`Opus rank ${c.opus_rank}`}
+                      >
+                        #{c.opus_rank}
+                      </span>
+                    ) : null}
                     {c.email}{" "}
                     {name ? (
                       <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>
@@ -257,6 +350,24 @@ export function HunterRow({
                     {c.department ? ` · ${c.department}` : ""}
                     {ranking ? ` · ${ranking}` : ""}
                   </div>
+                  {c.opus_reason ? (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-dim)",
+                        fontStyle: "italic",
+                        lineHeight: 1.45,
+                        marginTop: 4,
+                        padding: "4px 8px",
+                        background: "var(--surface)",
+                        border: "1px solid var(--border-soft, var(--border))",
+                        borderLeft: "3px solid var(--accent)",
+                        borderRadius: 3,
+                      }}
+                    >
+                      {c.opus_reason}
+                    </div>
+                  ) : null}
                 </div>
                 <button
                   type="button"
