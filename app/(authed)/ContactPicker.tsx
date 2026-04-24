@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type { ContactDirectory, ContactOption } from "@/lib/queries/contacts";
 import { switchContact } from "./approval/switchContactAction";
 import { loadContactDirectory } from "./approval/loadContactDirectoryAction";
+import { addParallelContact } from "./approval/addParallelContactAction";
 
 /**
  * Inline contact-picker chip — renders the currently-linked contact
@@ -110,6 +111,42 @@ export function ContactPicker({
     });
   }
 
+  // Tier 3 — parallel outreach. Creates a second campaign_partners
+  // row for the same firm so the founder can reach out to TWO people
+  // at IKEA in parallel threads. Status +0 Pending approval, DB gate
+  // blocks dispatch until promoted.
+  const [addNotice, setAddNotice] = useState<string | null>(null);
+  function onAddParallel(newPartnerId: number) {
+    setError(null);
+    setAddNotice(null);
+    setOptimisticCurrent(newPartnerId);
+    startTransition(async () => {
+      const result = await addParallelContact({
+        sourceCampaignPartnerId: campaignPartnerId,
+        newPartnerId,
+      });
+      setOptimisticCurrent(null);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // Warn (non-blocking) if we just added the 3rd+ active thread
+      // at the same firm — outreach hygiene flag.
+      const n = result.existing_active_threads;
+      if (n >= 2) {
+        setAddNotice(
+          `Added as parallel thread. You now have ${n + 1} active threads at this firm — double-check the angle isn't duplicating.`,
+        );
+      } else {
+        setAddNotice(
+          "Added as parallel thread — the new row is on /approval at +0 Pending approval.",
+        );
+      }
+      // Keep the popover open so the founder can see the success
+      // notice; close via ✕ or outside-click.
+    });
+  }
+
   const nounHeader =
     directory?.kind === "customer"
       ? `Contacts at ${directory?.firm_name ?? "this customer"}`
@@ -188,6 +225,23 @@ export function ContactPicker({
             ) : null}
           </div>
 
+          {addNotice ? (
+            <div
+              style={{
+                marginBottom: 8,
+                padding: "6px 8px",
+                fontSize: 11,
+                color: "var(--accent)",
+                background: "var(--accent-softer, var(--surface-alt))",
+                border: "1px solid var(--accent)",
+                borderRadius: 6,
+                lineHeight: 1.4,
+              }}
+            >
+              ✓ {addNotice}
+            </div>
+          ) : null}
+
           {loading ? (
             <div style={{ fontSize: 11, color: "var(--text-dim)", padding: 12 }}>
               Loading contacts…
@@ -237,6 +291,7 @@ export function ContactPicker({
                   }}
                   isPending={isPending && optimisticCurrent === c.partner_id}
                   onSwitch={() => onSwitch(c.partner_id)}
+                  onAddParallel={() => onAddParallel(c.partner_id)}
                 />
               ))}
             </ul>
@@ -251,10 +306,12 @@ function ContactRow({
   contact,
   isPending,
   onSwitch,
+  onAddParallel,
 }: {
   contact: ContactOption;
   isPending: boolean;
   onSwitch: () => void;
+  onAddParallel: () => void;
 }) {
   const bioPreview =
     contact.bio && contact.bio.length > 140
@@ -365,26 +422,46 @@ function ContactRow({
           ✓ Currently reaching out to this person
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={onSwitch}
-          disabled={isPending}
-          style={{
-            marginTop: 6,
-            alignSelf: "flex-start",
-            padding: "4px 10px",
-            fontSize: 11,
-            fontWeight: 600,
-            color: "var(--accent)",
-            background: "var(--surface)",
-            border: "1px solid var(--accent)",
-            borderRadius: 999,
-            cursor: isPending ? "wait" : "pointer",
-            opacity: isPending ? 0.6 : 1,
-          }}
-        >
-          {isPending ? "Switching…" : "Reach out to this person →"}
-        </button>
+        <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={onSwitch}
+            disabled={isPending}
+            title="Replace the current contact on this row. The cached draft is discarded and the composer regenerates from scratch for the new person."
+            style={{
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--accent)",
+              background: "var(--surface)",
+              border: "1px solid var(--accent)",
+              borderRadius: 999,
+              cursor: isPending ? "wait" : "pointer",
+              opacity: isPending ? 0.6 : 1,
+            }}
+          >
+            {isPending ? "Working…" : "Switch to this person →"}
+          </button>
+          <button
+            type="button"
+            onClick={onAddParallel}
+            disabled={isPending}
+            title="Keep the current contact AND add this person as a second parallel thread at the same firm. Creates a new row at +0 Pending approval."
+            style={{
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 500,
+              color: "var(--text-dim)",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 999,
+              cursor: isPending ? "wait" : "pointer",
+              opacity: isPending ? 0.6 : 1,
+            }}
+          >
+            + Add as parallel thread
+          </button>
+        </div>
       )}
     </li>
   );
