@@ -160,7 +160,15 @@ export async function getInvestorModalData(
   if (!campaignPartnerId || typeof campaignPartnerId !== "string") return null;
   const supabase = await createServerClient();
 
-  // 1) Root tracker row + joined campaign + joined partner + partner's investor.
+  // 1) Root tracker row + joined campaign + joined partner + partner's
+  // investor OR customer. Polymorphic read (migration 030) — depending
+  // on partners_mirror.kind, either investors_mirror:investor_id or
+  // customers_mirror:customer_id is populated. We join both and
+  // coalesce downstream so the same `investor` result slot carries
+  // firm metadata regardless of source. Investor-specific fields
+  // (thesis_summary, stage_focus, cheque_*, sector_focus, fund_size)
+  // are null for customer partners — compose.ts already branches on
+  // campaign_intent so those nulls are expected.
   const { data: root, error: rootErr } = await supabase
     .from("campaign_partners")
     .select(
@@ -186,7 +194,9 @@ export async function getInvestorModalData(
       ),
       partner:partners_mirror (
         id,
+        kind,
         investor_id,
+        customer_id,
         name,
         title,
         email,
@@ -211,6 +221,21 @@ export async function getInvestorModalData(
           investment_pattern,
           team_expertise,
           synthesis_data
+        ),
+        customer:customers_mirror (
+          id,
+          firm_name,
+          website,
+          hq_location,
+          country_iso,
+          type,
+          channel,
+          wave,
+          pitch_hook,
+          expected_ebitda_gbp,
+          bio,
+          deep_bio,
+          synthesis_data
         )
       )
     `,
@@ -231,20 +256,62 @@ export async function getInvestorModalData(
   const rootAny = root as any;
   const campaignRow = rootAny.campaign ?? null;
   const partnerRow = rootAny.partner ?? null;
-  const investorRow = partnerRow?.investor ?? null;
+  const partnerKind: "investor" | "customer" =
+    partnerRow?.kind === "customer" ? "customer" : "investor";
+  const investorRow = partnerKind === "investor" ? partnerRow?.investor ?? null : null;
+  const customerRow = partnerKind === "customer" ? partnerRow?.customer ?? null : null;
 
-  // 2) Sibling partners on the same investor firm (includes the primary).
+  // Unified "firm" row — what the rest of this function treats as the
+  // organisation. For investor partners it IS the investors_mirror row.
+  // For customer partners we map customers_mirror fields into the same
+  // shape so the downstream return shape is unchanged. This lets
+  // compose.ts, test-send, refine-synthesis all continue reading
+  // `data.investor.firm_name` etc. without per-kind branching.
+  const firmRow = investorRow
+    ? investorRow
+    : customerRow
+      ? {
+          id: customerRow.id,
+          firm_name: customerRow.firm_name,
+          website: customerRow.website,
+          hq_location: customerRow.hq_location,
+          // Customers_mirror.type is a retail-channel noun (DIY, grower,
+          // grocery). Expose as `type`.
+          type: customerRow.type,
+          // Customer "thesis" analogues — the briefing's pitch_hook
+          // describes why we'd sell to them; bio describes the firm.
+          thesis_summary: customerRow.pitch_hook ?? customerRow.bio ?? null,
+          thesis_deep: customerRow.deep_bio ?? customerRow.bio ?? null,
+          stage_focus: null,
+          sector_focus: customerRow.channel ?? null,
+          geo_focus: customerRow.country_iso ?? null,
+          cheque_min_usd: null,
+          cheque_max_usd: null,
+          fund_size_usd: null,
+          connection_brief: customerRow.pitch_hook ?? null,
+          investment_pattern: null,
+          team_expertise: null,
+          synthesis_data: customerRow.synthesis_data,
+        }
+      : null;
+
+  // 2) Sibling partners on the same firm (includes the primary).
+  // Kind-aware: query by investor_id for investor partners, customer_id
+  // for customer partners. Both come through the same partners_mirror
+  // table post-migration 030.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let siblingRows: any[] = [];
-  if (investorRow?.id != null) {
-    const { data: siblings, error: sibErr } = await supabase
+  const firmId = firmRow?.id ?? null;
+  if (firmId != null) {
+    const siblingQuery = supabase
       .from("partners_mirror")
-      .select(
-        "id, name, title, email, email_tier, bio, focus_areas",
-      )
-      .eq("investor_id", investorRow.id)
+      .select("id, name, title, email, email_tier, bio, focus_areas")
       .order("is_primary_contact", { ascending: false, nullsFirst: false })
       .order("name", { ascending: true });
+    const { data: siblings, error: sibErr } =
+      partnerKind === "investor"
+        ? await siblingQuery.eq("investor_id", firmId)
+        : await siblingQuery.eq("customer_id", firmId);
     if (sibErr) {
       console.error("getInvestorModalData siblings fetch failed:", sibErr.message);
     } else {
@@ -388,23 +455,23 @@ export async function getInvestorModalData(
         }
       : null,
     investor: {
-      id: (investorRow?.id as number | null) ?? null,
-      firm_name: investorRow?.firm_name ?? null,
-      website: investorRow?.website ?? null,
-      hq_location: investorRow?.hq_location ?? null,
-      type: investorRow?.type ?? null,
-      thesis_summary: investorRow?.thesis_summary ?? null,
-      thesis_deep: investorRow?.thesis_deep ?? null,
-      stage_focus: investorRow?.stage_focus ?? null,
-      sector_focus: investorRow?.sector_focus ?? null,
-      geo_focus: investorRow?.geo_focus ?? null,
-      cheque_min_usd: investorRow?.cheque_min_usd ?? null,
-      cheque_max_usd: investorRow?.cheque_max_usd ?? null,
-      fund_size_usd: investorRow?.fund_size_usd ?? null,
-      connection_brief: investorRow?.connection_brief ?? null,
-      investment_pattern: investorRow?.investment_pattern ?? null,
-      team_expertise: investorRow?.team_expertise ?? null,
-      portfolio_companies: parsePortfolioCompanies(investorRow?.synthesis_data),
+      id: (firmRow?.id as number | null) ?? null,
+      firm_name: firmRow?.firm_name ?? null,
+      website: firmRow?.website ?? null,
+      hq_location: firmRow?.hq_location ?? null,
+      type: firmRow?.type ?? null,
+      thesis_summary: firmRow?.thesis_summary ?? null,
+      thesis_deep: firmRow?.thesis_deep ?? null,
+      stage_focus: firmRow?.stage_focus ?? null,
+      sector_focus: firmRow?.sector_focus ?? null,
+      geo_focus: firmRow?.geo_focus ?? null,
+      cheque_min_usd: firmRow?.cheque_min_usd ?? null,
+      cheque_max_usd: firmRow?.cheque_max_usd ?? null,
+      fund_size_usd: firmRow?.fund_size_usd ?? null,
+      connection_brief: firmRow?.connection_brief ?? null,
+      investment_pattern: firmRow?.investment_pattern ?? null,
+      team_expertise: firmRow?.team_expertise ?? null,
+      portfolio_companies: parsePortfolioCompanies(firmRow?.synthesis_data),
     },
     primary_partner: primary,
     all_partners: allPartners,
