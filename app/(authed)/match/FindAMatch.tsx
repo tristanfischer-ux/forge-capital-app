@@ -711,12 +711,14 @@ export function FindAMatch({
           />
         ) : null}
 
-        <div className="substrate-hint">
-          <span className="tag">adjacent</span>
-          Semantic match uses the same embedding substrate as your Think &amp; Read
-          investor briefings. Reading history flows in — the more you read on a
-          fund, the stronger their thesis signal gets.
-        </div>
+        {archetype === "investor" ? (
+          <div className="substrate-hint">
+            <span className="tag">adjacent</span>
+            Semantic match uses the same embedding substrate as your Think &amp; Read
+            investor briefings. Reading history flows in — the more you read on a
+            fund, the stronger their thesis signal gets.
+          </div>
+        ) : null}
       </section>
 
       {/* Filter row — sits above the results head so the user can
@@ -793,6 +795,7 @@ export function FindAMatch({
         isLookalikePending={isLookalikePending}
         lookalikeData={lookalikeData}
         campaignName={campaignName}
+        customerPartnersCount={customerPartners?.length ?? 0}
         showAll={showAll}
         onToggleShowAll={(next) => {
           setShowAll(next);
@@ -1297,6 +1300,7 @@ function ResultsHead({
   showAll,
   onToggleShowAll,
   visibleCount,
+  customerPartnersCount,
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
@@ -1311,6 +1315,10 @@ function ResultsHead({
   showAll: boolean;
   onToggleShowAll: (next: boolean) => void;
   visibleCount: number;
+  /** Total customer partners on this campaign — only meaningful when
+   *  archetype is "customer". Drives the "Customers on this campaign · 93"
+   *  counter in place of the investor "showing N of M scored" label. */
+  customerPartnersCount?: number;
 }) {
   const poolLabel =
     archetype === "investor" ? archetypePoolSize.toLocaleString("en-GB") : "—";
@@ -1332,14 +1340,18 @@ function ResultsHead({
                 </span>
               ) : null}
             </>
+          ) : archetype === "customer" ? (
+            <>
+              Customers on this campaign
+              <span className="count">
+                {" "}&middot;{" "}
+                {customerPartnersCount?.toLocaleString("en-GB") ?? "0"}
+              </span>
+            </>
           ) : (
             <>
               Matched{" "}
-              {archetype === "customer"
-                ? "customers"
-                : archetype === "supplier"
-                  ? "suppliers"
-                  : "investors"}{" "}
+              {archetype === "supplier" ? "suppliers" : "investors"}{" "}
               <span className="count">
                 &middot; showing {visibleCount} of {scoredLabel} scored
               </span>
@@ -1351,6 +1363,12 @@ function ResultsHead({
             <>
               Scored against the aggregate thesis signal of positive
               respondents. {isLookalikePending ? "Scoring…" : "Already-contacted firms hidden."}
+            </>
+          ) : archetype === "customer" ? (
+            <>
+              Curated list of named customers on this campaign — not a
+              semantic-match pool. Use the approval sheet below to
+              review, approve and dispatch.
             </>
           ) : (
             <>
