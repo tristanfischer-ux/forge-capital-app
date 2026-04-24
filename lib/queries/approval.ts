@@ -64,6 +64,11 @@ export interface IncomingApprovalStats {
 
 export interface ApprovalCampaignMeta {
   campaign_id: string;
+  /** Campaign intent — investor / customer / supplier. Drives
+   *  column-header vocabulary ("Investor · Contact" vs
+   *  "Customer · Contact") and other noun choices on the approval
+   *  surface. Added 2026-04-24 for the Fischer Farms customer walk. */
+  campaign_intent: "investor" | "customer" | "supplier" | null;
   /** Internal campaign name — the auditable tracker token (e.g.
    *  "AUDIT · Wren Aerospace · Investor"). Consumers should render
    *  `campaign_display_name` instead when the surface is user-facing. */
@@ -92,6 +97,7 @@ interface PendingJoinRow {
   partners_mirror: {
     name: string | null;
     title: string | null;
+    kind: string | null;
     investors_mirror: {
       firm_name: string | null;
       hq_location: string | null;
@@ -100,7 +106,51 @@ interface PendingJoinRow {
       connection_brief: string | null;
       team_expertise: string | null;
     } | null;
+    customers_mirror: {
+      firm_name: string | null;
+      hq_location: string | null;
+      country_iso: string | null;
+      type: string | null;
+      wave: string | null;
+      pitch_hook: string | null;
+      bio: string | null;
+      expected_ebitda_gbp: number | null;
+    } | null;
   } | null;
+}
+
+/**
+ * Compose the "Why them" column for a customer-kind partner from the
+ * fields populated by the Fischer-Farms ingest (pitch_hook + wave +
+ * expected EBITDA). We build a one-liner so the approval-sheet row
+ * reads at a glance instead of "— synthesis pending —".
+ */
+function deriveWhyThemCustomer(
+  customer: {
+    pitch_hook: string | null;
+    wave: string | null;
+    expected_ebitda_gbp: number | null;
+  } | null,
+): string | null {
+  if (!customer) return null;
+  const parts: string[] = [];
+  if (customer.pitch_hook && customer.pitch_hook.trim().length > 0) {
+    parts.push(customer.pitch_hook.trim());
+  }
+  const meta: string[] = [];
+  if (customer.wave) {
+    meta.push(
+      customer.wave === "niche" ? "Niche wave" : `Wave ${customer.wave}`,
+    );
+  }
+  if (customer.expected_ebitda_gbp && customer.expected_ebitda_gbp > 0) {
+    meta.push(
+      `£${Math.round(customer.expected_ebitda_gbp / 1000).toLocaleString("en-GB")}K EBITDA`,
+    );
+  }
+  if (meta.length > 0) parts.push(meta.join(" · "));
+  if (parts.length === 0) return null;
+  return parts.join(" — ");
 }
 
 interface DecidedJoinRow {
@@ -181,6 +231,7 @@ export async function getPendingApproval(
       partners_mirror:partner_id (
         name,
         title,
+        kind,
         investors_mirror:investor_id (
           firm_name,
           hq_location,
@@ -188,6 +239,16 @@ export async function getPendingApproval(
           investment_pattern,
           connection_brief,
           team_expertise
+        ),
+        customers_mirror:customer_id (
+          firm_name,
+          hq_location,
+          country_iso,
+          type,
+          wave,
+          pitch_hook,
+          bio,
+          expected_ebitda_gbp
         )
       )
       `,
@@ -205,13 +266,26 @@ export async function getPendingApproval(
   return rows.map((row) => {
     const partner = row.partners_mirror;
     const investor = partner?.investors_mirror ?? null;
+    const customer = partner?.customers_mirror ?? null;
+    // Polymorphic partners (migration 030): a partner is EITHER an
+    // investor OR a customer — the kind discriminator + CHECK constraint
+    // guarantees exactly one side is populated. Coalesce firm_name /
+    // hq_location so downstream renderers don't need to care about the
+    // discriminator. "Why them" builds off investor synthesis for
+    // investor-kind rows and off the customer pitch_hook + wave + £
+    // EBITDA for customer-kind rows.
+    const isCustomer = partner?.kind === "customer";
     return {
       campaign_partner_id: row.id,
-      firm_name: investor?.firm_name ?? null,
-      hq_location: investor?.hq_location ?? null,
+      firm_name:
+        (isCustomer ? customer?.firm_name : investor?.firm_name) ?? null,
+      hq_location:
+        (isCustomer ? customer?.hq_location : investor?.hq_location) ?? null,
       partner_name: partner?.name ?? null,
       partner_title: partner?.title ?? null,
-      why_them: deriveWhyThem(investor),
+      why_them: isCustomer
+        ? deriveWhyThemCustomer(customer)
+        : deriveWhyThem(investor),
       created_at: row.created_at,
     };
   });
@@ -314,7 +388,9 @@ export async function getApprovalCampaignMeta(
   const [campaignResult, countResult] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, name, display_name, counterpart_name, counterpart_email")
+      .select(
+        "id, name, display_name, campaign_intent, counterpart_name, counterpart_email",
+      )
       .eq("id", campaignId)
       .maybeSingle(),
     supabase
@@ -334,11 +410,18 @@ export async function getApprovalCampaignMeta(
     id: string;
     name: string | null;
     display_name?: string | null;
+    campaign_intent?: string | null;
     counterpart_name?: string | null;
     counterpart_email?: string | null;
   };
+  const rawIntent = row.campaign_intent;
+  const campaign_intent: ApprovalCampaignMeta["campaign_intent"] =
+    rawIntent === "investor" || rawIntent === "customer" || rawIntent === "supplier"
+      ? rawIntent
+      : null;
   return {
     campaign_id: row.id,
+    campaign_intent,
     campaign_name: row.name ?? null,
     campaign_display_name: row.display_name ?? null,
     counterpart_name: row.counterpart_name ?? null,

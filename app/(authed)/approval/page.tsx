@@ -240,6 +240,7 @@ export default async function ApprovalPage({
           counterpartName={counterpartName}
           counterpartPossessive={counterpartPossessive}
           selfManaged={selfManaged}
+          campaignIntent={meta?.campaign_intent ?? null}
         />
         <ApprovalReturnDropZone
           campaignId={campaignId}
@@ -277,6 +278,7 @@ function OutgoingColumn({
   counterpartName,
   counterpartPossessive,
   selfManaged,
+  campaignIntent,
 }: {
   campaignId: string;
   rows: OutgoingApprovalRow[];
@@ -286,7 +288,19 @@ function OutgoingColumn({
    *  both sender and approver. Swaps "what X will see" for "outgoing
    *  list" and the evidence-footer wording accordingly. */
   selfManaged: boolean;
+  /** Campaign intent — drives column-header noun (Investor / Customer /
+   *  Supplier · Contact). Null before the meta query has resolved. */
+  campaignIntent: "investor" | "customer" | "supplier" | null;
 }) {
+  // Column-header noun. Customer and supplier campaigns read "Customer
+  // · Contact" / "Supplier · Contact" instead of the V4-default
+  // "Investor · Contact".
+  const contactColumnHeader =
+    campaignIntent === "customer"
+      ? "Customer · Contact"
+      : campaignIntent === "supplier"
+        ? "Supplier · Contact"
+        : "Investor · Contact";
   const count = rows.length;
   // Filename is honest about what it represents — no more hardcoded
   // demo "Stephan TF v12". Date = today's ISO; counterpart initial
@@ -357,7 +371,7 @@ function OutgoingColumn({
       <table className="sheet">
         <thead>
           <tr>
-            <th style={{ width: "30%" }}>Investor &middot; Contact</th>
+            <th style={{ width: "30%" }}>{contactColumnHeader}</th>
             <th>Why them (synthesis)</th>
             <th style={{ width: "16%" }}>Comment SW</th>
           </tr>
