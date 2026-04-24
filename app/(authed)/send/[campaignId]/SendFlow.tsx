@@ -93,6 +93,16 @@ export function SendFlow({
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Step 5's per-row email cache is lifted to the parent so navigating
+  // Step 5 → Step 6 → Step 5 doesn't trigger a full re-fetch flicker
+  // ("dead page look" per Tristan 2026-04-24). Each cpId is fetched
+  // at most once per browser session.
+  const [step5EmailByCpId, setStep5EmailByCpId] = useState<
+    Map<string, string | null>
+  >(new Map());
+  const [step5PrimaryPartnerIdByCpId, setStep5PrimaryPartnerIdByCpId] =
+    useState<Map<string, number | null>>(new Map());
+
   // Persist step to URL hash so refresh keeps you on the right step.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -248,6 +258,10 @@ export function SendFlow({
             )}
             onContinue={next}
             setToast={setToast}
+            emailByCpId={step5EmailByCpId}
+            setEmailByCpId={setStep5EmailByCpId}
+            primaryPartnerIdByCpId={step5PrimaryPartnerIdByCpId}
+            setPrimaryPartnerIdByCpId={setStep5PrimaryPartnerIdByCpId}
           />
         )}
         {step === "6" && (
@@ -794,20 +808,31 @@ function Step5EmailResolve({
   customers,
   onContinue,
   setToast,
+  emailByCpId,
+  setEmailByCpId,
+  primaryPartnerIdByCpId,
+  setPrimaryPartnerIdByCpId,
 }: {
   customers: CustomerCampaignPartnerCard[];
   onContinue: () => void;
   setToast: (s: string | null) => void;
+  // Lifted to parent — preserves email cache across step switches so
+  // returning to Step 5 doesn't re-fire 23 parallel Hunter lookups.
+  emailByCpId: Map<string, string | null>;
+  setEmailByCpId: React.Dispatch<
+    React.SetStateAction<Map<string, string | null>>
+  >;
+  primaryPartnerIdByCpId: Map<string, number | null>;
+  setPrimaryPartnerIdByCpId: React.Dispatch<
+    React.SetStateAction<Map<string, number | null>>
+  >;
 }) {
-  // Lazy-load each selected customer's contact directory so we can
-  // tell "has email / no email on file" per row. Populated on mount.
-  const [emailByCpId, setEmailByCpId] = useState<Map<string, string | null>>(
-    new Map(),
+  // Derived local-only state for the loading flicker.
+  const cacheComplete = useMemo(
+    () => customers.every((c) => emailByCpId.has(c.campaign_partner_id)),
+    [customers, emailByCpId],
   );
-  const [primaryPartnerIdByCpId, setPrimaryPartnerIdByCpId] = useState<
-    Map<string, number | null>
-  >(new Map());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cacheComplete);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   // Dep on a stable STRING derived from the selected ids, not the
@@ -829,25 +854,26 @@ function Step5EmailResolve({
   useEffect(() => {
     let cancelled = false;
     async function loadAll() {
-      setLoading(true);
-      setLoadedCount(0);
       const ids = cpIdsKey ? cpIdsKey.split(",").filter(Boolean) : [];
       if (ids.length === 0) {
-        if (!cancelled) {
-          setEmailByCpId(new Map());
-          setPrimaryPartnerIdByCpId(new Map());
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
         return;
       }
-      // Parallel fetch instead of sequential — 23 rows go from ~1.5s
-      // to ~150ms on the dev server. Tristan 2026-04-24 saw the "flash"
-      // because sequential load completed in ~2s and the loader
-      // appeared stuck for the first 2s. Parallel + a visible
-      // counter kills both perceptions.
+      // If parent already has every id cached, skip the re-fetch —
+      // this is the whole point of lifting state: Step 5 → 6 → 5
+      // reuses the cache and the dead-page flicker is gone.
+      const allCached = ids.every((id) => emailByCpId.has(id));
+      if (allCached) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setLoadedCount(0);
+      // Only fetch the ids we don't already have cached.
+      const missingIds = ids.filter((id) => !emailByCpId.has(id));
       let done = 0;
       const results = await Promise.all(
-        ids.map(async (id) => {
+        missingIds.map(async (id) => {
           try {
             const dir = await loadContactDirectory(id);
             done += 1;
@@ -870,21 +896,27 @@ function Step5EmailResolve({
         }),
       );
       if (cancelled) return;
-      const nextEmail = new Map<string, string | null>();
-      const nextPartner = new Map<string, number | null>();
-      for (const r of results) {
-        if (!r) continue;
-        nextEmail.set(r.id, r.email);
-        nextPartner.set(r.id, r.partnerId);
-      }
-      setEmailByCpId(nextEmail);
-      setPrimaryPartnerIdByCpId(nextPartner);
+      setEmailByCpId((prev) => {
+        const next = new Map(prev);
+        for (const r of results) {
+          if (r) next.set(r.id, r.email);
+        }
+        return next;
+      });
+      setPrimaryPartnerIdByCpId((prev) => {
+        const next = new Map(prev);
+        for (const r of results) {
+          if (r) next.set(r.id, r.partnerId);
+        }
+        return next;
+      });
       setLoading(false);
     }
     loadAll();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cpIdsKey]);
 
   const withEmail = customers.filter(
@@ -909,9 +941,11 @@ function Step5EmailResolve({
       setToast(`Error: ${r.error}`);
       return;
     }
-    const next = new Map(emailByCpId);
-    next.set(cpId, email.trim().toLowerCase());
-    setEmailByCpId(next);
+    setEmailByCpId((prev) => {
+      const next = new Map(prev);
+      next.set(cpId, email.trim().toLowerCase());
+      return next;
+    });
     setToast("Email saved.");
   }
 
