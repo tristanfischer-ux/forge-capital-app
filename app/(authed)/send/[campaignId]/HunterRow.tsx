@@ -47,6 +47,13 @@ export function HunterRow({
   // "It would be useful to have the ability to click one you might
   // want to go for and then that jumps to the top").
   const [pinned, setPinned] = useState<Set<string>>(new Set());
+  // After the ranker completes, default to showing only the #1
+  // candidate (plus any pinned) — Tristan 2026-04-24: "there should
+  // only be one". The rest collapse behind a disclosure. We
+  // automatically expand the list if the top candidate is generic
+  // (info@, sales@) — in that case the named alternative at rank 2+
+  // is probably the real answer and hiding it would be wrong.
+  const [showAllCandidates, setShowAllCandidates] = useState(false);
   function togglePin(email: string) {
     setPinned((prev) => {
       const next = new Set(prev);
@@ -254,19 +261,36 @@ export function HunterRow({
           {error}
         </div>
       ) : candidates && candidates.length > 0 ? (
-        <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-          {[...candidates]
-            .sort((a, b) => {
-              const ap = pinned.has(a.email) ? 1 : 0;
-              const bp = pinned.has(b.email) ? 1 : 0;
-              if (ap !== bp) return bp - ap; // pinned first
-              // Then ranker output when available (lower rank = better fit).
-              const ar = a.rank ?? Number.MAX_SAFE_INTEGER;
-              const br = b.rank ?? Number.MAX_SAFE_INTEGER;
-              if (ar !== br) return ar - br;
-              return 0; // fall back to array order (Hunter's native ranking)
-            })
-            .map((c) => {
+        (() => {
+          const sorted = [...candidates].sort((a, b) => {
+            const ap = pinned.has(a.email) ? 1 : 0;
+            const bp = pinned.has(b.email) ? 1 : 0;
+            if (ap !== bp) return bp - ap; // pinned first
+            // Then ranker output when available (lower rank = better fit).
+            const ar = a.rank ?? Number.MAX_SAFE_INTEGER;
+            const br = b.rank ?? Number.MAX_SAFE_INTEGER;
+            if (ar !== br) return ar - br;
+            return 0; // fall back to array order (Hunter's native ranking)
+          });
+          // Collapse-to-#1 only kicks in once the ranker has finished
+          // successfully AND the top-ranked candidate is a named personal
+          // address. Pre-rank or after a ranker failure, show the full
+          // list — the user has no "one" to trust yet. If the top pick
+          // is a generic (info@ / sales@), the rank-2+ named candidate
+          // is usually the real answer and hiding it would be wrong.
+          const topIsPersonal =
+            rankingStatus === "done" &&
+            sorted[0]?.rank != null &&
+            sorted[0]?.type === "personal";
+          const shouldCollapse = topIsPersonal && !showAllCandidates;
+          const visible = shouldCollapse
+            ? sorted.filter((c, idx) => idx === 0 || pinned.has(c.email))
+            : sorted;
+          const hiddenCount = sorted.length - visible.length;
+          return (
+            <>
+              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                {visible.map((c) => {
             const ranking = [
               c.type === "personal" ? "personal" : "generic",
               c.confidence != null ? `score ${c.confidence}` : null,
@@ -400,7 +424,53 @@ export function HunterRow({
               </li>
             );
           })}
-        </ul>
+              </ul>
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllCandidates(true)}
+                  style={{
+                    marginTop: 8,
+                    padding: "6px 10px",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: "var(--text-dim)",
+                    background: "var(--surface)",
+                    border: "1px dashed var(--border)",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    width: "100%",
+                    textAlign: "center",
+                  }}
+                  title="Show the rest of the Hunter candidates for this firm"
+                >
+                  Show {hiddenCount} other{hiddenCount === 1 ? "" : "s"} ↓
+                </button>
+              ) : shouldCollapse === false && sorted.length > 1 && rankingStatus === "done" ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllCandidates(false)}
+                  style={{
+                    marginTop: 8,
+                    padding: "6px 10px",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: "var(--text-dim)",
+                    background: "var(--surface)",
+                    border: "1px dashed var(--border)",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    width: "100%",
+                    textAlign: "center",
+                  }}
+                  title="Hide everything except the top-ranked candidate"
+                >
+                  Collapse to top pick ↑
+                </button>
+              ) : null}
+            </>
+          );
+        })()
       ) : null}
     </div>
   );
