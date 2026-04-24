@@ -6,7 +6,7 @@ import {
 } from "@/lib/queries/campaigns";
 import { getMatchScore, type Archetype } from "@/lib/queries/match-score";
 import { FindAMatch } from "../match/FindAMatch";
-import { DEFAULT_HERO_TEXT } from "../match/match-constants";
+import { heroTextForArchetype } from "../match/match-constants";
 
 import ApprovalPage from "../approval/page";
 import PipelinePage from "../pipeline/page";
@@ -63,8 +63,15 @@ type SearchParams = Promise<{
   a?: string;
 }>;
 
-function parseArchetype(raw: string | undefined): Archetype {
-  if (raw === "customer" || raw === "supplier") return raw;
+function parseArchetype(raw: string | undefined): Archetype | null {
+  if (raw === "investor" || raw === "customer" || raw === "supplier") return raw;
+  return null;
+}
+
+function archetypeFromCampaignIntent(
+  intent: string | null | undefined,
+): Archetype {
+  if (intent === "customer" || intent === "supplier") return intent;
   return "investor";
 }
 
@@ -94,13 +101,26 @@ export default async function HomePage({
   }
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
-  const archetype = parseArchetype(params.a);
 
-  // §3 Find-a-Match — initial scored top-10 against the V4 SkySails sample
-  // text so the first paint has real cards. Client-side edits re-run the
-  // query via the shared server action (see match/match-v4-actions.ts).
+  // Archetype follows the active campaign's campaign_intent by
+  // default (customer campaign → Customer, supplier → Supplier,
+  // investor → Investor). An explicit ?a= in the URL overrides so
+  // Tristan can still explore the investor pool from a customer
+  // campaign's context. Previously we defaulted to "investor"
+  // unconditionally, so switching to the Fischer Farms customer
+  // campaign still opened Find-a-Match in investor mode with stale
+  // SkySails text (Tristan 2026-04-24).
+  const archetype: Archetype =
+    parseArchetype(params.a) ??
+    archetypeFromCampaignIntent(activeCampaign?.campaign_intent ?? null);
+
+  // §3 Find-a-Match — initial scored top-10 against an
+  // archetype-appropriate sample text so the first paint has real
+  // cards on investor campaigns and a Fischer Farms-shaped description
+  // on customer campaigns. Client-side edits re-run the query via the
+  // shared server action (see match/match-v4-actions.ts).
   const findMatchInitial = await getMatchScore({
-    heroText: DEFAULT_HERO_TEXT,
+    heroText: heroTextForArchetype(archetype),
     archetype,
     campaignId,
     limit: 10,

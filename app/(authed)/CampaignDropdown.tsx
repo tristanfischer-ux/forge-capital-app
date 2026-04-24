@@ -250,7 +250,16 @@ function CampaignOption({
     e.preventDefault();
     const maxAge = 60 * 60 * 24 * 365;
     document.cookie = `fc_active_campaign=${campaign.id}; path=/; max-age=${maxAge}; samesite=lax`;
-    const target = `${pathname}?c=${campaign.id}`;
+    // Include the destination campaign's archetype in the URL so the
+    // Find-a-Match surface re-renders on the correct pool + hero text.
+    // Previously only `?c=` was set, which meant the server component
+    // fell back to "investor" archetype on every switch, regardless of
+    // whether the new campaign was investor / customer / supplier.
+    const arch =
+      campaign.campaign_intent === "customer" ? "customer"
+      : campaign.campaign_intent === "supplier" ? "supplier"
+      : "investor";
+    const target = `${pathname}?c=${campaign.id}&a=${arch}`;
     router.push(target);
     router.refresh();
   }
