@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { CustomerCampaignPartnerCard } from "@/lib/queries/customer-partners";
+import type { CampaignMonitorData } from "@/lib/queries/monitor";
 import {
   saveBrief,
   saveCriteria,
@@ -13,6 +14,13 @@ import {
   queueBatch,
 } from "./actions";
 import { loadContactDirectory } from "../../approval/loadContactDirectoryAction";
+import { HunterRow } from "./HunterRow";
+import {
+  Step4aSendList,
+  Step4bPasteReply,
+  Step4cIngest,
+} from "./PermissionSteps";
+import { MonitorPanel } from "./MonitorPanel";
 
 /**
  * The 9-step linear customer-outreach flow for self-managed
@@ -23,7 +31,20 @@ import { loadContactDirectory } from "../../approval/loadContactDirectoryAction"
  * lands you on the same step.
  */
 
-type StepIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+type StepKey =
+  | "1"
+  | "2"
+  | "3"
+  | "4"
+  | "4a"
+  | "4b"
+  | "4c"
+  | "5"
+  | "6"
+  | "7"
+  | "8"
+  | "9"
+  | "10";
 
 interface SendFlowProps {
   campaignId: string;
@@ -32,6 +53,11 @@ interface SendFlowProps {
   initialCriteria: string;
   initialTemplate: string;
   customerPartners: CustomerCampaignPartnerCard[];
+  /** Multi-party signal — when set, the 4a/4b/4c permission block
+   *  renders between Step 4 and Step 5. Null = self-managed. */
+  counterpartEmail: string | null;
+  /** Step 10 Monitor data — always loaded, shown at the end. */
+  monitor: CampaignMonitorData;
 }
 
 export function SendFlow({
@@ -41,33 +67,54 @@ export function SendFlow({
   initialCriteria,
   initialTemplate,
   customerPartners,
+  counterpartEmail,
+  monitor,
 }: SendFlowProps) {
-  const [step, setStep] = useState<StepIndex>(1);
+  const isMultiParty = counterpartEmail != null;
+
+  // Ordered step sequence — depends on whether the permission block
+  // is active. All non-permission steps keep their numeric labels so
+  // the code below reads naturally even as the ordinal position
+  // shifts for multi-party campaigns.
+  const stepSequence: StepKey[] = useMemo(() => {
+    return isMultiParty
+      ? ["1", "2", "3", "4", "4a", "4b", "4c", "5", "6", "7", "8", "9", "10"]
+      : ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+  }, [isMultiParty]);
+
+  const [step, setStep] = useState<StepKey>("1");
   const [brief, setBrief] = useState<string>(initialBrief);
   const [criteria, setCriteria] = useState<string>(initialCriteria);
   const [template, setTemplate] = useState<string>(initialTemplate);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
+  const [rawReply, setRawReply] = useState<string>(""); // Step 4b → 4c
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Persist step to URL hash so refresh keeps you on the right step.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const hash = window.location.hash.replace("#step-", "");
-    const parsed = Number.parseInt(hash, 10);
-    if (parsed >= 1 && parsed <= 9) setStep(parsed as StepIndex);
-  }, []);
+    const hash = window.location.hash.replace("#step-", "") as StepKey;
+    if (stepSequence.includes(hash)) setStep(hash);
+  }, [stepSequence]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.history.replaceState(null, "", `#step-${step}`);
   }, [step]);
 
+  const stepIdx = stepSequence.indexOf(step);
   function next() {
-    if (step < 9) setStep((step + 1) as StepIndex);
+    const i = stepSequence.indexOf(step);
+    if (i >= 0 && i < stepSequence.length - 1) {
+      setStep(stepSequence[i + 1]);
+    }
   }
   function prev() {
-    if (step > 1) setStep((step - 1) as StepIndex);
+    const i = stepSequence.indexOf(step);
+    if (i > 0) {
+      setStep(stepSequence[i - 1]);
+    }
   }
 
   const selectedCount = selectedIds.size;
@@ -92,7 +139,11 @@ export function SendFlow({
         </Link>
       </div>
 
-      <StepProgress step={step} onJump={(s) => setStep(s)} />
+      <StepProgress
+        step={step}
+        stepSequence={stepSequence}
+        onJump={(s) => setStep(s)}
+      />
 
       {toast ? (
         <div
@@ -111,7 +162,7 @@ export function SendFlow({
       ) : null}
 
       <div style={{ marginTop: 18 }}>
-        {step === 1 && (
+        {step === "1" && (
           <Step1Brief
             brief={brief}
             onChange={setBrief}
@@ -125,7 +176,7 @@ export function SendFlow({
             isPending={isPending}
           />
         )}
-        {step === 2 && (
+        {step === "2" && (
           <Step2Criteria
             criteria={criteria}
             onChange={setCriteria}
@@ -139,13 +190,13 @@ export function SendFlow({
             isPending={isPending}
           />
         )}
-        {step === 3 && (
+        {step === "3" && (
           <Step3Search
             customers={customerPartners}
             onContinue={next}
           />
         )}
-        {step === 4 && (
+        {step === "4" && (
           <Step4Pick
             customers={customerPartners}
             selectedIds={selectedIds}
@@ -165,7 +216,31 @@ export function SendFlow({
             }}
           />
         )}
-        {step === 5 && (
+        {step === "4a" && counterpartEmail ? (
+          <Step4aSendList
+            campaignId={campaignId}
+            counterpartEmail={counterpartEmail}
+            selectedCpIds={Array.from(selectedIds)}
+            onContinue={next}
+          />
+        ) : null}
+        {step === "4b" ? (
+          <Step4bPasteReply
+            campaignId={campaignId}
+            onContinue={(text) => {
+              setRawReply(text);
+              next();
+            }}
+          />
+        ) : null}
+        {step === "4c" ? (
+          <Step4cIngest
+            campaignId={campaignId}
+            rawReply={rawReply}
+            onContinue={next}
+          />
+        ) : null}
+        {step === "5" && (
           <Step5EmailResolve
             customers={customerPartners.filter((c) =>
               selectedIds.has(c.campaign_partner_id),
@@ -174,7 +249,7 @@ export function SendFlow({
             setToast={setToast}
           />
         )}
-        {step === 6 && (
+        {step === "6" && (
           <Step6Template
             template={template}
             onChange={setTemplate}
@@ -188,7 +263,7 @@ export function SendFlow({
             isPending={isPending}
           />
         )}
-        {step === 7 && (
+        {step === "7" && (
           <Step7Draft
             selectedCount={selectedCount}
             onDraftAll={() =>
@@ -214,7 +289,7 @@ export function SendFlow({
             campaignId={campaignId}
           />
         )}
-        {step === 8 && (
+        {step === "8" && (
           <Step8Approve
             customers={customerPartners.filter((c) =>
               selectedIds.has(c.campaign_partner_id),
@@ -244,7 +319,7 @@ export function SendFlow({
             isPending={isPending}
           />
         )}
-        {step === 9 && (
+        {step === "9" && (
           <Step9Queue
             customers={customerPartners.filter((c) =>
               approvedIds.has(c.campaign_partner_id),
@@ -267,6 +342,15 @@ export function SendFlow({
             campaignId={campaignId}
           />
         )}
+        {step === "10" && (
+          <StepCard
+            number={10}
+            title="Monitor"
+            intro="Everything that's been dispatched, queued, replied, or bounced for this campaign. Refresh the page to re-pull."
+          >
+            <MonitorPanel data={monitor} campaignId={campaignId} />
+          </StepCard>
+        )}
       </div>
 
       <div
@@ -281,36 +365,40 @@ export function SendFlow({
         <button
           type="button"
           onClick={prev}
-          disabled={step === 1}
+          disabled={stepIdx === 0}
           style={{
             padding: "6px 14px",
             fontSize: 12,
             fontWeight: 500,
-            color: step === 1 ? "var(--text-faint)" : "var(--text-dim)",
+            color: stepIdx === 0 ? "var(--text-faint)" : "var(--text-dim)",
             background: "var(--surface)",
             border: "1px solid var(--border)",
             borderRadius: 6,
-            cursor: step === 1 ? "not-allowed" : "pointer",
+            cursor: stepIdx === 0 ? "not-allowed" : "pointer",
           }}
         >
           ← Previous
         </button>
         <div style={{ fontSize: 11, color: "var(--text-faint)", alignSelf: "center" }}>
-          Step {step} of 9
+          Step {step} of {stepSequence.length}
         </div>
         <button
           type="button"
           onClick={next}
-          disabled={step === 9}
+          disabled={stepIdx === stepSequence.length - 1}
           style={{
             padding: "6px 14px",
             fontSize: 12,
             fontWeight: 500,
-            color: step === 9 ? "var(--text-faint)" : "var(--accent)",
+            color:
+              stepIdx === stepSequence.length - 1
+                ? "var(--text-faint)"
+                : "var(--accent)",
             background: "var(--surface)",
             border: "1px solid var(--border)",
             borderRadius: 6,
-            cursor: step === 9 ? "not-allowed" : "pointer",
+            cursor:
+              stepIdx === stepSequence.length - 1 ? "not-allowed" : "pointer",
           }}
         >
           Skip to next →
@@ -322,38 +410,45 @@ export function SendFlow({
 
 /* ───────────────────────── Step Progress ──────────────────────────────────── */
 
-const STEP_LABELS = [
-  "Brief",
-  "Criteria",
-  "Search",
-  "Pick",
-  "Email",
-  "Template",
-  "Draft",
-  "Approve",
-  "Queue",
-] as const;
+const LABEL_FOR_STEP: Record<StepKey, string> = {
+  "1": "Brief",
+  "2": "Criteria",
+  "3": "Search",
+  "4": "Pick",
+  "4a": "Send list",
+  "4b": "Paste reply",
+  "4c": "Ingest",
+  "5": "Email",
+  "6": "Template",
+  "7": "Draft",
+  "8": "Approve",
+  "9": "Queue",
+  "10": "Monitor",
+};
 
 function StepProgress({
   step,
+  stepSequence,
   onJump,
 }: {
-  step: StepIndex;
-  onJump: (s: StepIndex) => void;
+  step: StepKey;
+  stepSequence: StepKey[];
+  onJump: (s: StepKey) => void;
 }) {
+  const activeIdx = stepSequence.indexOf(step);
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(9, 1fr)",
+        gridTemplateColumns: `repeat(${stepSequence.length}, 1fr)`,
         gap: 4,
         marginTop: 12,
       }}
     >
-      {STEP_LABELS.map((label, i) => {
-        const s = (i + 1) as StepIndex;
+      {stepSequence.map((s, i) => {
         const active = s === step;
-        const done = s < step;
+        const done = i < activeIdx;
+        const isSubStep = s.length > 1 && s !== "10";
         return (
           <button
             key={s}
@@ -361,24 +456,31 @@ function StepProgress({
             onClick={() => onJump(s)}
             style={{
               padding: "6px 8px",
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: active ? 700 : 500,
-              color: active ? "white" : done ? "var(--accent)" : "var(--text-dim)",
+              color: active
+                ? "white"
+                : done
+                  ? "var(--accent)"
+                  : "var(--text-dim)",
               background: active
                 ? "var(--accent)"
                 : done
                   ? "var(--accent-softer)"
-                  : "var(--surface-alt)",
+                  : isSubStep
+                    ? "var(--surface)"
+                    : "var(--surface-alt)",
               border: "1px solid",
               borderColor: active ? "var(--accent)" : "var(--border)",
+              borderStyle: isSubStep ? "dashed" : "solid",
               borderRadius: 4,
               cursor: "pointer",
               textAlign: "center",
               textTransform: "uppercase",
-              letterSpacing: 0.6,
+              letterSpacing: 0.4,
             }}
           >
-            {s} · {label}
+            {s} · {LABEL_FOR_STEP[s]}
           </button>
         );
       })}
@@ -799,8 +901,17 @@ function Step5EmailResolve({
                   key={c.campaign_partner_id}
                   customer={c}
                   currentEmail={null}
+                  primaryPartnerId={
+                    primaryPartnerIdByCpId.get(c.campaign_partner_id) ?? null
+                  }
                   saving={savingId === c.campaign_partner_id}
                   onSave={(email) => saveInline(c.campaign_partner_id, email)}
+                  onHunterSaved={(email) => {
+                    const next = new Map(emailByCpId);
+                    next.set(c.campaign_partner_id, email);
+                    setEmailByCpId(next);
+                  }}
+                  setToast={setToast}
                 />
               ))}
             </div>
@@ -814,8 +925,17 @@ function Step5EmailResolve({
                   key={c.campaign_partner_id}
                   customer={c}
                   currentEmail={emailByCpId.get(c.campaign_partner_id) ?? null}
+                  primaryPartnerId={
+                    primaryPartnerIdByCpId.get(c.campaign_partner_id) ?? null
+                  }
                   saving={savingId === c.campaign_partner_id}
                   onSave={(email) => saveInline(c.campaign_partner_id, email)}
+                  onHunterSaved={(email) => {
+                    const next = new Map(emailByCpId);
+                    next.set(c.campaign_partner_id, email);
+                    setEmailByCpId(next);
+                  }}
+                  setToast={setToast}
                 />
               ))}
             </div>
@@ -831,20 +951,26 @@ function Step5EmailResolve({
 function EmailRow({
   customer,
   currentEmail,
+  primaryPartnerId,
   saving,
   onSave,
+  onHunterSaved,
+  setToast,
 }: {
   customer: CustomerCampaignPartnerCard;
   currentEmail: string | null;
+  primaryPartnerId: number | null;
   saving: boolean;
   onSave: (email: string) => void;
+  onHunterSaved: (email: string) => void;
+  setToast: (s: string | null) => void;
 }) {
   const [value, setValue] = useState<string>(currentEmail ?? "");
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1fr auto auto",
+        gridTemplateColumns: "1fr auto auto auto",
         gap: 10,
         padding: "8px 12px",
         borderBottom: "1px solid var(--border-soft, var(--border))",
@@ -888,6 +1014,13 @@ function EmailRow({
       >
         {saving ? "Saving…" : "Save"}
       </button>
+      <HunterRow
+        campaignPartnerId={customer.campaign_partner_id}
+        firmName={customer.firm_name}
+        primaryPartnerId={primaryPartnerId}
+        onSaved={onHunterSaved}
+        setToast={setToast}
+      />
     </div>
   );
 }

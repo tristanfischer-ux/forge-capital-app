@@ -1,6 +1,7 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { listCustomerCampaignPartners } from "@/lib/queries/customer-partners";
+import { getCampaignMonitor } from "@/lib/queries/monitor";
 import { SendFlow } from "./SendFlow";
 
 /**
@@ -49,21 +50,26 @@ export default async function SendPage(props: {
   }
   if (!campaign) notFound();
 
-  // Self-managed guard — if this campaign has an external approver
-  // configured, the linear /send flow is the wrong shape (it skips
-  // the approver hand-off). Send them back to /approval.
-  const hasCounterpart =
+  // Multi-party campaigns (with a counterpart_email set — e.g.
+  // FishFrom's Andrew Robertson) flow through the SAME /send route
+  // but trigger the 4a/4b/4c permission block between Pick and Email.
+  // Previous revision redirected them to /approval — we keep /send as
+  // the unified surface now so the flow is one mental model regardless.
+  const counterpartEmail =
     typeof campaign.counterpart_email === "string" &&
-    campaign.counterpart_email.trim().length > 0;
-  if (hasCounterpart) {
-    redirect(`/approval?c=${campaign.id}`);
-  }
+    campaign.counterpart_email.trim().length > 0
+      ? campaign.counterpart_email.trim()
+      : null;
 
   // Load everything the flow needs up-front. Steps 3/4 use the customer
-  // list; steps 5 reads email state off each row; step 7 reads drafts
-  // from rendered_synthesis (if cached). All of this is campaign-scoped
-  // so RLS keeps the query tight.
-  const customerPartners = await listCustomerCampaignPartners(campaignId);
+  // list; Step 5 reads email state off each row; Step 7 reads drafts
+  // from rendered_synthesis (if cached); Step 10 reads the monitor
+  // view (scheduled_sends + contact_events). Campaign-scoped so RLS
+  // keeps the query tight.
+  const [customerPartners, monitor] = await Promise.all([
+    listCustomerCampaignPartners(campaignId),
+    getCampaignMonitor(campaignId),
+  ]);
 
   return (
     <SendFlow
@@ -73,6 +79,8 @@ export default async function SendPage(props: {
       initialCriteria={campaign.hunting_criteria ?? ""}
       initialTemplate={campaign.customer_template ?? ""}
       customerPartners={customerPartners}
+      counterpartEmail={counterpartEmail}
+      monitor={monitor}
     />
   );
 }
