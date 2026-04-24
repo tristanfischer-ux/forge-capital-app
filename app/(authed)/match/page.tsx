@@ -5,7 +5,7 @@ import {
 } from "@/lib/queries/campaigns";
 import { getMatchScore, type Archetype } from "@/lib/queries/match-score";
 import { FindAMatch } from "./FindAMatch";
-import { DEFAULT_HERO_TEXT } from "./match-constants";
+import { heroTextForArchetype } from "./match-constants";
 
 /**
  * Match page — §3 Find-a-Match. Ports Phase2-Mockup-V4.html §"Find a
@@ -28,8 +28,15 @@ type SearchParams = Promise<{
   a?: string;
 }>;
 
-function parseArchetype(raw: string | undefined): Archetype {
-  if (raw === "customer" || raw === "supplier") return raw;
+function parseArchetype(raw: string | undefined): Archetype | null {
+  if (raw === "investor" || raw === "customer" || raw === "supplier") return raw;
+  return null;
+}
+
+function archetypeFromCampaignIntent(
+  intent: string | null | undefined,
+): Archetype {
+  if (intent === "customer" || intent === "supplier") return intent;
   return "investor";
 }
 
@@ -45,21 +52,33 @@ export default async function MatchPage({
   if (!campaignId) {
     redirect("/tracker");
   }
-  if (!params.c) {
-    redirect(`/match?c=${campaignId}&a=${parseArchetype(params.a)}`);
-  }
 
   const activeCampaign = campaigns.find((cmp) => cmp.id === campaignId);
-  const archetype = parseArchetype(params.a);
 
-  // Seed the initial results with the V4 SkySails sample text so the
-  // first paint has real cards. The client component persists whatever
-  // the user types in localStorage and re-runs the query on submit.
-  // Enhancement wave 2026-04-22: default page size is 25 and the scorer
-  // sweeps the 2,000-row candidate pool (was 10 / 600). Client component
-  // handles Load-more pagination by asking the server for a larger limit.
+  // Archetype follows the active campaign's `campaign_intent` by
+  // default — a customer campaign opens on the Customer archetype, a
+  // supplier campaign opens on Supplier, an investor campaign on
+  // Investor. An explicit `?a=` query param overrides (Tristan wants
+  // to explore the investor pool from a customer campaign's context).
+  // Previously this defaulted to "investor" unconditionally, so
+  // switching to the Fischer Farms customer campaign still opened in
+  // investor mode with stale SkySails text.
+  const archetype: Archetype =
+    parseArchetype(params.a) ??
+    archetypeFromCampaignIntent(activeCampaign?.campaign_intent ?? null);
+
+  if (!params.c || !params.a) {
+    redirect(`/match?c=${campaignId}&a=${archetype}`);
+  }
+
+  // Seed the initial results with an archetype-appropriate sample text
+  // so the first paint has real cards on the investor flow and a
+  // Fischer Farms-shaped description on the customer flow. The client
+  // component persists whatever the user types in localStorage per
+  // campaign and hydrates from there on subsequent mounts.
+  const seedText = heroTextForArchetype(archetype);
   const initialData = await getMatchScore({
-    heroText: DEFAULT_HERO_TEXT,
+    heroText: seedText,
     archetype,
     campaignId,
     limit: 25,

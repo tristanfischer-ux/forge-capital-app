@@ -11,7 +11,7 @@ import type {
 } from "@/lib/queries/match-score-types";
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
 import { findMatches, findLookalikes, shortlistSelected } from "./match-v4-actions";
-import { DEFAULT_HERO_TEXT } from "./match-constants";
+import { heroTextForArchetype } from "./match-constants";
 // NOTE: EmailHuntModal is now mounted at the authed shell level
 // (`app/(authed)/layout.tsx`) so the verification-gate buttons and
 // any future surface can also dispatch `fc:resolve-email`. The modal
@@ -269,7 +269,9 @@ export function FindAMatch({
 }: FindAMatchProps) {
   const router = useRouter();
 
-  const [heroText, setHeroText] = useState<string>(DEFAULT_HERO_TEXT);
+  const [heroText, setHeroText] = useState<string>(
+    heroTextForArchetype(initialArchetype),
+  );
   const [archetype, setArchetype] = useState<Archetype>(initialArchetype);
   const [data, setData] = useState<GetMatchScoreResult>(initialData);
   const [tab, setTab] = useState<Tab>("best");
@@ -309,19 +311,26 @@ export function FindAMatch({
     | null
   >(null);
 
-  // Hero text must follow the active campaign. Previous bug: switching
-  // from SkySails to FishFrom left the SkySails pitch text in the
-  // textarea because we only loaded from localStorage when something
-  // was stored — never cleared. Now we always set the text when
-  // campaignId changes: stored value if present, else the default.
+  // Hero text must follow the active campaign + its archetype.
+  // Previous bugs:
+  //   (a) switching SkySails → FishFrom left stale SkySails text
+  //       because we only loaded from localStorage when something
+  //       was stored — never cleared.
+  //   (b) switching investor → customer campaign left the SkySails
+  //       investor pitch in place (Tristan 2026-04-24) because the
+  //       fallback default was hard-coded investor-shaped.
+  // Now we always set the text when campaignId OR archetype changes:
+  // stored value if present, else the archetype-appropriate default.
   useEffect(() => {
-    const key = `fc_hero_text_${campaignId}`;
+    const key = `fc_hero_text_${campaignId}_${archetype}`;
     const stored =
       typeof window !== "undefined"
         ? window.localStorage.getItem(key)
         : null;
     setHeroText(
-      stored && stored.trim().length > 0 ? stored : DEFAULT_HERO_TEXT,
+      stored && stored.trim().length > 0
+        ? stored
+        : heroTextForArchetype(archetype),
     );
     // Reset the scored data set — previously-scored rows are from the
     // old campaign's text, not the new one, and rendering stale rows
@@ -329,7 +338,7 @@ export function FindAMatch({
     // matches" bug Tristan flagged.
     setSelected(new Set());
     setLookalikeData(null);
-  }, [campaignId]);
+  }, [campaignId, archetype]);
 
   // Persist hero text (debounced at 500ms).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -337,13 +346,16 @@ export function FindAMatch({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(`fc_hero_text_${campaignId}`, heroText);
+        window.localStorage.setItem(
+          `fc_hero_text_${campaignId}_${archetype}`,
+          heroText,
+        );
       }
     }, 500);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [heroText, campaignId]);
+  }, [heroText, campaignId, archetype]);
 
   // Live auto-suggest — banner updates live client-side as user types.
   const liveSuggest = useMemo(
