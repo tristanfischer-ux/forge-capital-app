@@ -1558,26 +1558,12 @@ function ResultCard({
         </span>
       </div>
       <div className="rc-body">
+        {/* Tier 1: Firm name + match % + type badge */}
         <div className="result-top">
           <div className="result-headline">
             <div className="result-name">
               <span className="firm">{row.firm_name ?? "—"}</span>
               <TagChips row={row} />
-            </div>
-            <div className="result-meta">
-              {row.fund_size_raw ? (
-                <>{formatRawAmount(row.fund_size_raw)} fund</>
-              ) : (
-                <i style={{ color: "var(--text-faint)" }}>fund size unknown</i>
-              )}
-              {row.sector_focus ? (
-                <>
-                  <span className="sep">&middot;</span>
-                  {row.sector_focus}
-                </>
-              ) : null}
-              <span className="sep">&middot;</span>
-              {row.partner_count} {row.partner_count === 1 ? "partner" : "partners"}
             </div>
           </div>
           <div className="result-score">
@@ -1586,17 +1572,7 @@ function ResultCard({
           </div>
         </div>
 
-        {/* Scorecard goes first (under the headline+score). Near-miss
-            moved BELOW, inside the expand panel so it sits after
-            "Why them". Removing it from this slot is deliberate —
-            the old order put the weakness above the scorecard which
-            buried the positive signal. */}
-        <ScoreCard dims={row.dims} />
-
-        <div className="result-tags">
-          <ResultTagRow row={row} />
-        </div>
-
+        {/* Tier 2: Why them one-liner (visible on closed card) */}
         {!expanded && row.why_them ? (
           <div
             style={{
@@ -1613,6 +1589,30 @@ function ResultCard({
             {row.why_them}
           </div>
         ) : null}
+
+        {/* Tier 5: Score dimension bars */}
+        <ScoreCard dims={row.dims} />
+
+        {/* Tier 6: Fund size + sector + partner count */}
+        <div className="result-meta">
+          {row.fund_size_raw ? (
+            <>{formatRawAmount(row.fund_size_raw)} fund</>
+          ) : (
+            <i style={{ color: "var(--text-faint)" }}>fund size unknown</i>
+          )}
+          {row.sector_focus ? (
+            <>
+              <span className="sep">&middot;</span>
+              {row.sector_focus}
+            </>
+          ) : null}
+          <span className="sep">&middot;</span>
+          {row.partner_count} {row.partner_count === 1 ? "partner" : "partners"}
+        </div>
+
+        <div className="result-tags">
+          <ResultTagRow row={row} />
+        </div>
 
         {expanded ? (
           <ResultCardDrillDown row={row} onOpenProfile={onOpenProfile} />
@@ -1704,7 +1704,6 @@ function ResultCardDrillDown({
   onOpenProfile: () => void;
 }) {
   const hasWhyThem = Boolean(row.why_them);
-  const hasThesis = Boolean(row.thesis_summary);
   const needsEmail = row.verified_email_count === 0;
   return (
     <div
@@ -1712,10 +1711,7 @@ function ResultCardDrillDown({
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
-      {/* Order flip (2026-04-22): "Why them" leads, THEN near-miss
-          weakness, THEN the meta grid. The old layout put near-miss
-          above the scorecard which read as "why NOT them" before
-          the user had a chance to see the positive signal. */}
+      {/* Tier 2: Why them (full text in drill-down) */}
       {hasWhyThem ? (
         <div className="rc-expand-block">
           <div className="rc-expand-label">Why them</div>
@@ -1725,7 +1721,7 @@ function ResultCardDrillDown({
         <div className="rc-expand-block">
           <div className="rc-expand-label">Why them</div>
           <p style={{ color: "var(--text-dim)", fontStyle: "italic" }}>
-            Haiku synthesis queued · nightly pipeline fills this.
+            Synthesis queued — the nightly pipeline fills this.
           </p>
         </div>
       )}
@@ -1734,22 +1730,101 @@ function ResultCardDrillDown({
           <b>{row.near_miss.headline}</b> {row.near_miss.body}
         </div>
       ) : null}
-      {hasThesis ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Thesis</div>
-          <p>{row.thesis_summary}</p>
-        </div>
-      ) : null}
+
+      {/* Tier 3: Deep thesis */}
       {row.thesis_deep ? (
         <div className="rc-expand-block">
           <div className="rc-expand-label">Deep thesis</div>
           <p style={{ whiteSpace: "pre-line" }}>{row.thesis_deep}</p>
         </div>
       ) : null}
+
+      {/* Tier 4: Ideal company profile */}
       {row.ideal_company_profile ? (
         <div className="rc-expand-block">
           <div className="rc-expand-label">Ideal company profile</div>
           <p>{row.ideal_company_profile}</p>
+        </div>
+      ) : null}
+
+      {/* Tier 5: Structured focus + score detail grid */}
+      <div className="rc-expand-grid">
+        <MetaCell
+          label="Stage"
+          value={row.stage_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="Geo"
+          value={row.geo_focus ?? <Faint>not on file</Faint>}
+        />
+        <MetaCell
+          label="Cheque"
+          value={
+            row.cheque_min_raw || row.cheque_max_raw ? (
+              <>
+                {row.cheque_min_raw
+                  ? formatDualCurrency(row.cheque_min_raw)
+                  : "—"}
+                {" – "}
+                {row.cheque_max_raw
+                  ? formatDualCurrency(row.cheque_max_raw)
+                  : "—"}
+              </>
+            ) : (
+              <Faint>not on file</Faint>
+            )
+          }
+        />
+        <MetaCell
+          label="Primary partner"
+          value={
+            row.primary_partner?.name ? (
+              <>
+                {row.primary_partner.name}
+                {row.primary_partner.title ? (
+                  <span style={{ color: "var(--text-dim)" }}>
+                    {" · "}
+                    {row.primary_partner.title}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <Faint>no primary on file</Faint>
+            )
+          }
+        />
+      </div>
+
+      {/* Tier 6: Fund size with dual currency */}
+      {row.fund_size_raw ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Fund size</div>
+          <p>{formatDualCurrency(row.fund_size_raw)}</p>
+        </div>
+      ) : null}
+
+      {/* Tier 7: Team expertise + partners summary */}
+      {row.team_expertise ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Team expertise</div>
+          <p>{row.team_expertise}</p>
+        </div>
+      ) : null}
+      {!row.team_expertise && row.primary_partner?.name ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Primary partner</div>
+          <p>
+            {row.primary_partner.name}
+            {row.primary_partner.title ? ` — ${row.primary_partner.title}` : ""}
+          </p>
+        </div>
+      ) : null}
+
+      {/* Tier 8: Investment pattern + portfolio fit */}
+      {row.investment_pattern ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Investment pattern</div>
+          <p>{row.investment_pattern}</p>
         </div>
       ) : null}
       {row.portfolio_fit && row.portfolio_fit.length > 0 ? (
@@ -1814,52 +1889,15 @@ function ResultCardDrillDown({
           </ul>
         </div>
       ) : null}
-      <div className="rc-expand-grid">
-        <MetaCell
-          label="Stage"
-          value={row.stage_focus ?? <Faint>not on file</Faint>}
-        />
-        <MetaCell
-          label="Geo"
-          value={row.geo_focus ?? <Faint>not on file</Faint>}
-        />
-        <MetaCell
-          label="Cheque"
-          value={
-            row.cheque_min_raw || row.cheque_max_raw ? (
-              <>
-                {row.cheque_min_raw
-                  ? formatRawAmount(row.cheque_min_raw)
-                  : "—"}
-                {" – "}
-                {row.cheque_max_raw
-                  ? formatRawAmount(row.cheque_max_raw)
-                  : "—"}
-              </>
-            ) : (
-              <Faint>not on file</Faint>
-            )
-          }
-        />
-        <MetaCell
-          label="Primary partner"
-          value={
-            row.primary_partner?.name ? (
-              <>
-                {row.primary_partner.name}
-                {row.primary_partner.title ? (
-                  <span style={{ color: "var(--text-dim)" }}>
-                    {" · "}
-                    {row.primary_partner.title}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              <Faint>no primary on file</Faint>
-            )
-          }
-        />
-      </div>
+
+      {/* Thesis summary (moved below investment pattern per 10-tier plan) */}
+      {row.thesis_summary ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Thesis</div>
+          <p>{row.thesis_summary}</p>
+        </div>
+      ) : null}
+
       <div className="rc-expand-actions">
         <button
           type="button"
@@ -2228,6 +2266,27 @@ function formatRawAmount(raw: string): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(0)}M`;
   if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
   return `$${n.toFixed(0)}`;
+}
+
+const USD_TO_GBP = 0.79;
+
+/**
+ * Format a raw USD string as dual-currency: "$10M (£7.9M)".
+ * Falls through to the original string if parsing fails.
+ */
+function formatDualCurrency(raw: string | null): string {
+  if (!raw) return "—";
+  const usd = formatRawAmount(raw);
+  const trimmed = raw.trim();
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return usd;
+  const gbp = n * USD_TO_GBP;
+  let gbpStr: string;
+  if (gbp >= 1_000_000_000) gbpStr = `£${(gbp / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
+  else if (gbp >= 1_000_000) gbpStr = `£${(gbp / 1_000_000).toFixed(0)}M`;
+  else if (gbp >= 1_000) gbpStr = `£${Math.round(gbp / 1_000)}K`;
+  else gbpStr = `£${gbp.toFixed(0)}`;
+  return `${usd} (${gbpStr})`;
 }
 
 /* ========================================================================= */

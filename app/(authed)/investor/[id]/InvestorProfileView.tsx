@@ -27,13 +27,26 @@ export function InvestorProfileView({
   return (
     <div className="modal-grid" style={{ alignItems: "start" }}>
       <div>
+        {/* Tier 1: Headline */}
         <InvestorHeadline profile={profile} />
+        {/* Tier 3: Thesis */}
         <ThesisBlock profile={profile} />
-        <SynthesisBlock profile={profile} />
-        <DeepDossierBlock dossier={profile.deep_profile} />
+        {/* Tier 4: Ideal company profile (pulled out of synthesis) */}
+        <IdealCompanyProfileBlock profile={profile} />
+        {/* Tier 7: Team expertise + Partners */}
+        <TeamExpertiseBlock profile={profile} />
         <PartnersBlock partners={profile.partners} />
+        {/* Tier 8: Investment pattern + Portfolio */}
+        <InvestmentPatternBlock profile={profile} />
         <RelatedFirmsBlock relatedFirms={profile.related_firms} />
+        {/* Tier 9: Connection brief + Recent activity + Campaign activity */}
+        <ConnectionBriefBlock profile={profile} />
+        <RecentActivityBlock profile={profile} />
         <ActivityBlock campaignLinks={profile.campaign_links} />
+        {/* Deep dossier */}
+        <DeepDossierBlock dossier={profile.deep_profile} />
+        {/* Remaining synthesis fields (value add) */}
+        <ValueAddBlock profile={profile} />
       </div>
       <SideRail profile={profile} />
     </div>
@@ -167,16 +180,6 @@ function InvestorHeadline({ profile }: { profile: InvestorProfileData }) {
             LinkedIn ↗
           </a>
         ) : null}
-        {profile.twitter_url ? (
-          <a
-            href={profile.twitter_url}
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: "var(--accent)" }}
-          >
-            Twitter ↗
-          </a>
-        ) : null}
       </div>
     </div>
   );
@@ -205,56 +208,68 @@ function ThesisBlock({ profile }: { profile: InvestorProfileData }) {
   );
 }
 
-function SynthesisBlock({ profile }: { profile: InvestorProfileData }) {
-  const blocks: Array<{ title: string; body: string }> = [];
-  if (profile.investment_pattern)
-    blocks.push({ title: "Investment pattern", body: profile.investment_pattern });
-  if (profile.connection_brief)
-    blocks.push({ title: "Connection brief", body: profile.connection_brief });
-  if (profile.team_expertise)
-    blocks.push({ title: "Team expertise", body: profile.team_expertise });
-  if (profile.ideal_company_profile)
-    blocks.push({
-      title: "Ideal company profile",
-      body: profile.ideal_company_profile,
-    });
-  if (profile.value_add)
-    blocks.push({ title: "Value add", body: profile.value_add });
-  if (profile.recent_activity)
-    blocks.push({ title: "Recent activity", body: profile.recent_activity });
-
-  if (blocks.length === 0) {
-    return (
-      <div className="m-section">
-        <h3>Research synthesis</h3>
-        <p style={{ color: "var(--text-dim)" }}>
-          No research synthesis on file — the nightly Forge Capital
-          synthesiser writes this after enriching the firm.
-        </p>
-      </div>
-    );
-  }
-
+/** Tier 4: Ideal company profile — broken out of the old SynthesisBlock. */
+function IdealCompanyProfileBlock({ profile }: { profile: InvestorProfileData }) {
+  if (!profile.ideal_company_profile) return null;
   return (
     <div className="m-section">
-      <h3>Research synthesis</h3>
-      {blocks.map((b) => (
-        <div key={b.title} style={{ marginBottom: 12 }}>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--text-dim)",
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-              marginBottom: 4,
-            }}
-          >
-            {b.title}
-          </div>
-          <p style={{ fontSize: 13, lineHeight: 1.65 }}>{b.body}</p>
-        </div>
-      ))}
+      <h3>Ideal company profile</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.ideal_company_profile}</p>
+    </div>
+  );
+}
+
+/** Tier 7: Team expertise lead paragraph (partners block follows separately). */
+function TeamExpertiseBlock({ profile }: { profile: InvestorProfileData }) {
+  if (!profile.team_expertise) return null;
+  return (
+    <div className="m-section">
+      <h3>Team expertise</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.team_expertise}</p>
+    </div>
+  );
+}
+
+/** Tier 8: Investment pattern lead paragraph (portfolio follows separately). */
+function InvestmentPatternBlock({ profile }: { profile: InvestorProfileData }) {
+  if (!profile.investment_pattern) return null;
+  return (
+    <div className="m-section">
+      <h3>Investment pattern</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.investment_pattern}</p>
+    </div>
+  );
+}
+
+/** Tier 9: Connection brief — approach angle for outreach. */
+function ConnectionBriefBlock({ profile }: { profile: InvestorProfileData }) {
+  if (!profile.connection_brief) return null;
+  return (
+    <div className="m-section">
+      <h3>Connection approach</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.connection_brief}</p>
+    </div>
+  );
+}
+
+/** Tier 9: Recent activity. */
+function RecentActivityBlock({ profile }: { profile: InvestorProfileData }) {
+  if (!profile.recent_activity) return null;
+  return (
+    <div className="m-section">
+      <h3>Recent activity</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.recent_activity}</p>
+    </div>
+  );
+}
+
+/** Value add — remaining synthesis field. */
+function ValueAddBlock({ profile }: { profile: InvestorProfileData }) {
+  if (!profile.value_add) return null;
+  return (
+    <div className="m-section">
+      <h3>Value add</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.value_add}</p>
     </div>
   );
 }
@@ -517,6 +532,8 @@ function CanonicalPortfolioCard({
   );
 }
 
+const USD_TO_GBP = 0.79;
+
 function formatUsd(value: number | null): string {
   if (value == null) return "—";
   if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
@@ -525,17 +542,30 @@ function formatUsd(value: number | null): string {
   return `$${value}`;
 }
 
+function formatGbp(value: number): string {
+  const gbp = value * USD_TO_GBP;
+  if (gbp >= 1_000_000_000) return `£${(gbp / 1_000_000_000).toFixed(1)}B`;
+  if (gbp >= 1_000_000) return `£${Math.round(gbp / 1_000_000)}M`;
+  if (gbp >= 1_000) return `£${Math.round(gbp / 1_000)}K`;
+  return `£${gbp.toFixed(0)}`;
+}
+
+function formatDual(usd: number | null): string {
+  if (usd == null) return "—";
+  return `${formatUsd(usd)} (${formatGbp(usd)})`;
+}
+
 function FactsCard({ profile }: { profile: InvestorProfileData }) {
   const rows: Array<[string, string]> = [];
   if (profile.fund_size_usd != null)
-    rows.push(["Fund size", formatUsd(profile.fund_size_usd)]);
+    rows.push(["Fund size", formatDual(profile.fund_size_usd)]);
   if (profile.cheque_min_usd != null || profile.cheque_max_usd != null) {
     const range =
       profile.cheque_min_usd != null && profile.cheque_max_usd != null
-        ? `${formatUsd(profile.cheque_min_usd)} – ${formatUsd(profile.cheque_max_usd)}`
+        ? `${formatDual(profile.cheque_min_usd)} – ${formatDual(profile.cheque_max_usd)}`
         : profile.cheque_min_usd != null
-          ? `${formatUsd(profile.cheque_min_usd)}+`
-          : `up to ${formatUsd(profile.cheque_max_usd)}`;
+          ? `${formatDual(profile.cheque_min_usd)}+`
+          : `up to ${formatDual(profile.cheque_max_usd)}`;
     rows.push(["Cheque", range]);
   }
   if (profile.hardware_fit_score != null)

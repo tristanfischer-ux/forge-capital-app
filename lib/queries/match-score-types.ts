@@ -90,6 +90,11 @@ export interface MatchResultRow {
   on_other_campaign: ConflictRow | null;
   near_miss: NearMiss | null;
   why_them: string | null;
+  investment_pattern: string | null;
+  connection_brief: string | null;
+  team_expertise: string | null;
+  value_add: string | null;
+  recent_activity: string | null;
   /** Top-3 portfolio companies the investor has already backed that look
    *  like a sector fit for the founder's pitch. Empty when no overlap or
    *  no dossier rows landed yet. */
