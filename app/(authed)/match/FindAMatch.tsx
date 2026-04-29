@@ -1589,7 +1589,7 @@ function ResultCard({
           </div>
         </div>
 
-        {/* Tier 2: Why them (full text on closed card) */}
+        {/* Tier 2: Why them (truncated to 2 lines on closed card) */}
         {!expanded && row.why_them ? (
           <div
             style={{
@@ -1597,6 +1597,10 @@ function ResultCard({
               color: "var(--text-dim)",
               lineHeight: 1.5,
               marginTop: 6,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
             }}
           >
             <span style={{ fontWeight: 600, color: "var(--orange)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", marginRight: 6 }}>Why them</span>
@@ -1848,23 +1852,7 @@ function ResultCardDrillDown({
         </div>
       ) : null}
 
-      {/* Tier 3: Deep thesis */}
-      {row.thesis_deep ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Deep thesis</div>
-          <p style={{ whiteSpace: "pre-line" }}>{row.thesis_deep}</p>
-        </div>
-      ) : null}
-
-      {/* Tier 4: Ideal company profile */}
-      {row.ideal_company_profile ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Ideal company profile</div>
-          <p>{row.ideal_company_profile}</p>
-        </div>
-      ) : null}
-
-      {/* Tier 5: Structured focus + score detail grid */}
+      {/* Score detail grid */}
       <div className="rc-expand-grid">
         <MetaCell
           label="Stage"
@@ -1917,93 +1905,6 @@ function ResultCardDrillDown({
         <div className="rc-expand-block">
           <div className="rc-expand-label">Fund size</div>
           <p>{formatDualCurrency(row.fund_size_raw)}</p>
-        </div>
-      ) : null}
-
-      {/* Tier 7: Team expertise + partners summary */}
-      {row.team_expertise ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Team expertise</div>
-          <p>{row.team_expertise}</p>
-        </div>
-      ) : null}
-      {!row.team_expertise && row.primary_partner?.name ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Primary partner</div>
-          <p>
-            {row.primary_partner.name}
-            {row.primary_partner.title ? ` — ${row.primary_partner.title}` : ""}
-          </p>
-        </div>
-      ) : null}
-
-      {/* Tier 8: Investment pattern + portfolio fit */}
-      {row.investment_pattern ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Investment pattern</div>
-          <p>{row.investment_pattern}</p>
-        </div>
-      ) : null}
-      {row.portfolio_fit && row.portfolio_fit.length > 0 ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">
-            Portfolio fit · top {row.portfolio_fit.length}
-          </div>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {row.portfolio_fit.map((p) => (
-              <li
-                key={p.slug}
-                style={{
-                  padding: "6px 0",
-                  borderBottom: "1px solid var(--border-soft)",
-                  fontSize: 12,
-                  lineHeight: 1.55,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>{p.name}</span>
-                  {p.sector ? (
-                    <span
-                      style={{
-                        color: "var(--text-dim)",
-                        fontSize: 11,
-                      }}
-                    >
-                      · {p.sector}
-                    </span>
-                  ) : null}
-                </div>
-                {p.what_they_do ? (
-                  <div
-                    style={{
-                      color: "var(--text-dim)",
-                      marginTop: 2,
-                    }}
-                  >
-                    {p.what_they_do}
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      color: "var(--text-faint)",
-                      marginTop: 2,
-                      fontStyle: "italic",
-                    }}
-                  >
-                    No dossier prose on file yet — populates once the
-                    portfolio-company synthesiser runs.
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
         </div>
       ) : null}
 

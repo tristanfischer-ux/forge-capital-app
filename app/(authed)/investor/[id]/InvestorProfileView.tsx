@@ -7,18 +7,15 @@ import type {
 } from "@/lib/queries/investor-profile";
 import { TierBadge } from "@/app/(authed)/tracker/TierBadge";
 import { PersonalisedInsight } from "./PersonalisedInsight";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 /**
- * Full investor profile view. Uses V4 vocabulary — `.section`,
- * `.m-section`, `.ms-card`, `.ms-kv`, `.tag-chip` — so the page sits in
- * the same visual universe as the rest of the app. No new Tailwind
- * approximations: every colour/border/padding decision inherits from
- * `app/v4-mockup.css`.
+ * Full investor profile view — single-column layout with a fact strip
+ * at the top and collapsible §-numbered sections. Uses V4 vocabulary —
+ * `.section`, `.m-section`, `.ms-card`, `.ms-kv`, `.tag-chip` — so the
+ * page sits in the same visual universe as the rest of the app.
  *
- * Empty states use the project's "name the pipeline stage" voice: no
- * "No data" strings. When Forge Capital hasn't synthesised prose yet we
- * say "No research synthesis on file — the nightly pipeline writes this
- * once an investor has been through the synthesiser."
+ * Empty states use the project's "name the pipeline stage" voice.
  */
 export function InvestorProfileView({
   profile,
@@ -26,103 +23,62 @@ export function InvestorProfileView({
   profile: InvestorProfileData;
 }) {
   return (
-    <div className="modal-grid" style={{ alignItems: "start" }}>
-      <div>
-        {/* Tier 1: Headline */}
-        <InvestorHeadline profile={profile} />
-        {/* Tier 2: Personalised insight (from sessionStorage, if available) */}
-        <PersonalisedInsight investorId={profile.id} />
-        {/* Tier 3: Thesis */}
-        <ThesisBlock profile={profile} />
-        {/* Tier 4: Ideal company profile (pulled out of synthesis) */}
-        <IdealCompanyProfileBlock profile={profile} />
-        {/* Value add — moved up per Tristan's request */}
-        <ValueAddBlock profile={profile} />
-        {/* Tier 7: Team expertise + Partners */}
-        <TeamExpertiseBlock profile={profile} />
-        <PartnersBlock partners={profile.partners} />
-        {/* Tier 8: Investment pattern + Portfolio */}
-        <InvestmentPatternBlock profile={profile} />
-        <RelatedFirmsBlock relatedFirms={profile.related_firms} />
-        {/* Tier 9: Connection brief + Recent activity + Campaign activity */}
-        <ConnectionBriefBlock profile={profile} />
-        <RecentActivityBlock profile={profile} />
-        <ActivityBlock campaignLinks={profile.campaign_links} />
-        {/* Deep dossier */}
-        <DeepDossierBlock dossier={profile.deep_profile} />
-      </div>
-      <SideRail profile={profile} />
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      {/* §1 — Header */}
+      <InvestorHeadline profile={profile} />
+
+      {/* §2 — Fact strip: Key facts + Focus + Provenance inline */}
+      <FactStrip profile={profile} />
+
+      {/* §3 — Recent news (from deep dossier, if available) */}
+      <RecentNewsBlock dossier={profile.deep_profile} />
+
+      {/* §4 — Personalised insight (from sessionStorage) */}
+      <PersonalisedInsight investorId={profile.id} />
+
+      {/* §5 — Thesis */}
+      <CollapsibleSection number={5} title="Thesis" previewLines={3}>
+        <ThesisContent profile={profile} />
+      </CollapsibleSection>
+
+      {/* §6 — Ideal company profile + Value add */}
+      <CollapsibleSection number={6} title="Ideal company profile" previewLines={3}>
+        <IdealAndValueContent profile={profile} />
+      </CollapsibleSection>
+
+      {/* §7 — Investment pattern + Recent investments + Related firms */}
+      <CollapsibleSection number={7} title="Investment pattern" previewLines={4}>
+        <InvestmentContent profile={profile} dossier={profile.deep_profile} />
+      </CollapsibleSection>
+
+      {/* §8 — Connection brief + Campaign activity */}
+      <CollapsibleSection number={8} title="Connection & activity" previewLines={2}>
+        <ConnectionContent profile={profile} />
+      </CollapsibleSection>
+
+      {/* §9 — Partners */}
+      <CollapsibleSection number={9} title={`Partners · ${profile.partners.length}`} previewLines={6}>
+        <PartnersContent partners={profile.partners} />
+      </CollapsibleSection>
+
+      {/* §10 — Deep dossier (remaining) */}
+      <CollapsibleSection number={10} title="Deep dossier" previewLines={4}>
+        <DeepDossierContent dossier={profile.deep_profile} />
+      </CollapsibleSection>
+
+      {/* Portfolio (canonical or legacy names) — below the collapsibles */}
+      {profile.canonical_portfolio.length > 0 ? (
+        <CanonicalPortfolioCard rows={profile.canonical_portfolio} />
+      ) : profile.portfolio_companies.length > 0 ? (
+        <PortfolioCard names={profile.portfolio_companies} />
+      ) : null}
     </div>
   );
 }
 
-function RelatedFirmsBlock({
-  relatedFirms,
-}: {
-  relatedFirms: InvestorProfileData["related_firms"];
-}) {
-  if (relatedFirms.length === 0) {
-    return (
-      <div className="m-section">
-        <h3>Related firms</h3>
-        <p style={{ color: "var(--text-dim)" }}>
-          No portfolio overlap with other investors yet — fills in as the
-          nightly pipeline enriches more firms with their portfolio pages
-          (research/04-research-portfolio.js).
-        </p>
-      </div>
-    );
-  }
-  return (
-    <div className="m-section">
-      <h3>Related firms · {relatedFirms.length}</h3>
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {relatedFirms.map((r) => (
-          <li
-            key={r.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "8px 0",
-              borderBottom: "1px solid var(--border-soft)",
-              fontSize: 12,
-              gap: 10,
-            }}
-          >
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <Link
-                href={`/investor/${r.id}`}
-                className="partner-link"
-                style={{ fontWeight: 500 }}
-                aria-label={`Open ${r.firm_name ?? "firm"} profile`}
-              >
-                {r.firm_name ?? "Unnamed firm"}
-              </Link>
-              {r.shared_examples.length > 0 ? (
-                <div
-                  style={{
-                    color: "var(--text-faint)",
-                    fontSize: 11,
-                    marginTop: 2,
-                  }}
-                >
-                  Shared: {r.shared_examples.join(", ")}
-                </div>
-              ) : null}
-            </div>
-            <span
-              className="tag-chip tag-neutral"
-              style={{ flexShrink: 0 }}
-            >
-              {r.shared_count} shared
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  §1 — Headline                                                     */
+/* ------------------------------------------------------------------ */
 
 function InvestorHeadline({ profile }: { profile: InvestorProfileData }) {
   const chips: React.ReactNode[] = [];
@@ -188,132 +144,435 @@ function InvestorHeadline({ profile }: { profile: InvestorProfileData }) {
   );
 }
 
-function ThesisBlock({ profile }: { profile: InvestorProfileData }) {
-  const hasThesis =
-    Boolean(profile.thesis_summary) || Boolean(profile.thesis_deep);
+/* ------------------------------------------------------------------ */
+/*  §2 — Fact strip (replaces old sidebar)                            */
+/* ------------------------------------------------------------------ */
+
+function FactStrip({ profile }: { profile: InvestorProfileData }) {
   return (
-    <div className="m-section">
-      <h3>Thesis</h3>
-      {hasThesis ? (
-        <>
-          {profile.thesis_summary ? <p>{profile.thesis_summary}</p> : null}
-          {profile.thesis_deep ? (
-            <p style={{ marginTop: 8 }}>{profile.thesis_deep}</p>
-          ) : null}
-        </>
-      ) : (
-        <p style={{ color: "var(--text-dim)" }}>
-          No thesis on file — pulls from the nightly Forge Capital sync once
-          the investor has been through the research synthesiser.
-        </p>
-      )}
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 12,
+        marginBottom: 16,
+      }}
+    >
+      <FactsCard profile={profile} />
+      <FocusCard profile={profile} />
+      <ProvenanceCard profile={profile} />
     </div>
   );
 }
 
-/** Tier 4: Ideal company profile — broken out of the old SynthesisBlock. */
-function IdealCompanyProfileBlock({ profile }: { profile: InvestorProfileData }) {
-  if (!profile.ideal_company_profile) return null;
-  return (
-    <div className="m-section">
-      <h3>Ideal company profile</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.ideal_company_profile}</p>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  §3 — Recent news                                                  */
+/* ------------------------------------------------------------------ */
 
-/** Tier 7: Team expertise lead paragraph (partners block follows separately). */
-function TeamExpertiseBlock({ profile }: { profile: InvestorProfileData }) {
-  if (!profile.team_expertise) return null;
-  return (
-    <div className="m-section">
-      <h3>Team expertise</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.team_expertise}</p>
-    </div>
-  );
-}
+function RecentNewsBlock({ dossier }: { dossier: InvestorDeepProfile | null }) {
+  if (!dossier?.recent_news || dossier.recent_news.length === 0) return null;
 
-/** Tier 8: Investment pattern lead paragraph (portfolio follows separately). */
-function InvestmentPatternBlock({ profile }: { profile: InvestorProfileData }) {
-  if (!profile.investment_pattern) return null;
-  return (
-    <div className="m-section">
-      <h3>Investment pattern</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.investment_pattern}</p>
-    </div>
-  );
-}
-
-/** Tier 9: Connection brief — approach angle for outreach. */
-function ConnectionBriefBlock({ profile }: { profile: InvestorProfileData }) {
-  if (!profile.connection_brief) return null;
-  return (
-    <div className="m-section">
-      <h3>Connection approach</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.connection_brief}</p>
-    </div>
-  );
-}
-
-/** Tier 9: Recent activity. */
-function RecentActivityBlock({ profile }: { profile: InvestorProfileData }) {
-  if (!profile.recent_activity) return null;
-  return (
-    <div className="m-section">
-      <h3>Recent activity</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.recent_activity}</p>
-    </div>
-  );
-}
-
-/** Value add — remaining synthesis field. */
-function ValueAddBlock({ profile }: { profile: InvestorProfileData }) {
-  if (!profile.value_add) return null;
-  return (
-    <div className="m-section">
-      <h3>Value add</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.value_add}</p>
-    </div>
-  );
-}
-
-function PartnersBlock({
-  partners,
-}: {
-  partners: InvestorProfilePartner[];
-}) {
-  if (partners.length === 0) {
-    return (
-      <div className="m-section">
-        <h3>Partners</h3>
-        <p style={{ color: "var(--text-dim)" }}>
-          No partners on file — the Forge Capital partner-discovery step
-          fills this once it resolves team pages on the firm&rsquo;s website
-          or LinkedIn.
-        </p>
-      </div>
-    );
-  }
   return (
     <div className="m-section">
       <h3>
-        Partners · {partners.length}
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", marginRight: 8 }}>§3</span>
+        Recent news · {dossier.recent_news.length}
       </h3>
-      <div className="m-partners">
-        {[...partners].sort((a, b) => {
-          const aHasEmail = a.email ? 1 : 0;
-          const bHasEmail = b.email ? 1 : 0;
-          if (aHasEmail !== bHasEmail) return bHasEmail - aHasEmail;
-          const aPrimary = a.is_primary_contact ? 1 : 0;
-          const bPrimary = b.is_primary_contact ? 1 : 0;
-          return bPrimary - aPrimary;
-        }).map((p) => (
-          <PartnerCard key={p.id} partner={p} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {dossier.recent_news.map((line, i) => (
+          <div
+            key={i}
+            style={{
+              padding: "10px 14px",
+              border: "1px solid var(--border-soft)",
+              borderRadius: 8,
+              background: "var(--surface-alt)",
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: "var(--text-dim)",
+            }}
+          >
+            {line}
+          </div>
         ))}
       </div>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  §5 — Thesis content                                               */
+/* ------------------------------------------------------------------ */
+
+function ThesisContent({ profile }: { profile: InvestorProfileData }) {
+  return (
+    <>
+      {profile.thesis_summary ? <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.thesis_summary}</p> : null}
+      {profile.thesis_deep ? (
+        <p style={{ fontSize: 13, lineHeight: 1.65, marginTop: 8, whiteSpace: "pre-line" }}>{profile.thesis_deep}</p>
+      ) : null}
+      {!profile.thesis_summary && !profile.thesis_deep ? (
+        <p style={{ color: "var(--text-dim)" }}>No thesis on file — pulls from the nightly Forge Capital sync.</p>
+      ) : null}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  §6 — Ideal company profile + Value add                            */
+/* ------------------------------------------------------------------ */
+
+function IdealAndValueContent({ profile }: { profile: InvestorProfileData }) {
+  return (
+    <>
+      {profile.ideal_company_profile ? (
+        <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.ideal_company_profile}</p>
+      ) : null}
+      {profile.value_add ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Value add</div>
+          <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.value_add}</p>
+        </div>
+      ) : null}
+      {!profile.ideal_company_profile && !profile.value_add ? (
+        <p style={{ color: "var(--text-dim)" }}>No ideal company profile on file yet.</p>
+      ) : null}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  §7 — Investment pattern + Recent investments + Related firms       */
+/* ------------------------------------------------------------------ */
+
+function InvestmentContent({ profile, dossier }: { profile: InvestorProfileData; dossier: InvestorDeepProfile | null }) {
+  const recentInv = dossier?.recent_investments ?? null;
+  return (
+    <>
+      {profile.investment_pattern ? (
+        <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.investment_pattern}</p>
+      ) : null}
+      {profile.recent_activity ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Recent activity</div>
+          <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.recent_activity}</p>
+        </div>
+      ) : null}
+      {recentInv && recentInv.length > 0 ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Recent investments · {recentInv.length}</div>
+          {recentInv.map((inv, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border-soft)", fontSize: 12 }}>
+              <span style={{ fontWeight: 500 }}>{inv.company_name || "—"}</span>
+              <span style={{ color: "var(--text-faint)", fontSize: 11 }}>
+                {[inv.stage, inv.sector, inv.date].filter(Boolean).join(" · ")}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {/* Related firms — co-investors sharing portfolio companies */}
+      <RelatedFirmsInline relatedFirms={profile.related_firms} />
+      {!profile.investment_pattern && !profile.recent_activity && (!recentInv || recentInv.length === 0) && profile.related_firms.length === 0 ? (
+        <p style={{ color: "var(--text-dim)" }}>No investment pattern data on file yet.</p>
+      ) : null}
+    </>
+  );
+}
+
+function RelatedFirmsInline({
+  relatedFirms,
+}: {
+  relatedFirms: InvestorProfileData["related_firms"];
+}) {
+  if (relatedFirms.length === 0) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Related firms · {relatedFirms.length}</div>
+      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        {relatedFirms.map((r) => (
+          <li
+            key={r.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "8px 0",
+              borderBottom: "1px solid var(--border-soft)",
+              fontSize: 12,
+              gap: 10,
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <Link
+                href={`/investor/${r.id}`}
+                className="partner-link"
+                style={{ fontWeight: 500 }}
+                aria-label={`Open ${r.firm_name ?? "firm"} profile`}
+              >
+                {r.firm_name ?? "Unnamed firm"}
+              </Link>
+              {r.shared_examples.length > 0 ? (
+                <div
+                  style={{
+                    color: "var(--text-faint)",
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  Shared: {r.shared_examples.join(", ")}
+                </div>
+              ) : null}
+            </div>
+            <span
+              className="tag-chip tag-neutral"
+              style={{ flexShrink: 0 }}
+            >
+              {r.shared_count} shared
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  §8 — Connection & activity                                        */
+/* ------------------------------------------------------------------ */
+
+function ConnectionContent({ profile }: { profile: InvestorProfileData }) {
+  return (
+    <>
+      {profile.connection_brief ? (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Connection approach</div>
+          <p style={{ fontSize: 13, lineHeight: 1.65 }}>{profile.connection_brief}</p>
+        </div>
+      ) : null}
+      <ActivityBlock campaignLinks={profile.campaign_links} />
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  §9 — Partners                                                     */
+/* ------------------------------------------------------------------ */
+
+function PartnersContent({ partners }: { partners: InvestorProfilePartner[] }) {
+  if (partners.length === 0) {
+    return (
+      <p style={{ color: "var(--text-dim)" }}>
+        No partners on file — the Forge Capital partner-discovery step fills this.
+      </p>
+    );
+  }
+  const sorted = [...partners].sort((a, b) => {
+    const aHasEmail = a.email ? 1 : 0;
+    const bHasEmail = b.email ? 1 : 0;
+    if (aHasEmail !== bHasEmail) return bHasEmail - aHasEmail;
+    const aPrimary = a.is_primary_contact ? 1 : 0;
+    const bPrimary = b.is_primary_contact ? 1 : 0;
+    return bPrimary - aPrimary;
+  });
+  return (
+    <div className="m-partners">
+      {sorted.map((p) => (
+        <PartnerCard key={p.id} partner={p} />
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  §10 — Deep dossier content (minus news/focus/tickets shown above) */
+/* ------------------------------------------------------------------ */
+
+function DeepDossierContent({
+  dossier,
+}: {
+  dossier: InvestorDeepProfile | null;
+}) {
+  if (!dossier) {
+    return (
+      <p style={{ color: "var(--text-dim)" }}>
+        No deep dossier generated yet — the synthesiser writes this once the
+        investor has been through the research pipeline.
+      </p>
+    );
+  }
+
+  const thesis = dossier.investment_thesis;
+  const fund = dossier.fund_details;
+  const team = dossier.team;
+  const recentInv = dossier.recent_investments;
+  const fact = dossier.fact_checks;
+  const quality = dossier.quality_assessment;
+
+  const hasAnything =
+    Boolean(thesis?.primary_statement) ||
+    Boolean(thesis?.detailed_description) ||
+    Boolean(fund?.current_fund_name || fund?.fund_size_usd) ||
+    Boolean(team?.total_partners) ||
+    (recentInv && recentInv.length > 0) ||
+    Boolean(fact && Object.keys(fact).length > 0) ||
+    Boolean(quality);
+  if (!hasAnything) {
+    return (
+      <p style={{ color: "var(--text-dim)" }}>
+        Dossier exists but contains no structured sections yet.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      {quality?.verification_level ? (
+        <div style={{ marginBottom: 10 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: "var(--text-dim)",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
+          >
+            {quality.verification_level}
+            {quality.source_reliability
+              ? ` · ${quality.source_reliability}`
+              : ""}
+          </span>
+        </div>
+      ) : null}
+
+      {/* Investment thesis */}
+      {thesis?.primary_statement || thesis?.detailed_description ? (
+        <div style={{ marginBottom: 14 }}>
+          <DossierLabel>Investment thesis</DossierLabel>
+          {thesis?.primary_statement ? (
+            <p style={{ fontSize: 13, lineHeight: 1.65, fontWeight: 500 }}>
+              {thesis.primary_statement}
+            </p>
+          ) : null}
+          {thesis?.detailed_description ? (
+            <p
+              style={{
+                fontSize: 13,
+                lineHeight: 1.65,
+                marginTop: 6,
+                color: "var(--text-dim)",
+              }}
+            >
+              {thesis.detailed_description}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Fund details + team */}
+      {fund || team?.total_partners ? (
+        <div style={{ marginBottom: 14 }}>
+          <DossierLabel>Fund &amp; team</DossierLabel>
+          <div className="ms-kv">
+            <span className="k">Current fund</span>
+            <span className="v">
+              {fund?.current_fund_name ?? <DossierFaint>not on file</DossierFaint>}
+            </span>
+          </div>
+          {fund?.fund_size_usd ? (
+            <div className="ms-kv">
+              <span className="k">Fund size</span>
+              <span className="v">{formatUsd(fund.fund_size_usd)}</span>
+            </div>
+          ) : null}
+          {fund?.fund_vintage ? (
+            <div className="ms-kv">
+              <span className="k">Vintage</span>
+              <span className="v">{fund.fund_vintage}</span>
+            </div>
+          ) : null}
+          {team?.total_partners ? (
+            <div className="ms-kv">
+              <span className="k">Partners on file</span>
+              <span className="v">{team.total_partners}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Recent investments (more detail than §7) */}
+      {recentInv && recentInv.length > 0 ? (
+        <div style={{ marginBottom: 14 }}>
+          <DossierLabel>Recent investments · {recentInv.length}</DossierLabel>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {recentInv.map((inv, idx) => (
+              <li
+                key={`${inv.company_name ?? "unnamed"}-${idx}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "6px 0",
+                  borderBottom: "1px solid var(--border-soft)",
+                  fontSize: 12,
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>
+                  {inv.company_name ?? "Unnamed company"}
+                </span>
+                <span
+                  style={{
+                    color: "var(--text-dim)",
+                    fontSize: 11,
+                    textAlign: "right",
+                  }}
+                >
+                  {[inv.stage, inv.sector, inv.date].filter(Boolean).join(" · ")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* Fact-check ribbon */}
+      {fact && Object.keys(fact).length > 0 ? (
+        <div style={{ marginBottom: 4 }}>
+          <DossierLabel>Fact checks</DossierLabel>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {Object.entries(fact).map(([key, verdict]) => (
+              <span
+                key={key}
+                className={`tag-chip ${factVerdictKlass(verdict)}`}
+              >
+                {key.replace(/_/g, " ")} · {verdict}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {dossier.generated_at ? (
+        <p
+          style={{
+            fontSize: 11,
+            color: "var(--text-faint)",
+            marginTop: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Generated {dossier.generated_at} by the deep-dossier synthesiser.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shared components — kept from original                            */
+/* ------------------------------------------------------------------ */
 
 function PartnerCard({ partner }: { partner: InvestorProfilePartner }) {
   return (
@@ -409,8 +668,8 @@ function ActivityBlock({
 }) {
   if (campaignLinks.length === 0) {
     return (
-      <div className="m-section">
-        <h3>Campaign activity</h3>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Campaign activity</div>
         <p style={{ color: "var(--text-dim)" }}>
           This firm isn&rsquo;t on any of your campaigns yet — shortlisting
           from Find a Match will add a tracker row.
@@ -419,8 +678,8 @@ function ActivityBlock({
     );
   }
   return (
-    <div className="m-section">
-      <h3>Campaign activity · {campaignLinks.length}</h3>
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Campaign activity · {campaignLinks.length}</div>
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {campaignLinks.map((l, i) => (
           <li
@@ -460,21 +719,6 @@ function ActivityBlock({
         ))}
       </ul>
     </div>
-  );
-}
-
-function SideRail({ profile }: { profile: InvestorProfileData }) {
-  return (
-    <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <FactsCard profile={profile} />
-      <FocusCard profile={profile} />
-      {profile.canonical_portfolio.length > 0 ? (
-        <CanonicalPortfolioCard rows={profile.canonical_portfolio} />
-      ) : profile.portfolio_companies.length > 0 ? (
-        <PortfolioCard names={profile.portfolio_companies} />
-      ) : null}
-      <ProvenanceCard profile={profile} />
-    </aside>
   );
 }
 
@@ -660,8 +904,6 @@ function FocusCard({ profile }: { profile: InvestorProfileData }) {
  *   1. lower-case
  *   2. replace any run of non-[a-z0-9] with '-'
  *   3. trim leading/trailing '-'
- * Empty result (e.g. name is "—") means we can't link; fall back to a
- * plain chip so the card never shows a broken Link.
  */
 function slugifyCompany(name: string): string {
   return name
@@ -736,278 +978,9 @@ function ProvenanceCard({ profile }: { profile: InvestorProfileData }) {
   );
 }
 
-/**
- * Deep dossier — Opus-generated jsonb on `investor_deep_profiles`.
- * Returns null when no dossier has been generated for this investor yet
- * (the page never ships a hollow card).
- *
- * Renders the canonical top-level keys that every dossier row carries
- * — investment_thesis, fund_details, geo / stage / sector focus,
- * recent investments, recent news, fact-checks, quality assessment.
- * Sections that are missing from THIS dossier (the jsonb is open-ended)
- * collapse silently rather than rendering an empty header.
- *
- * Voice: dossier sections lead with the synthesised content; the jsonb
- * came from the Opus pipeline so the prose is already in the right
- * register. We add no editorial framing.
- */
-function DeepDossierBlock({
-  dossier,
-}: {
-  dossier: InvestorDeepProfile | null;
-}) {
-  if (!dossier) return null;
-
-  const thesis = dossier.investment_thesis;
-  const fund = dossier.fund_details;
-  const tickets = dossier.tickets;
-  const team = dossier.team;
-  const sector = dossier.sector_focus;
-  const stage = dossier.stage_focus;
-  const geo = dossier.geo_focus;
-  const recentInv = dossier.recent_investments;
-  const recentNews = dossier.recent_news;
-  const fact = dossier.fact_checks;
-  const quality = dossier.quality_assessment;
-
-  // If literally every section is missing, render nothing rather than a
-  // hollow "Deep dossier" card. The component is opt-in by data presence.
-  const hasAnything =
-    Boolean(thesis?.primary_statement) ||
-    Boolean(thesis?.detailed_description) ||
-    Boolean(fund?.current_fund_name || fund?.fund_size_usd) ||
-    Boolean(tickets?.minimum_usd || tickets?.typical_usd || tickets?.maximum_usd) ||
-    Boolean(team?.total_partners) ||
-    (sector && sector.length > 0) ||
-    (stage && stage.length > 0) ||
-    (geo && geo.length > 0) ||
-    (recentInv && recentInv.length > 0) ||
-    (recentNews && recentNews.length > 0) ||
-    Boolean(fact && Object.keys(fact).length > 0) ||
-    Boolean(quality);
-  if (!hasAnything) return null;
-
-  return (
-    <div className="m-section">
-      <h3>
-        Deep dossier
-        {quality?.verification_level ? (
-          <span
-            style={{
-              marginLeft: 8,
-              fontSize: 11,
-              fontWeight: 500,
-              color: "var(--text-dim)",
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-            }}
-          >
-            {quality.verification_level}
-            {quality.source_reliability
-              ? ` · ${quality.source_reliability}`
-              : ""}
-          </span>
-        ) : null}
-      </h3>
-
-      {/* Investment thesis — primary statement + detailed description.
-          The detailed paragraph is the most useful single block in a
-          dossier; we lead with it. */}
-      {thesis?.primary_statement || thesis?.detailed_description ? (
-        <div style={{ marginBottom: 14 }}>
-          <DossierLabel>Investment thesis</DossierLabel>
-          {thesis?.primary_statement ? (
-            <p style={{ fontSize: 13, lineHeight: 1.65, fontWeight: 500 }}>
-              {thesis.primary_statement}
-            </p>
-          ) : null}
-          {thesis?.detailed_description ? (
-            <p
-              style={{
-                fontSize: 13,
-                lineHeight: 1.65,
-                marginTop: 6,
-                color: "var(--text-dim)",
-              }}
-            >
-              {thesis.detailed_description}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Fund details + ticket envelope — combined into a single
-          two-column key/value block so the numbers sit next to each other. */}
-      {fund || tickets || team?.total_partners ? (
-        <div style={{ marginBottom: 14 }}>
-          <DossierLabel>Fund &amp; team</DossierLabel>
-          <div className="ms-kv">
-            <span className="k">Current fund</span>
-            <span className="v">
-              {fund?.current_fund_name ?? <DossierFaint>not on file</DossierFaint>}
-            </span>
-          </div>
-          {fund?.fund_size_usd ? (
-            <div className="ms-kv">
-              <span className="k">Fund size</span>
-              <span className="v">{formatUsd(fund.fund_size_usd)}</span>
-            </div>
-          ) : null}
-          {fund?.fund_vintage ? (
-            <div className="ms-kv">
-              <span className="k">Vintage</span>
-              <span className="v">{fund.fund_vintage}</span>
-            </div>
-          ) : null}
-          {tickets &&
-          (tickets.minimum_usd || tickets.typical_usd || tickets.maximum_usd) ? (
-            <div className="ms-kv">
-              <span className="k">Cheque envelope</span>
-              <span className="v">
-                {tickets.minimum_usd ? formatUsd(tickets.minimum_usd) : "—"}
-                {" / "}
-                {tickets.typical_usd ? formatUsd(tickets.typical_usd) : "—"}
-                {" / "}
-                {tickets.maximum_usd ? formatUsd(tickets.maximum_usd) : "—"}
-                <span style={{ color: "var(--text-faint)", marginLeft: 6 }}>
-                  min / typical / max
-                </span>
-              </span>
-            </div>
-          ) : null}
-          {team?.total_partners ? (
-            <div className="ms-kv">
-              <span className="k">Partners on file</span>
-              <span className="v">{team.total_partners}</span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Focus chips — sector, stage, geo as small chip rows. */}
-      {(sector && sector.length > 0) ||
-      (stage && stage.length > 0) ||
-      (geo && geo.length > 0) ? (
-        <div style={{ marginBottom: 14 }}>
-          <DossierLabel>Focus</DossierLabel>
-          <div style={{ display: "grid", gap: 8 }}>
-            {sector && sector.length > 0 ? (
-              <ChipsRow label="Sector" items={sector} />
-            ) : null}
-            {stage && stage.length > 0 ? (
-              <ChipsRow label="Stage" items={stage} />
-            ) : null}
-            {geo && geo.length > 0 ? (
-              <ChipsRow label="Geo" items={geo} />
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Recent investments — table-like list of company / sector / stage. */}
-      {recentInv && recentInv.length > 0 ? (
-        <details
-          open
-          style={{ marginBottom: 14 }}
-        >
-          <summary
-            style={{
-              cursor: "pointer",
-              listStyle: "none",
-            }}
-          >
-            <DossierLabel>Recent investments · {recentInv.length}</DossierLabel>
-          </summary>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {recentInv.map((inv, idx) => (
-              <li
-                key={`${inv.company_name ?? "unnamed"}-${idx}`}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "6px 0",
-                  borderBottom: "1px solid var(--border-soft)",
-                  fontSize: 12,
-                  gap: 12,
-                }}
-              >
-                <span style={{ fontWeight: 500 }}>
-                  {inv.company_name ?? "Unnamed company"}
-                </span>
-                <span
-                  style={{
-                    color: "var(--text-dim)",
-                    fontSize: 11,
-                    textAlign: "right",
-                  }}
-                >
-                  {[inv.stage, inv.sector, inv.date].filter(Boolean).join(" · ")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      {/* Recent news — headline list with reasonable truncation. */}
-      {recentNews && recentNews.length > 0 ? (
-        <details style={{ marginBottom: 14 }}>
-          <summary style={{ cursor: "pointer", listStyle: "none" }}>
-            <DossierLabel>Recent news · {recentNews.length}</DossierLabel>
-          </summary>
-          <ul
-            style={{
-              listStyle: "disc",
-              paddingLeft: 18,
-              margin: "4px 0 0 0",
-              fontSize: 12,
-              color: "var(--text-dim)",
-              lineHeight: 1.55,
-            }}
-          >
-            {recentNews.map((line, idx) => (
-              <li key={idx} style={{ marginBottom: 4 }}>
-                {line}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      {/* Fact-check ribbon — small pill row showing CONFIRMED / VERIFIED
-          / CONSISTENT verdicts on individual claims in the dossier. */}
-      {fact && Object.keys(fact).length > 0 ? (
-        <div style={{ marginBottom: 4 }}>
-          <DossierLabel>Fact checks</DossierLabel>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {Object.entries(fact).map(([key, verdict]) => (
-              <span
-                key={key}
-                className={`tag-chip ${factVerdictKlass(verdict)}`}
-              >
-                {key.replace(/_/g, " ")} · {verdict}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {dossier.generated_at ? (
-        <p
-          style={{
-            fontSize: 11,
-            color: "var(--text-faint)",
-            marginTop: 12,
-            lineHeight: 1.5,
-          }}
-        >
-          Generated {dossier.generated_at} by the deep-dossier synthesiser.
-        </p>
-      ) : null}
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  Utility components                                                */
+/* ------------------------------------------------------------------ */
 
 function DossierLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -1022,27 +995,6 @@ function DossierLabel({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </div>
-  );
-}
-
-function ChipsRow({ label, items }: { label: string; items: string[] }) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-      <span
-        style={{
-          fontSize: 11,
-          color: "var(--text-faint)",
-          minWidth: 48,
-        }}
-      >
-        {label}
-      </span>
-      {items.map((item) => (
-        <span key={item} className="tag-chip tag-neutral" style={{ fontSize: 11 }}>
-          {item}
-        </span>
-      ))}
     </div>
   );
 }
@@ -1065,4 +1017,3 @@ function factVerdictKlass(verdict: string): string {
   }
   return "tag-warn";
 }
-
