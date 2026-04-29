@@ -843,16 +843,20 @@ function FactsCard({ profile }: { profile: InvestorProfileData }) {
           : `up to ${formatDual(profile.cheque_max_usd)}`;
     rows.push(["Cheque", range]);
   }
-  if (profile.hardware_fit_score != null)
-    rows.push([
-      "Hardware fit",
-      `${Math.round(profile.hardware_fit_score * 100)}%`,
-    ]);
-  if (profile.data_quality_score != null)
-    rows.push([
-      "Data quality",
-      `${Math.round(profile.data_quality_score * 100)}%`,
-    ]);
+  // hardware_fit_score and data_quality_score are stored as text in the DB
+  // on a 0-10 scale. Parse to float and multiply by 10 for a 0-100% display.
+  const hwScore =
+    profile.hardware_fit_score != null
+      ? parseFloat(String(profile.hardware_fit_score))
+      : null;
+  if (hwScore != null && Number.isFinite(hwScore) && hwScore > 0)
+    rows.push(["Hardware fit", `${Math.round(hwScore * 10)}%`]);
+  const dqScore =
+    profile.data_quality_score != null
+      ? parseFloat(String(profile.data_quality_score))
+      : null;
+  if (dqScore != null && Number.isFinite(dqScore))
+    rows.push(["Data quality", `${Math.round(dqScore * 10)}%`]);
   if (profile.synthesis_confidence)
     rows.push(["Synthesis confidence", profile.synthesis_confidence]);
 

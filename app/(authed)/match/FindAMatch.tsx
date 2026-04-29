@@ -2015,8 +2015,27 @@ function TagChips({ row }: { row: MatchResultRow }) {
 }
 
 function ResultTagRow({ row }: { row: MatchResultRow }) {
+  // hardware_fit_score is 0-10 from the DB pipeline. Convert to percentage
+  // for display. Only show when > 0 — a zero score adds no signal.
+  const hwPct =
+    row.hardware_fit_score != null && row.hardware_fit_score > 0
+      ? Math.round(row.hardware_fit_score * 10)
+      : null;
   return (
     <>
+      {hwPct !== null ? (
+        <span
+          className="tag-chip"
+          style={{
+            background: hwPct >= 60 ? "var(--green-tint, #ecfdf5)" : hwPct >= 30 ? "#fffbeb" : undefined,
+            color: hwPct >= 60 ? "var(--green, #059669)" : hwPct >= 30 ? "#d97706" : undefined,
+            fontWeight: 600,
+          }}
+          title={`Hardware-focus score from the Forge Capital pipeline (0–100%)`}
+        >
+          <span>⚙</span>Hardware fit: {hwPct}%
+        </span>
+      ) : null}
       {row.verified_email_count > 0 ? (
         <span className="tag-chip">
           <span>✉</span>

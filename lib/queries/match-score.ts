@@ -179,6 +179,9 @@ function scoreDims(
     chrome_verified: boolean | null;
     hq_location: string | null;
     sector_focus: string | null;
+    ideal_company_profile: string | null;
+    /** Raw text value from the DB — parseFloat before use. */
+    hardware_fit_score: string | null;
   },
   heroTokens: Set<string>,
   heroText: string,
@@ -186,9 +189,13 @@ function scoreDims(
   wantedGeos: string[],
   heroCheque: { min: number | null; max: number | null },
 ): ScoreDims {
-  // THESIS: jaccard of hero tokens against (sector_focus + thesis_summary).
+  // THESIS: jaccard of hero tokens against (sector_focus + thesis_summary +
+  // ideal_company_profile). The ideal_company_profile field is the most
+  // specific description of what the investor wants to back — weighting it
+  // alongside the sector/thesis bag improves recall for investors whose
+  // thesis_summary is thin but whose ideal_company_profile is rich.
   const thesisBag = tokenise(
-    `${investor.sector_focus ?? ""} ${investor.thesis_summary ?? ""}`,
+    `${investor.sector_focus ?? ""} ${investor.thesis_summary ?? ""} ${investor.ideal_company_profile ?? ""}`,
   );
   const thesisScore = Math.round(Math.min(100, jaccard(heroTokens, thesisBag) * 180 + 30));
 
@@ -299,7 +306,29 @@ function scoreDims(
   };
 }
 
-function dimAverage(d: ScoreDims): number {
+/**
+ * Roll up the 6 scoring dimensions into a single match percentage.
+ * When a hardware_fit_score is supplied (0-100 normalised from 0-10),
+ * it contributes a 15% weight to the rollup — displacing data quality
+ * slightly. Without a hardware score the original 6-dim average is used.
+ * The hardware score is non-penalising: a missing score (null) does NOT
+ * lower the investor's ranking.
+ */
+function dimAverage(d: ScoreDims, hardwareFit0to100?: number): number {
+  if (hardwareFit0to100 != null) {
+    // Weighted average: thesis×20 + stage×20 + geo×15 + cheque×15 +
+    //                   activity×15 + data×10 + hardware×15
+    // = 110 total weight (normalised below).
+    const weighted =
+      d.thesis * 20 +
+      d.stage * 20 +
+      d.geo * 15 +
+      d.cheque * 15 +
+      d.activity * 15 +
+      d.data * 10 +
+      hardwareFit0to100 * 15;
+    return Math.round(weighted / 110);
+  }
   return Math.round((d.thesis + d.stage + d.geo + d.cheque + d.activity + d.data) / 6);
 }
 
@@ -423,6 +452,10 @@ interface CandidateRow {
   thesis_summary: string | null;
   thesis_deep: string | null;
   ideal_company_profile: string | null;
+  /** Hardware-focus score, 0–10, stored as text in the DB column. Cast to
+   *  float with parseFloat on use. Null when the pipeline hasn't scored this
+   *  investor yet. */
+  hardware_fit_score: string | null;
   synthesis_data: unknown;
   investment_pattern: string | null;
   connection_brief: string | null;
@@ -657,6 +690,7 @@ export async function getMatchScore(
       id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
       cheque_min_usd, cheque_max_usd, fund_size_usd,
       thesis_summary, thesis_deep, ideal_company_profile,
+      hardware_fit_score,
       synthesis_data, investment_pattern, connection_brief,
       team_expertise, value_add, recent_activity,
       synthesized_at, last_enriched,
@@ -792,6 +826,8 @@ export async function getMatchScore(
         chrome_verified: inv.chrome_verified,
         hq_location: inv.hq_location,
         sector_focus: inv.sector_focus,
+        ideal_company_profile: inv.ideal_company_profile,
+        hardware_fit_score: inv.hardware_fit_score,
       },
       heroTokens,
       heroText,
@@ -799,7 +835,11 @@ export async function getMatchScore(
       wantedGeos,
       heroCheque,
     );
-    const match = dimAverage(dims);
+    // hardware_fit_score is stored as text in the DB (0-10 scale).
+    // Normalise to 0-100 for the weighted rollup.
+    const hwRaw = inv.hardware_fit_score != null ? parseFloat(inv.hardware_fit_score) : null;
+    const hwNorm = hwRaw != null && Number.isFinite(hwRaw) ? Math.round(hwRaw * 10) : undefined;
+    const match = dimAverage(dims, hwNorm);
     if (match < minMatch) continue;
 
     const nm = pickNearMiss(
@@ -833,6 +873,9 @@ export async function getMatchScore(
       thesis_summary: inv.thesis_summary,
       thesis_deep: inv.thesis_deep,
       ideal_company_profile: inv.ideal_company_profile,
+      // Cast the text column to a number (0-10 scale). Store null when
+      // the DB value is absent or non-numeric.
+      hardware_fit_score: hwRaw != null && Number.isFinite(hwRaw) ? hwRaw : null,
       investment_pattern: inv.investment_pattern,
       connection_brief: inv.connection_brief,
       team_expertise: inv.team_expertise,
