@@ -36,6 +36,8 @@ export function InvestorProfileView({
         <ThesisBlock profile={profile} />
         {/* Tier 4: Ideal company profile (pulled out of synthesis) */}
         <IdealCompanyProfileBlock profile={profile} />
+        {/* Value add — moved up per Tristan's request */}
+        <ValueAddBlock profile={profile} />
         {/* Tier 7: Team expertise + Partners */}
         <TeamExpertiseBlock profile={profile} />
         <PartnersBlock partners={profile.partners} />
@@ -48,8 +50,6 @@ export function InvestorProfileView({
         <ActivityBlock campaignLinks={profile.campaign_links} />
         {/* Deep dossier */}
         <DeepDossierBlock dossier={profile.deep_profile} />
-        {/* Remaining synthesis fields (value add) */}
-        <ValueAddBlock profile={profile} />
       </div>
       <SideRail profile={profile} />
     </div>
@@ -300,7 +300,14 @@ function PartnersBlock({
         Partners · {partners.length}
       </h3>
       <div className="m-partners">
-        {partners.map((p) => (
+        {[...partners].sort((a, b) => {
+          const aHasEmail = a.email ? 1 : 0;
+          const bHasEmail = b.email ? 1 : 0;
+          if (aHasEmail !== bHasEmail) return bHasEmail - aHasEmail;
+          const aPrimary = a.is_primary_contact ? 1 : 0;
+          const bPrimary = b.is_primary_contact ? 1 : 0;
+          return bPrimary - aPrimary;
+        }).map((p) => (
           <PartnerCard key={p.id} partner={p} />
         ))}
       </div>

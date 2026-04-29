@@ -112,7 +112,7 @@ export function TierBadge({ tier }: { tier: EmailTier }) {
         className="inline-flex items-center rounded-full border border-border-soft bg-surface-alt px-2 py-0.5 text-[10px] font-medium text-text-faint"
         title="No deliverability tier on file"
       >
-        No tier
+        —
       </span>
     );
   }

@@ -1568,6 +1568,19 @@ function ResultCard({
             <div className="result-name">
               <span className="firm">{row.firm_name ?? "—"}</span>
               <TagChips row={row} />
+              <span
+                style={{
+                  display: "inline-block",
+                  marginLeft: 6,
+                  fontSize: 10,
+                  color: "var(--text-faint)",
+                  transition: "transform 0.2s ease",
+                  transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+                }}
+                aria-hidden="true"
+              >
+                ▼
+              </span>
             </div>
           </div>
           <div className="result-score">
@@ -1757,6 +1770,14 @@ function ResultCardDrillDown({
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
+      {/* Why them — always first when available */}
+      {row.why_them ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Why them</div>
+          <p>{row.why_them}</p>
+        </div>
+      ) : null}
+
       {/* On-demand insight: "Why they might back you" + "How to pitch" */}
       {insightLoading ? (
         <div

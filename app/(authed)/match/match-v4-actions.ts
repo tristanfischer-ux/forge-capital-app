@@ -291,10 +291,10 @@ HOW TO PITCH:
       body: JSON.stringify({
         model: "deepseek/deepseek-v4-flash",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 1024,
+        max_tokens: 2048,
         temperature: 0.4,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!res.ok) {
