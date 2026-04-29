@@ -6,6 +6,7 @@ import type {
   InvestorProfileCampaignLink,
 } from "@/lib/queries/investor-profile";
 import { TierBadge } from "@/app/(authed)/tracker/TierBadge";
+import { PersonalisedInsight } from "./PersonalisedInsight";
 
 /**
  * Full investor profile view. Uses V4 vocabulary — `.section`,
@@ -29,6 +30,8 @@ export function InvestorProfileView({
       <div>
         {/* Tier 1: Headline */}
         <InvestorHeadline profile={profile} />
+        {/* Tier 2: Personalised insight (from sessionStorage, if available) */}
+        <PersonalisedInsight investorId={profile.id} />
         {/* Tier 3: Thesis */}
         <ThesisBlock profile={profile} />
         {/* Tier 4: Ideal company profile (pulled out of synthesis) */}

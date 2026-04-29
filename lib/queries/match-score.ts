@@ -378,7 +378,7 @@ function pickNearMiss(
           : "";
       return {
         headline: "Near-miss: weak thesis overlap.",
-        body: `${missingFrag}${firm}: ${firmSectors}. Ask if a team member has written on an adjacent theme before approaching cold.`,
+        body: `${missingFrag}${firm}: ${firmSectors}. Check their blog or recent talks for adjacent themes that could bridge the gap.`,
       };
     }
     case "cheque": {

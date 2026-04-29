@@ -1706,7 +1706,6 @@ function ResultCardDrillDown({
   heroText: string;
   onOpenProfile: () => void;
 }) {
-  const hasWhyThem = Boolean(row.why_them);
   const needsEmail = row.verified_email_count === 0;
 
   const [insight, setInsight] = useState<InvestorInsight | null>(null);
@@ -1717,6 +1716,17 @@ function ResultCardDrillDown({
   useEffect(() => {
     if (insightRequested.current) return;
     insightRequested.current = true;
+
+    // Check sessionStorage cache first (survives Back navigation)
+    const cacheKey = `insight:${row.investor_id}`;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        setInsight(JSON.parse(cached));
+        return;
+      }
+    } catch {}
+
     setInsightLoading(true);
     generateInsight({
       heroText,
@@ -1730,8 +1740,12 @@ function ResultCardDrillDown({
       portfolioNames: (row.portfolio_fit ?? []).map((p) => p.name),
     })
       .then((res) => {
-        if (res.ok) setInsight(res.insight);
-        else setInsightError(res.error);
+        if (res.ok) {
+          setInsight(res.insight);
+          try { sessionStorage.setItem(cacheKey, JSON.stringify(res.insight)); } catch {}
+        } else {
+          setInsightError(res.error);
+        }
       })
       .catch(() => setInsightError("Network error"))
       .finally(() => setInsightLoading(false));
@@ -1743,22 +1757,7 @@ function ResultCardDrillDown({
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
-      {/* Tier 2: Why them (full text in drill-down) */}
-      {hasWhyThem ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Why them</div>
-          <p>{row.why_them}</p>
-        </div>
-      ) : (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Why them</div>
-          <p style={{ color: "var(--text-dim)", fontStyle: "italic" }}>
-            Synthesis queued — the nightly pipeline fills this.
-          </p>
-        </div>
-      )}
-
-      {/* On-demand insight: "Why they would back you" + "How to pitch" */}
+      {/* On-demand insight: "Why they might back you" + "How to pitch" */}
       {insightLoading ? (
         <div
           className="rc-expand-block"
@@ -1781,16 +1780,16 @@ function ResultCardDrillDown({
         </div>
       ) : insight ? (
         <>
-          {insight.why_would_back ? (
+          {insight.why_might_back ? (
             <div className="rc-expand-block">
               <div
                 className="rc-expand-label"
                 style={{ color: "var(--green, #16a34a)" }}
               >
-                Why they would back you
+                Why they might back you
               </div>
               <p style={{ fontSize: 13, lineHeight: 1.65 }}>
-                {insight.why_would_back}
+                {insight.why_might_back}
               </p>
             </div>
           ) : null}

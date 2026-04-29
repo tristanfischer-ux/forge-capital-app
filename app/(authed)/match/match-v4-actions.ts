@@ -214,11 +214,11 @@ export async function shortlistSelected(input: {
 }
 
 /* ------------------------------------------------------------------------- */
-/* On-demand investor insight — "Why they would back you" + "How to pitch"  */
+/* On-demand investor insight — "Why they might back you" + "How to pitch"  */
 /* ------------------------------------------------------------------------- */
 
 export interface InvestorInsight {
-  why_would_back: string;
+  why_might_back: string;
   how_to_pitch: string;
 }
 
@@ -274,7 +274,7 @@ ${investorContext || "Limited data on file."}
 
 Respond in EXACTLY this format (no markdown headers, no bullet points, just flowing paragraphs):
 
-WHY THEY WOULD BACK YOU:
+WHY THEY MIGHT BACK YOU:
 [One paragraph, 80-150 words. Explain why this investor's thesis, portfolio, and sector focus align with the founder's company. Reference specific portfolio companies or stated focus areas. Be concrete — no generic "they invest in your space" filler. If the fit is weak, say so honestly and explain the angle that could work.]
 
 HOW TO PITCH:
@@ -318,14 +318,14 @@ HOW TO PITCH:
     }
 
     const whyMatch = content.match(
-      /WHY THEY WOULD BACK YOU:\s*\n?([\s\S]*?)(?=\n\s*HOW TO PITCH:|$)/i,
+      /WHY THEY MIGHT BACK YOU:\s*\n?([\s\S]*?)(?=\n\s*HOW TO PITCH:|$)/i,
     );
     const howMatch = content.match(/HOW TO PITCH:\s*\n?([\s\S]*?)$/i);
 
     return {
       ok: true,
       insight: {
-        why_would_back: whyMatch?.[1]?.trim() || content.trim(),
+        why_might_back: whyMatch?.[1]?.trim() || content.trim(),
         how_to_pitch: howMatch?.[1]?.trim() || "",
       },
     };
