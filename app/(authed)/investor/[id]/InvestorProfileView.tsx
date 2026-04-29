@@ -600,6 +600,7 @@ function DeepDossierContent({
 /* ------------------------------------------------------------------ */
 
 function PartnerCard({ partner }: { partner: InvestorProfilePartner }) {
+  const displayBio = partner.deep_bio || partner.bio;
   return (
     <div
       style={{
@@ -654,6 +655,14 @@ function PartnerCard({ partner }: { partner: InvestorProfilePartner }) {
           >
             {partner.email}
           </a>
+          {partner.email_verified ? (
+            <span className="tag-chip tag-approved" style={{ marginLeft: 6, fontSize: 9 }}>Verified</span>
+          ) : null}
+          {partner.email_source ? (
+            <span style={{ fontSize: 10, color: "var(--text-faint)", marginLeft: 6 }}>
+              via {partner.email_source}
+            </span>
+          ) : null}
         </div>
       ) : (
         <div
@@ -662,26 +671,38 @@ function PartnerCard({ partner }: { partner: InvestorProfilePartner }) {
           No email on file
         </div>
       )}
+      {displayBio ? (
+        <p style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5, marginBottom: 6 }}>
+          {displayBio}
+        </p>
+      ) : null}
       {partner.focus_areas ? (
         <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
           Focus: {partner.focus_areas}
         </div>
       ) : null}
-      {partner.linkedin ? (
-        <a
-          href={partner.linkedin}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            fontSize: 11,
-            color: "var(--accent)",
-            display: "inline-block",
-            marginTop: 6,
-          }}
-        >
-          LinkedIn ↗
-        </a>
-      ) : null}
+      <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+        {partner.linkedin ? (
+          <a
+            href={partner.linkedin}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 11, color: "var(--accent)" }}
+          >
+            LinkedIn ↗
+          </a>
+        ) : null}
+        {partner.twitter ? (
+          <a
+            href={partner.twitter}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 11, color: "var(--accent)" }}
+          >
+            Twitter ↗
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 }

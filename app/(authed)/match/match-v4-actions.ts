@@ -350,7 +350,7 @@ export interface ChunkEvidence {
 }
 
 export type GetChunkEvidenceResult =
-  | { ok: true; chunks: ChunkEvidence[] }
+  | { ok: true; chunks: ChunkEvidence[]; indexing?: boolean }
   | { ok: false; error: string };
 
 export async function getChunkEvidence(input: {
@@ -395,6 +395,16 @@ export async function getChunkEvidence(input: {
     chunk_index: r.chunk_index,
     cosine_similarity: r.cosine_similarity,
   }));
+
+  if (chunks.length === 0) {
+    const { count } = await supabase
+      .from("investor_page_chunks")
+      .select("id", { count: "exact", head: true })
+      .eq("investor_id", investorId);
+    if (count === 0) {
+      return { ok: true, chunks: [], indexing: true };
+    }
+  }
 
   return { ok: true, chunks };
 }

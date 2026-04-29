@@ -16,8 +16,13 @@ export interface InvestorProfilePartner {
   title: string | null;
   email: string | null;
   email_tier: EmailTier;
+  email_verified: boolean;
+  email_source: string | null;
+  email_verified_method: string | null;
   linkedin: string | null;
+  twitter: string | null;
   bio: string | null;
+  deep_bio: string | null;
   focus_areas: string | null;
   is_primary_contact: boolean;
 }
@@ -217,7 +222,7 @@ export async function getInvestorProfile(
   const { data: partnerRows, error: partnersErr } = await supabase
     .from("partners_mirror")
     .select(
-      "id, name, title, email, email_tier, linkedin, bio, focus_areas, is_primary_contact",
+      "id, name, title, email, email_tier, email_verified, email_source, email_verified_method, linkedin, twitter, bio, deep_bio, focus_areas, is_primary_contact",
     )
     .eq("investor_id", investorId)
     .order("is_primary_contact", { ascending: false, nullsFirst: false })
@@ -233,8 +238,13 @@ export async function getInvestorProfile(
     title: (row.title as string | null) ?? null,
     email: (row.email as string | null) ?? null,
     email_tier: ((row.email_tier as string | null) ?? null) as EmailTier,
+    email_verified: Boolean(row.email_verified),
+    email_source: (row.email_source as string | null) ?? null,
+    email_verified_method: (row.email_verified_method as string | null) ?? null,
     linkedin: (row.linkedin as string | null) ?? null,
+    twitter: (row.twitter as string | null) ?? null,
     bio: (row.bio as string | null) ?? null,
+    deep_bio: (row.deep_bio as string | null) ?? null,
     focus_areas: (row.focus_areas as string | null) ?? null,
     is_primary_contact: Boolean(row.is_primary_contact),
   }));

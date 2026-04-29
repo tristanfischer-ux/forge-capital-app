@@ -10,6 +10,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
   const [chunks, setChunks] = useState<ChunkEvidence[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [indexing, setIndexing] = useState(false);
 
   useEffect(() => {
     try {
@@ -21,6 +22,8 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
         .then((res) => {
           if (res.ok && res.chunks.length > 0) {
             setChunks(res.chunks);
+          } else if (res.ok && res.indexing) {
+            setIndexing(true);
           } else if (!res.ok) {
             setError(res.error);
           }
@@ -30,7 +33,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
     } catch {}
   }, [investorId]);
 
-  if (!loading && !chunks) return null;
+  if (!loading && !chunks && !indexing) return null;
 
   return (
     <div className="m-section">
@@ -72,6 +75,11 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
         </div>
       ) : error ? (
         <p style={{ color: "var(--text-dim)", fontSize: 13 }}>{error}</p>
+      ) : indexing ? (
+        <p style={{ padding: "10px 14px", color: "var(--text-dim)", fontSize: 13, fontStyle: "italic" }}>
+          No website excerpts yet — this investor's pages are still being indexed.
+          Check back shortly.
+        </p>
       ) : chunks ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {chunks.map((chunk, i) => {
