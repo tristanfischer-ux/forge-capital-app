@@ -23,46 +23,43 @@ export function InvestorProfileView({
   profile: InvestorProfileData;
 }) {
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      {/* §1 — Header */}
+    <div style={{ maxWidth: 900 }}>
       <InvestorHeadline profile={profile} />
 
-      {/* §2 — Fact strip: Key facts + Focus + Provenance inline */}
       <FactStrip profile={profile} />
 
-      {/* §3 — Recent news (from deep dossier, if available) */}
+      {/* §1 — Recent news */}
       <RecentNewsBlock dossier={profile.deep_profile} />
 
-      {/* §4 — Personalised insight (from sessionStorage) */}
       <PersonalisedInsight investorId={profile.id} />
 
-      {/* §5 — Thesis */}
-      <CollapsibleSection number={5} title="Thesis" previewLines={3}>
+      {/* §2 — Thesis */}
+      <CollapsibleSection number={2} title="Thesis" previewLines={3}>
         <ThesisContent profile={profile} />
       </CollapsibleSection>
 
-      {/* §6 — Ideal company profile + Value add */}
-      <CollapsibleSection number={6} title="Ideal company profile" previewLines={3}>
+      {/* §3 — Ideal company profile + Value add */}
+      <CollapsibleSection number={3} title="Ideal company profile" previewLines={3}>
         <IdealAndValueContent profile={profile} />
       </CollapsibleSection>
 
-      {/* §7 — Investment pattern + Recent investments + Related firms */}
-      <CollapsibleSection number={7} title="Investment pattern" previewLines={4}>
+      {/* §4 — Investment pattern + Recent investments + Related firms */}
+      <CollapsibleSection number={4} title="Investment pattern" previewLines={4}>
         <InvestmentContent profile={profile} dossier={profile.deep_profile} />
       </CollapsibleSection>
 
-      {/* §8 — Connection brief + Campaign activity */}
-      <CollapsibleSection number={8} title="Connection & activity" previewLines={2}>
+      {/* §5 — Connection brief + Campaign activity */}
+      <CollapsibleSection number={5} title="Connection & activity" previewLines={2}>
         <ConnectionContent profile={profile} />
       </CollapsibleSection>
 
-      {/* §9 — Partners */}
-      <CollapsibleSection number={9} title={`Partners · ${profile.partners.length}`} previewLines={6}>
+      {/* §6 — Partners */}
+      <CollapsibleSection number={6} title={`Partners · ${profile.partners.length}`} previewLines={6}>
         <PartnersContent partners={profile.partners} />
       </CollapsibleSection>
 
-      {/* §10 — Deep dossier (remaining) */}
-      <CollapsibleSection number={10} title="Deep dossier" previewLines={4}>
+      {/* §7 — Deep dossier (remaining) */}
+      <CollapsibleSection number={7} title="Deep dossier" previewLines={4}>
         <DeepDossierContent dossier={profile.deep_profile} />
       </CollapsibleSection>
 
@@ -166,7 +163,7 @@ function FactStrip({ profile }: { profile: InvestorProfileData }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  §3 — Recent news                                                  */
+/*  §1 — Recent news                                                  */
 /* ------------------------------------------------------------------ */
 
 function RecentNewsBlock({ dossier }: { dossier: InvestorDeepProfile | null }) {
@@ -175,33 +172,57 @@ function RecentNewsBlock({ dossier }: { dossier: InvestorDeepProfile | null }) {
   return (
     <div className="m-section">
       <h3>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", marginRight: 8 }}>§3</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", marginRight: 8 }}>§1</span>
         Recent news · {dossier.recent_news.length}
       </h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {dossier.recent_news.map((line, i) => (
-          <div
-            key={i}
-            style={{
-              padding: "10px 14px",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 8,
-              background: "var(--surface-alt)",
-              fontSize: 13,
-              lineHeight: 1.55,
-              color: "var(--text-dim)",
-            }}
-          >
-            {line}
-          </div>
-        ))}
+        {dossier.recent_news.map((line, i) => {
+          const urlMatch = line.match(/https?:\/\/[^\s)]+/);
+          const url = urlMatch ? urlMatch[0] : null;
+          const text = url ? line.replace(url, "").replace(/\s{2,}/g, " ").trim() : line;
+          return (
+            <div
+              key={i}
+              style={{
+                padding: "10px 14px",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 8,
+                background: "var(--surface-alt)",
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "var(--text-dim)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <span>{text}</span>
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    color: "var(--accent)",
+                    fontSize: 11,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  Source ↗
+                </a>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  §5 — Thesis content                                               */
+/*  §2 — Thesis content                                               */
 /* ------------------------------------------------------------------ */
 
 function ThesisContent({ profile }: { profile: InvestorProfileData }) {
@@ -219,7 +240,7 @@ function ThesisContent({ profile }: { profile: InvestorProfileData }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  §6 — Ideal company profile + Value add                            */
+/*  §3 — Ideal company profile + Value add                            */
 /* ------------------------------------------------------------------ */
 
 function IdealAndValueContent({ profile }: { profile: InvestorProfileData }) {
@@ -242,7 +263,7 @@ function IdealAndValueContent({ profile }: { profile: InvestorProfileData }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  §7 — Investment pattern + Recent investments + Related firms       */
+/*  §4 — Investment pattern + Recent investments + Related firms       */
 /* ------------------------------------------------------------------ */
 
 function InvestmentContent({ profile, dossier }: { profile: InvestorProfileData; dossier: InvestorDeepProfile | null }) {
@@ -338,7 +359,7 @@ function RelatedFirmsInline({
 }
 
 /* ------------------------------------------------------------------ */
-/*  §8 — Connection & activity                                        */
+/*  §5 — Connection & activity                                        */
 /* ------------------------------------------------------------------ */
 
 function ConnectionContent({ profile }: { profile: InvestorProfileData }) {
@@ -356,7 +377,7 @@ function ConnectionContent({ profile }: { profile: InvestorProfileData }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  §9 — Partners                                                     */
+/*  §6 — Partners                                                     */
 /* ------------------------------------------------------------------ */
 
 function PartnersContent({ partners }: { partners: InvestorProfilePartner[] }) {
@@ -385,7 +406,7 @@ function PartnersContent({ partners }: { partners: InvestorProfilePartner[] }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  §10 — Deep dossier content (minus news/focus/tickets shown above) */
+/*  §7 — Deep dossier content (minus news/focus/tickets shown above)  */
 /* ------------------------------------------------------------------ */
 
 function DeepDossierContent({
@@ -501,7 +522,7 @@ function DeepDossierContent({
         </div>
       ) : null}
 
-      {/* Recent investments (more detail than §7) */}
+      {/* Recent investments (more detail than §4) */}
       {recentInv && recentInv.length > 0 ? (
         <div style={{ marginBottom: 14 }}>
           <DossierLabel>Recent investments · {recentInv.length}</DossierLabel>
