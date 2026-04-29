@@ -69,6 +69,8 @@ export interface MatchResultRow {
   cheque_max_raw: string | null;
   fund_size_raw: string | null;
   thesis_summary: string | null;
+  thesis_deep: string | null;
+  ideal_company_profile: string | null;
   dims: ScoreDims;
   match: number;
   primary_partner: {

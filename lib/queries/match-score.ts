@@ -421,6 +421,8 @@ interface CandidateRow {
   cheque_max_usd: string | null;
   fund_size_usd: string | null;
   thesis_summary: string | null;
+  thesis_deep: string | null;
+  ideal_company_profile: string | null;
   synthesis_data: unknown;
   investment_pattern: string | null;
   connection_brief: string | null;
@@ -652,7 +654,8 @@ export async function getMatchScore(
       `
       id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
       cheque_min_usd, cheque_max_usd, fund_size_usd,
-      thesis_summary, synthesis_data, investment_pattern, connection_brief,
+      thesis_summary, thesis_deep, ideal_company_profile,
+      synthesis_data, investment_pattern, connection_brief,
       team_expertise, synthesized_at, last_enriched,
       chrome_verified, last_synced_at,
       partners_mirror:partners_mirror!partners_mirror_investor_id_fkey (
@@ -825,6 +828,8 @@ export async function getMatchScore(
       cheque_max_raw: inv.cheque_max_usd,
       fund_size_raw: inv.fund_size_usd,
       thesis_summary: inv.thesis_summary,
+      thesis_deep: inv.thesis_deep,
+      ideal_company_profile: inv.ideal_company_profile,
       dims,
       match,
       primary_partner: primary

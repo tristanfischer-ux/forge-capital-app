@@ -1565,8 +1565,6 @@ function ResultCard({
               <TagChips row={row} />
             </div>
             <div className="result-meta">
-              {row.hq_location ?? <i style={{ color: "var(--text-faint)" }}>HQ unknown</i>}
-              <span className="sep">&middot;</span>
               {row.fund_size_raw ? (
                 <>{formatRawAmount(row.fund_size_raw)} fund</>
               ) : (
@@ -1598,6 +1596,23 @@ function ResultCard({
         <div className="result-tags">
           <ResultTagRow row={row} />
         </div>
+
+        {!expanded && row.why_them ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-dim)",
+              lineHeight: 1.5,
+              marginTop: 6,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span style={{ fontWeight: 600, color: "var(--orange)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", marginRight: 6 }}>Why them</span>
+            {row.why_them}
+          </div>
+        ) : null}
 
         {expanded ? (
           <ResultCardDrillDown row={row} onOpenProfile={onOpenProfile} />
@@ -1723,6 +1738,18 @@ function ResultCardDrillDown({
         <div className="rc-expand-block">
           <div className="rc-expand-label">Thesis</div>
           <p>{row.thesis_summary}</p>
+        </div>
+      ) : null}
+      {row.thesis_deep ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Deep thesis</div>
+          <p style={{ whiteSpace: "pre-line" }}>{row.thesis_deep}</p>
+        </div>
+      ) : null}
+      {row.ideal_company_profile ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Ideal company profile</div>
+          <p>{row.ideal_company_profile}</p>
         </div>
       ) : null}
       {row.portfolio_fit && row.portfolio_fit.length > 0 ? (
