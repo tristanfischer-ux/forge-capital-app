@@ -7,6 +7,7 @@ import type {
 } from "@/lib/queries/investor-profile";
 import { TierBadge } from "@/app/(authed)/tracker/TierBadge";
 import { PersonalisedInsight } from "./PersonalisedInsight";
+import { SourceEvidence } from "./SourceEvidence";
 import { CollapsibleSection } from "./CollapsibleSection";
 
 /**
@@ -62,6 +63,9 @@ export function InvestorProfileView({
       <CollapsibleSection number={7} title="Deep dossier" previewLines={4}>
         <DeepDossierContent dossier={profile.deep_profile} />
       </CollapsibleSection>
+
+      {/* §8 — Source evidence (chunks from scraped website, matched to hero text) */}
+      <SourceEvidence investorId={profile.id} />
 
       {/* Portfolio (canonical or legacy names) — below the collapsibles */}
       {profile.canonical_portfolio.length > 0 ? (

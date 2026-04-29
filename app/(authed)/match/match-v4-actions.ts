@@ -337,3 +337,64 @@ HOW TO PITCH:
     };
   }
 }
+
+/* ------------------------------------------------------------------------- */
+/* Chunk evidence — relevant scraped website excerpts for one investor       */
+/* ------------------------------------------------------------------------- */
+
+export interface ChunkEvidence {
+  chunk_text: string;
+  page_url: string;
+  chunk_index: number;
+  cosine_similarity: number;
+}
+
+export type GetChunkEvidenceResult =
+  | { ok: true; chunks: ChunkEvidence[] }
+  | { ok: false; error: string };
+
+export async function getChunkEvidence(input: {
+  investorId: number;
+  heroText: string;
+  limit?: number;
+}): Promise<GetChunkEvidenceResult> {
+  const { investorId, heroText, limit = 10 } = input;
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const { embedQueryText } = await import("@/lib/embeddings/openai");
+  const embedResult = await embedQueryText(heroText);
+  if (!embedResult.ok) {
+    return { ok: false, error: "Could not embed hero text" };
+  }
+
+  const { data, error } = await supabase.rpc("match_chunks_for_investor", {
+    p_investor_id: investorId,
+    query_embedding: embedResult.vector,
+    match_count: limit,
+    min_similarity: 0.0,
+  });
+
+  if (error) {
+    console.error("[getChunkEvidence] RPC failed:", error.message);
+    return { ok: false, error: error.message };
+  }
+
+  const chunks = ((data ?? []) as Array<{
+    chunk_text: string;
+    page_url: string;
+    chunk_index: number;
+    cosine_similarity: number;
+  }>).map((r) => ({
+    chunk_text: r.chunk_text,
+    page_url: r.page_url,
+    chunk_index: r.chunk_index,
+    cosine_similarity: r.cosine_similarity,
+  }));
+
+  return { ok: true, chunks };
+}

@@ -651,16 +651,23 @@ export async function getMatchScore(
   // Try the embedding route first. Fail silently to lexical on any error.
   let annIds: number[] | null = null;
   let embedInfo: { dims: number; latencyMs: number } | null = null;
+  let chunkEvidenceMap = new Map<number, { text: string; url: string; similarity: number }>();
   const embedResult = await embedQueryText(heroText);
   if (embedResult.ok) {
     embedInfo = { dims: embedResult.dims, latencyMs: embedResult.latencyMs };
-    const { data: annRows, error: annErr } = await supabase.rpc(
-      "match_investors_by_embedding",
-      {
+    // Fire both RPCs in parallel — ANN candidate selection and chunk evidence.
+    const [annResult, chunkResult] = await Promise.all([
+      supabase.rpc("match_investors_by_embedding", {
         query_embedding: embedResult.vector,
         match_count: Math.min(candidatePool, 2000),
-      },
-    );
+      }),
+      supabase.rpc("match_investors_by_chunks", {
+        query_embedding: embedResult.vector,
+        per_investor_limit: 1,
+        total_match_count: 500,
+      }),
+    ]);
+    const { data: annRows, error: annErr } = annResult;
     if (annErr) {
       console.warn(
         "[match-score] ANN RPC failed, falling back to lexical:",
@@ -672,6 +679,23 @@ export async function getMatchScore(
         .map((r) => r.id)
         .filter((id) => !excludeIds.includes(id))
         .slice(0, candidatePool);
+    }
+    const { data: chunkRows, error: chunkErr } = chunkResult;
+    if (!chunkErr && chunkRows) {
+      for (const row of chunkRows as Array<{
+        investor_id: number;
+        best_cosine_similarity: number;
+        best_chunk_text: string;
+        best_chunk_url: string;
+      }>) {
+        chunkEvidenceMap.set(row.investor_id, {
+          text: row.best_chunk_text,
+          url: row.best_chunk_url,
+          similarity: row.best_cosine_similarity,
+        });
+      }
+    } else if (chunkErr) {
+      console.warn("[match-score] chunk evidence RPC failed:", chunkErr.message);
     }
   } else if (embedResult.kind !== "no_token") {
     // no_token is expected in dev without the key — don't spam the logs.
@@ -902,6 +926,7 @@ export async function getMatchScore(
       // Attached in a follow-up pass below — keep the in-loop allocation
       // to a stable empty array so the row already conforms to the type.
       portfolio_fit: [],
+      chunk_evidence: chunkEvidenceMap.get(inv.id) ?? null,
     });
   }
 

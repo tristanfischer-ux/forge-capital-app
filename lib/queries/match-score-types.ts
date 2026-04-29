@@ -104,6 +104,14 @@ export interface MatchResultRow {
    *  like a sector fit for the founder's pitch. Empty when no overlap or
    *  no dossier rows landed yet. */
   portfolio_fit: PortfolioFitRow[];
+  /** Best-matching chunk from the investor's scraped website pages.
+   *  Populated by the match_investors_by_chunks RPC when chunk data is
+   *  available. Null when no chunks have been embedded yet. */
+  chunk_evidence: {
+    text: string;
+    url: string;
+    similarity: number;
+  } | null;
 }
 
 export interface GetMatchScoreResult {

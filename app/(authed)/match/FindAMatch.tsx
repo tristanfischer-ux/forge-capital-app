@@ -384,6 +384,7 @@ export function FindAMatch({
           `fc_hero_text_${campaignId}_${archetype}`,
           heroText,
         );
+        sessionStorage.setItem("heroText", heroText);
       }
     }, 500);
     return () => {
@@ -1608,6 +1609,37 @@ function ResultCard({
           </div>
         ) : null}
 
+        {/* Chunk evidence — "Matched from their website" pill on closed card */}
+        {!expanded && row.chunk_evidence ? (
+          <div style={{
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "var(--text-dim)",
+            marginTop: 6,
+            padding: "6px 10px",
+            background: "var(--surface-alt, #f8f9fa)",
+            borderRadius: 6,
+            borderLeft: "3px solid var(--accent)",
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Matched from their website
+            </span>
+            <p style={{
+              margin: "2px 0 0",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}>
+              &ldquo;{row.chunk_evidence.text.slice(0, 200)}{row.chunk_evidence.text.length > 200 ? "…" : ""}&rdquo;
+            </p>
+            <a href={row.chunk_evidence.url} target="_blank" rel="noreferrer"
+              style={{ fontSize: 10, color: "var(--accent)" }}>
+              Source &#x2197;
+            </a>
+          </div>
+        ) : null}
+
         {/* Tier 5: Score dimension bars */}
         <ScoreCard dims={row.dims} />
 
@@ -1779,6 +1811,22 @@ function ResultCardDrillDown({
         <div className="rc-expand-block">
           <div className="rc-expand-label">Why them</div>
           <p>{row.why_them}</p>
+        </div>
+      ) : null}
+
+      {/* Chunk evidence — website passage that drove the semantic match */}
+      {row.chunk_evidence ? (
+        <div className="ms-card" style={{ borderLeft: "3px solid var(--accent)" }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+            Matched from their website &middot; {Math.round(row.chunk_evidence.similarity * 100)}% relevance
+          </div>
+          <p style={{ fontSize: 13, lineHeight: 1.65, fontStyle: "italic" }}>
+            &ldquo;{row.chunk_evidence.text}&rdquo;
+          </p>
+          <a href={row.chunk_evidence.url} target="_blank" rel="noreferrer"
+            style={{ fontSize: 11, color: "var(--accent)", marginTop: 4, display: "inline-block" }}>
+            {row.chunk_evidence.url.replace(/^https?:\/\//, "").slice(0, 60)} &#x2197;
+          </a>
         </div>
       ) : null}
 
