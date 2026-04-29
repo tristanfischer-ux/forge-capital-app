@@ -684,3 +684,7 @@ button {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

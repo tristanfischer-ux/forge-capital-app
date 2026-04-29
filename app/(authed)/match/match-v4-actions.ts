@@ -212,3 +212,128 @@ export async function shortlistSelected(input: {
   revalidatePath("/tracker");
   return { ok: true, shortlisted, skipped };
 }
+
+/* ------------------------------------------------------------------------- */
+/* On-demand investor insight — "Why they would back you" + "How to pitch"  */
+/* ------------------------------------------------------------------------- */
+
+export interface InvestorInsight {
+  why_would_back: string;
+  how_to_pitch: string;
+}
+
+export type GenerateInsightResult =
+  | { ok: true; insight: InvestorInsight }
+  | { ok: false; error: string };
+
+export async function generateInsight(input: {
+  heroText: string;
+  firmName: string;
+  thesisDeep: string | null;
+  idealCompanyProfile: string | null;
+  sectorFocus: string | null;
+  stageFocus: string | null;
+  geoFocus: string | null;
+  investmentPattern: string | null;
+  portfolioNames: string[];
+}): Promise<GenerateInsightResult> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return { ok: false, error: "OpenRouter key not configured" };
+
+  const investorContext = [
+    input.thesisDeep ? `Thesis: ${input.thesisDeep}` : null,
+    input.idealCompanyProfile
+      ? `Ideal company profile: ${input.idealCompanyProfile}`
+      : null,
+    input.sectorFocus ? `Sector focus: ${input.sectorFocus}` : null,
+    input.stageFocus ? `Stage focus: ${input.stageFocus}` : null,
+    input.geoFocus ? `Geography focus: ${input.geoFocus}` : null,
+    input.investmentPattern
+      ? `Investment pattern: ${input.investmentPattern}`
+      : null,
+    input.portfolioNames.length > 0
+      ? `Portfolio companies: ${input.portfolioNames.join(", ")}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const prompt = `You are an investor outreach adviser for a hardware startup founder. Given the founder's pitch and an investor's profile, produce two sections.
+
+FOUNDER'S PITCH:
+${input.heroText}
+
+INVESTOR — ${input.firmName}:
+${investorContext || "Limited data on file."}
+
+Respond in EXACTLY this format (no markdown headers, no bullet points, just flowing paragraphs):
+
+WHY THEY WOULD BACK YOU:
+[One paragraph, 80-150 words. Explain why this investor's thesis, portfolio, and sector focus align with the founder's company. Reference specific portfolio companies or stated focus areas. Be concrete — no generic "they invest in your space" filler. If the fit is weak, say so honestly and explain the angle that could work.]
+
+HOW TO PITCH:
+[One paragraph, 80-150 words. Give specific tactical advice on how to frame the pitch for this investor. Reference their stated thesis language, what they look for, and how the founder should position their company. Include what to lead with and what to emphasise.]`;
+
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://forge-capital-app.vercel.app",
+      },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-v4-flash",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1024,
+        temperature: 0.4,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(
+        `[generateInsight] OpenRouter ${res.status}: ${body.slice(0, 200)}`,
+      );
+      return { ok: false, error: `OpenRouter returned ${res.status}` };
+    }
+
+    const json = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
+    };
+    const content =
+      json.choices?.[0]?.message?.content ||
+      json.choices?.[0]?.message?.reasoning_content ||
+      "";
+
+    if (!content) {
+      return { ok: false, error: "Empty response from model" };
+    }
+
+    const whyMatch = content.match(
+      /WHY THEY WOULD BACK YOU:\s*\n?([\s\S]*?)(?=\n\s*HOW TO PITCH:|$)/i,
+    );
+    const howMatch = content.match(/HOW TO PITCH:\s*\n?([\s\S]*?)$/i);
+
+    return {
+      ok: true,
+      insight: {
+        why_would_back: whyMatch?.[1]?.trim() || content.trim(),
+        how_to_pitch: howMatch?.[1]?.trim() || "",
+      },
+    };
+  } catch (err) {
+    console.error("[generateInsight] failed:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Insight generation failed",
+    };
+  }
+}

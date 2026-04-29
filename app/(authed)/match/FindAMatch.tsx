@@ -10,7 +10,8 @@ import type {
   ScoreDims,
 } from "@/lib/queries/match-score-types";
 import { detectArchetypeSignals } from "@/lib/queries/match-score-types";
-import { findMatches, findLookalikes, shortlistSelected } from "./match-v4-actions";
+import { findMatches, findLookalikes, shortlistSelected, generateInsight } from "./match-v4-actions";
+import type { InvestorInsight } from "./match-v4-actions";
 import { heroTextForArchetype } from "./match-constants";
 import { CustomerPartnerCards } from "./CustomerPartnerCards";
 import type { CustomerCampaignPartnerCard } from "@/lib/queries/customer-partners";
@@ -865,6 +866,7 @@ export function FindAMatch({
                 <ResultCard
                   key={row.investor_id}
                   row={row}
+                  heroText={heroText}
                   checked={selected.has(row.investor_id)}
                   expanded={expandedId === row.investor_id}
                   onToggle={() => toggleSelect(row.investor_id)}
@@ -1504,6 +1506,7 @@ function ResultsHead({
 
 function ResultCard({
   row,
+  heroText,
   checked,
   expanded,
   onToggle,
@@ -1511,6 +1514,7 @@ function ResultCard({
   onOpenProfile,
 }: {
   row: MatchResultRow;
+  heroText: string;
   checked: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -1572,7 +1576,7 @@ function ResultCard({
           </div>
         </div>
 
-        {/* Tier 2: Why them one-liner (visible on closed card) */}
+        {/* Tier 2: Why them (full text on closed card) */}
         {!expanded && row.why_them ? (
           <div
             style={{
@@ -1580,9 +1584,6 @@ function ResultCard({
               color: "var(--text-dim)",
               lineHeight: 1.5,
               marginTop: 6,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
             }}
           >
             <span style={{ fontWeight: 600, color: "var(--orange)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", marginRight: 6 }}>Why them</span>
@@ -1615,7 +1616,7 @@ function ResultCard({
         </div>
 
         {expanded ? (
-          <ResultCardDrillDown row={row} onOpenProfile={onOpenProfile} />
+          <ResultCardDrillDown row={row} heroText={heroText} onOpenProfile={onOpenProfile} />
         ) : null}
       </div>
     </div>
@@ -1698,13 +1699,44 @@ function useExpandNavigateHandlers({
 
 function ResultCardDrillDown({
   row,
+  heroText,
   onOpenProfile,
 }: {
   row: MatchResultRow;
+  heroText: string;
   onOpenProfile: () => void;
 }) {
   const hasWhyThem = Boolean(row.why_them);
   const needsEmail = row.verified_email_count === 0;
+
+  const [insight, setInsight] = useState<InvestorInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
+  const insightRequested = useRef(false);
+
+  useEffect(() => {
+    if (insightRequested.current) return;
+    insightRequested.current = true;
+    setInsightLoading(true);
+    generateInsight({
+      heroText,
+      firmName: row.firm_name ?? "Unknown firm",
+      thesisDeep: row.thesis_deep,
+      idealCompanyProfile: row.ideal_company_profile,
+      sectorFocus: row.sector_focus,
+      stageFocus: row.stage_focus,
+      geoFocus: row.geo_focus,
+      investmentPattern: row.investment_pattern,
+      portfolioNames: (row.portfolio_fit ?? []).map((p) => p.name),
+    })
+      .then((res) => {
+        if (res.ok) setInsight(res.insight);
+        else setInsightError(res.error);
+      })
+      .catch(() => setInsightError("Network error"))
+      .finally(() => setInsightLoading(false));
+  }, [heroText, row]);
+
   return (
     <div
       className="rc-expand"
@@ -1725,6 +1757,71 @@ function ResultCardDrillDown({
           </p>
         </div>
       )}
+
+      {/* On-demand insight: "Why they would back you" + "How to pitch" */}
+      {insightLoading ? (
+        <div
+          className="rc-expand-block"
+          style={{ display: "flex", alignItems: "center", gap: 8 }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: 14,
+              height: 14,
+              border: "2px solid var(--border)",
+              borderTopColor: "var(--accent)",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+            Generating personalised insight…
+          </span>
+        </div>
+      ) : insight ? (
+        <>
+          {insight.why_would_back ? (
+            <div className="rc-expand-block">
+              <div
+                className="rc-expand-label"
+                style={{ color: "var(--green, #16a34a)" }}
+              >
+                Why they would back you
+              </div>
+              <p style={{ fontSize: 13, lineHeight: 1.65 }}>
+                {insight.why_would_back}
+              </p>
+            </div>
+          ) : null}
+          {insight.how_to_pitch ? (
+            <div className="rc-expand-block">
+              <div
+                className="rc-expand-label"
+                style={{ color: "var(--orange, #ea580c)" }}
+              >
+                How to pitch
+              </div>
+              <p style={{ fontSize: 13, lineHeight: 1.65 }}>
+                {insight.how_to_pitch}
+              </p>
+            </div>
+          ) : null}
+        </>
+      ) : insightError ? (
+        <div className="rc-expand-block">
+          <p
+            style={{
+              fontSize: 12,
+              color: "var(--text-faint)",
+              fontStyle: "italic",
+            }}
+          >
+            Insight unavailable — {insightError}
+          </p>
+        </div>
+      ) : null}
+
       {row.near_miss ? (
         <div className="near-miss" style={{ marginTop: 0 }}>
           <b>{row.near_miss.headline}</b> {row.near_miss.body}
@@ -1887,14 +1984,6 @@ function ResultCardDrillDown({
               </li>
             ))}
           </ul>
-        </div>
-      ) : null}
-
-      {/* Thesis summary (moved below investment pattern per 10-tier plan) */}
-      {row.thesis_summary ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Thesis</div>
-          <p>{row.thesis_summary}</p>
         </div>
       ) : null}
 
