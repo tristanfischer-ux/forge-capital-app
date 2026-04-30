@@ -1,5 +1,7 @@
 import { getDraftsByCampaign } from "@/lib/queries/drafts";
 import type { DraftGroup, DraftRow } from "@/lib/queries/drafts";
+import { InlineEditDraft } from "./InlineEditDraft";
+import { DiscardDraftButton } from "./DiscardDraftButton";
 
 /**
  * V4 §8 Gmail drafts panel — 1:1 port of Phase2-Mockup-V4.html lines
@@ -130,16 +132,16 @@ function DraftsPanel({
       </div>
 
       {/* V4 `<table class="sheet">` (lines 1736-1789). Columns + widths
-          match the mockup. */}
+          match the mockup. Action column widened to hold Draft ↗ + Edit + Discard. */}
       <table className="sheet">
         <thead>
           <tr>
-            <th style={{ width: "22%" }}>To</th>
+            <th style={{ width: "20%" }}>To</th>
             <th style={{ width: "12%" }}>Campaign</th>
-            <th style={{ width: "30%" }}>Subject</th>
+            <th style={{ width: "26%" }}>Subject</th>
             <th>Opening line</th>
-            <th style={{ width: "8%" }}>Saved</th>
-            <th style={{ width: "10%" }}>Action</th>
+            <th style={{ width: "7%" }}>Saved</th>
+            <th style={{ width: "17%" }}>Action</th>
           </tr>
         </thead>
         <tbody>
