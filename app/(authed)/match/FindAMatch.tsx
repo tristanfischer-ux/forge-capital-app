@@ -971,7 +971,7 @@ const ARCHETYPES: ArchetypeCardDef[] = [
       <>
         <b>Today’s pool:</b> {pools.investor.toLocaleString("en-GB")} active
         investors &middot; 6 matching dimensions: Thesis / Stage / Geo /
-        Cheque / Activity / Confidence.
+        Cheque / Activity / Data depth.
       </>
     ),
   },
@@ -2159,8 +2159,8 @@ function ResultTagRow({ row }: { row: MatchResultRow }) {
 /**
  * Scorecard dim labels as shown to the user. The 6th dim's internal key
  * is still `data` (migrations + match-score-types.ts untouched), but the
- * user-facing label flipped to "Confidence" on 2026-04-22 because "Data"
- * reads as "how much data do you have?" not "how confident are we?".
+ * user-facing label: "Data depth" — communicates that this pillar measures
+ * how complete the investor's profile data is, not match confidence.
  */
 const DIM_ORDER: Array<{ key: keyof ScoreDims; label: string }> = [
   { key: "thesis", label: "Thesis" },
@@ -2168,7 +2168,7 @@ const DIM_ORDER: Array<{ key: keyof ScoreDims; label: string }> = [
   { key: "geo", label: "Geo" },
   { key: "cheque", label: "Cheque" },
   { key: "activity", label: "Activity" },
-  { key: "data", label: "Confidence" },
+  { key: "data", label: "Data depth" },
 ];
 
 function ScoreCard({ dims }: { dims: ScoreDims }) {

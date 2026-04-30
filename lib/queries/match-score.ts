@@ -92,6 +92,85 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : inter / union;
 }
 
+/**
+ * Synonym clusters for investment/technology domains. Each cluster groups
+ * terms that should be treated as equivalent for thesis matching. When any
+ * term from a cluster appears in the hero text, all terms in that cluster
+ * are considered "covered" if any of them appear in the investor's thesis.
+ */
+const SYNONYM_CLUSTERS: string[][] = [
+  ["hardware", "deeptech", "deep-tech", "deep tech", "physical", "tangible", "atoms"],
+  ["climate", "cleantech", "clean-tech", "clean tech", "sustainability", "green", "net-zero", "net zero", "decarbonisation", "decarbonization"],
+  ["energy", "renewable", "renewables", "solar", "wind", "battery", "batteries", "storage", "grid"],
+  ["biotech", "biology", "bio", "life sciences", "life-sciences", "pharmaceutical", "pharma"],
+  ["healthtech", "health-tech", "health tech", "digital health", "medtech", "med-tech", "medical"],
+  ["fintech", "fin-tech", "financial technology", "payments", "banking", "insurtech"],
+  ["agtech", "ag-tech", "agriculture", "farming", "food tech", "foodtech", "agri"],
+  ["proptech", "prop-tech", "property technology", "real estate tech"],
+  ["robotics", "automation", "autonomous", "drones", "unmanned"],
+  ["saas", "software", "platform", "cloud", "enterprise software"],
+  ["mobility", "transport", "automotive", "vehicles", "electric vehicles", "evs"],
+  ["aerospace", "space", "defence", "defense", "aviation"],
+  ["manufacturing", "industrial", "factory", "production"],
+  ["materials", "advanced materials", "composites", "nanomaterials"],
+  ["iot", "internet of things", "sensors", "connected devices", "embedded"],
+  ["data", "analytics", "machine learning", "artificial intelligence"],
+];
+
+/**
+ * Compute thesis coverage: what fraction of the hero's query tokens are
+ * "covered" by the investor's thesis text, using synonym expansion.
+ *
+ * Unlike Jaccard, this is asymmetric — a short query like "climate tech
+ * hardware" isn't penalised because the investor has 20 other sector tags.
+ * The question is: does the investor cover what the founder cares about?
+ *
+ * Returns 0-1 where 1 = every hero token (or its synonym) appears in the
+ * investor's thesis bag.
+ */
+function thesisCoverage(heroTokens: Set<string>, investorBag: Set<string>): number {
+  if (heroTokens.size === 0) return 0;
+
+  let covered = 0;
+  for (const token of heroTokens) {
+    // Direct match
+    if (investorBag.has(token)) {
+      covered++;
+      continue;
+    }
+    // Substring match (e.g. "climate" matches "climatech")
+    let found = false;
+    for (const inv of investorBag) {
+      if (inv.includes(token) || token.includes(inv)) {
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      covered++;
+      continue;
+    }
+    // Synonym cluster match
+    for (const cluster of SYNONYM_CLUSTERS) {
+      const heroInCluster = cluster.some((syn) => {
+        const synTokens = syn.split(/\s+/);
+        return synTokens.some((st) => st === token || token.includes(st) || st.includes(token));
+      });
+      if (!heroInCluster) continue;
+      const investorInCluster = cluster.some((syn) => {
+        const synTokens = syn.split(/\s+/);
+        return synTokens.some((st) => investorBag.has(st) || Array.from(investorBag).some((inv) => inv.includes(st) || st.includes(inv)));
+      });
+      if (investorInCluster) {
+        covered++;
+        break;
+      }
+    }
+  }
+
+  return covered / heroTokens.size;
+}
+
 function parseAmountUsd(raw: string | null | undefined): number | null {
   if (!raw) return null;
   // Match strings like "~$4,320,000", "€1M", "$2.5b", "£500k".
@@ -189,15 +268,19 @@ function scoreDims(
   wantedGeos: string[],
   heroCheque: { min: number | null; max: number | null },
 ): ScoreDims {
-  // THESIS: jaccard of hero tokens against (sector_focus + thesis_summary +
-  // ideal_company_profile). The ideal_company_profile field is the most
-  // specific description of what the investor wants to back — weighting it
-  // alongside the sector/thesis bag improves recall for investors whose
-  // thesis_summary is thin but whose ideal_company_profile is rich.
+  // THESIS: coverage-based scoring with synonym expansion. Measures what
+  // fraction of the hero's query tokens are covered by the investor's
+  // thesis text (directly or via synonym clusters). Unlike Jaccard, short
+  // queries aren't penalised by the investor having many sector tags.
+  // Blends coverage (70% weight) with Jaccard (30%) so investors with a
+  // tighter focus still get a boost.
   const thesisBag = tokenise(
     `${investor.sector_focus ?? ""} ${investor.thesis_summary ?? ""} ${investor.ideal_company_profile ?? ""}`,
   );
-  const thesisScore = Math.round(Math.min(100, jaccard(heroTokens, thesisBag) * 180 + 30));
+  const coverage = thesisCoverage(heroTokens, thesisBag);
+  const jaccardScore = jaccard(heroTokens, thesisBag);
+  const blended = coverage * 0.7 + jaccardScore * 0.3;
+  const thesisScore = Math.round(Math.min(100, blended * 100 * 1.2 + 20));
 
   // STAGE: does investor.stage_focus mention the wanted stages?
   let stageScore = 50; // neutral
