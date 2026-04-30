@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       );
     if (upsertError) throw new Error(`gmail_tokens upsert: ${upsertError.message}`);
 
-    const response = NextResponse.redirect(new URL("/home?gmail_connected=1", request.url));
+    const response = NextResponse.redirect(new URL("/pipeline?gmail_connected=1", request.url));
     response.cookies.delete("gmail_oauth_state");
     return response;
   } catch (err) {

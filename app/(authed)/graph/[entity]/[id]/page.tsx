@@ -40,7 +40,7 @@ export default async function GraphPage({
           </p>
         </div>
         <Link
-          href={data.nodes[0]?.href ?? "/home"}
+          href={data.nodes[0]?.href ?? "/discover"}
           className="as-link"
           style={{ fontSize: 13 }}
         >

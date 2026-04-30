@@ -233,7 +233,7 @@ function CampaignOption({
   active: boolean;
 }) {
   const router = useRouter();
-  const pathname = usePathname() ?? "/home";
+  const pathname = usePathname() ?? "/pipeline";
 
   // Stay on the user's current page when switching campaigns. Clicking
   // a campaign used to force-navigate to /tracker — jarring when the

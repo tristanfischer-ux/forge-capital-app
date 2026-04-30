@@ -189,10 +189,10 @@ How to use it for a parity screenshot run:
 ```
 echo "DEV_SKIP_AUTH=1" >> .env.local   # once; or uncomment the example line
 npm run dev
-agent-browser open http://localhost:3000/home --headless
+agent-browser open http://localhost:3000/discover --headless
 agent-browser screenshot -c
 ```
-The `/home` request will transparently authenticate the test user and
+The `/discover` request will transparently authenticate the test user and
 render as if Tristan signed in.
 
 Belt-and-braces guarantee: the flag is inert in production. The check is
@@ -204,16 +204,25 @@ middleware short-circuits at the same guard. Never remove either check.
 Never commit `.env.local`. Never export `DEV_SKIP_AUTH` in Vercel env
 config.
 
-## Architecture — locked
+## Architecture — two pages (updated 2026-04-30)
 
-- **V4 is one scrolling page.** Not multi-route. The 8 topbar pills are
-  anchor-scroll targets (#find-a-match, #approval, #automation, etc.),
-  not separate pages.
-- `/` after auth renders the V4 single-page home with every built
-  section stacked. `/tracker`, `/match`, `/tracker/[id]/draft` remain
-  as deep-link views of individual sections, useful for sharing URLs.
-- Right sidebar (`app/(authed)/Sidebar.tsx`) is persistent across the
-  home and all sub-routes.
+The V4 single-page layout was replaced with a two-page architecture,
+confirmed by Tristan and a 6-model council. The split separates the
+"truth database" (shared investor pool) from the "personal database"
+(campaign-scoped outreach actions).
+
+- **`/discover`** — truth database surface. Default post-login landing.
+  Contains Find a Match (search, score, browse). Campaign-agnostic —
+  no campaign switcher. "Add to campaign" bar bridges discovery results
+  into the user's personal pipeline.
+- **`/pipeline`** — personal database surface. Campaign-scoped. Contains
+  Approval, Automation, Templates, Review, Drafts, Tracker, Weekly,
+  Gmail + Calendar, Import, Inbox. Campaign switcher lives here (in
+  the topbar layout). Section pills are anchor-scroll targets within
+  this page.
+- **`/home`** — redirects to `/discover` for backwards compatibility.
+- `/tracker`, `/match`, `/approval`, etc. remain as deep-link views of
+  individual sections, useful for sharing URLs.
 
 ## Section ownership
 

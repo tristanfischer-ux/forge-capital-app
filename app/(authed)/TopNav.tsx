@@ -5,80 +5,68 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
- * Top-bar pill row with scroll-spy. On /home the 8 pills are anchor
- * scrolls; the one matching the currently-visible section gets
- * `.pill.active` so the user can see where they are in the 10-section
- * scroll. On any deep-link route (/tracker, /match, …) the pills are
- * `<Link href="/home#anchor">` and the active state falls back to
- * pathname matching (existing V1 behaviour).
+ * Top-bar pill row — two-page navigation.
+ *
+ * Page 1: /discover — "Discovery" pill (truth database, search + match)
+ * Page 2: /pipeline — section pills that anchor-scroll within the page
+ *         (Approval, Automation, Templates, Review, Drafts, Tracker,
+ *         Weekly, Gmail + Calendar)
+ *
+ * On /pipeline: pills are anchor scrolls with scroll-spy.
+ * Elsewhere: pills are <Link> to /pipeline#anchor or /discover.
  *
  * V4 class vocabulary used verbatim from app/v4-mockup.css:
  *   - `.topnav`           — flex container
  *   - `.pill`             — base
- *   - `.pill.active`      — indigo fill + white text (V4 line 45-50)
- *   - `.pill.auto`        — pink "NEW" ribbon (automation pill only)
- *
- * Scroll-spy uses a scroll listener + rAF throttle rather than
- * IntersectionObserver. IO with rootMargin works well for "section
- * enters top zone" but gives awkward empty states at page top and page
- * bottom; the scroll-position check we do here is O(8) per frame which
- * is cheap, always picks exactly one pill, and handles the first-load
- * and bottom-of-page cases naturally.
- *
- * Replaces the old app/(authed)/NavPill.tsx which did per-pill routing
- * without shared scroll state.
+ *   - `.pill.active`      — indigo fill + white text
  */
 
 interface PillConfig {
   anchor: string;
   label: string;
-  /** Route that deep-links to this section on its own. */
-  deepLinkPath: string;
+  /** Full href when not on the pipeline page. */
+  href: string;
   /** Stage number shown before the label. */
   number: number;
+  /** Which page this pill belongs to. */
+  page: "discover" | "pipeline";
 }
 
 const PILLS: PillConfig[] = [
-  { anchor: "find-a-match", label: "Find a match", deepLinkPath: "/match", number: 1 },
-  { anchor: "approval", label: "Approval", deepLinkPath: "/approval", number: 2 },
-  { anchor: "automation", label: "Automation", deepLinkPath: "/pipeline", number: 3 },
-  { anchor: "templates", label: "Templates", deepLinkPath: "/templates", number: 4 },
-  { anchor: "review", label: "Review", deepLinkPath: "/review", number: 5 },
-  { anchor: "drafts", label: "Drafts", deepLinkPath: "/drafts", number: 6 },
-  { anchor: "tracker", label: "Tracker", deepLinkPath: "/tracker", number: 7 },
-  { anchor: "weekly", label: "Weekly", deepLinkPath: "/weekly", number: 8 },
-  { anchor: "gmail-calendar", label: "Gmail + Calendar", deepLinkPath: "/gmail-calendar", number: 9 },
-  { anchor: "import-tracker", label: "Import tracker", deepLinkPath: "/import", number: 10 },
-  { anchor: "inbox", label: "Inbox", deepLinkPath: "/inbox", number: 11 },
+  { anchor: "discover", label: "Discovery", href: "/discover", number: 1, page: "discover" },
+  { anchor: "approval", label: "Approval", href: "/pipeline#approval", number: 2, page: "pipeline" },
+  { anchor: "automation", label: "Automation", href: "/pipeline#automation", number: 3, page: "pipeline" },
+  { anchor: "templates", label: "Templates", href: "/pipeline#templates", number: 4, page: "pipeline" },
+  { anchor: "review", label: "Review", href: "/pipeline#review", number: 5, page: "pipeline" },
+  { anchor: "drafts", label: "Drafts", href: "/pipeline#drafts", number: 6, page: "pipeline" },
+  { anchor: "tracker", label: "Tracker", href: "/pipeline#tracker", number: 7, page: "pipeline" },
+  { anchor: "weekly", label: "Weekly", href: "/pipeline#weekly", number: 8, page: "pipeline" },
+  { anchor: "gmail-calendar", label: "Gmail", href: "/pipeline#gmail-calendar", number: 9, page: "pipeline" },
 ];
 
 export function TopNav() {
   const pathname = usePathname() ?? "";
-  const onHome = pathname === "/home";
+  const onPipeline = pathname === "/pipeline";
+  const onDiscover = pathname === "/discover";
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!onHome) {
+    if (!onPipeline) {
       setActiveSection(null);
       return;
     }
 
-    // Midline of the viewport-active zone: a section is "active" when
-    // its top has crossed this y-offset from the viewport top. 30% is
-    // comfortable — the top of a section reaches this line a beat
-    // before the user's eye lands on its heading.
     function currentSection(): string | null {
       const midline = window.innerHeight * 0.3;
       let currentId: string | null = null;
-      for (const { anchor } of PILLS) {
-        const el = document.getElementById(anchor);
+      for (const pill of PILLS) {
+        if (pill.page !== "pipeline") continue;
+        const el = document.getElementById(pill.anchor);
         if (!el) continue;
         const top = el.getBoundingClientRect().top;
-        if (top <= midline) currentId = anchor;
+        if (top <= midline) currentId = pill.anchor;
       }
-      // If we're above the first section's threshold, highlight the
-      // first pill so the user always sees a "you are here" mark.
-      if (!currentId) currentId = PILLS[0]?.anchor ?? null;
+      if (!currentId) currentId = "approval";
       return currentId;
     }
 
@@ -91,7 +79,6 @@ export function TopNav() {
       });
     }
 
-    // Initial sync (page may be scrolled mid-way on navigation).
     setActiveSection(currentSection());
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
@@ -100,22 +87,21 @@ export function TopNav() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [onHome]);
+  }, [onPipeline]);
 
   return (
     <nav className="topnav">
       {PILLS.map((pill) => {
-        const active = onHome
-          ? activeSection === pill.anchor
-          : pathname === pill.deepLinkPath
-            || pathname.startsWith(`${pill.deepLinkPath}/`);
+        let active = false;
+        if (pill.page === "discover") {
+          active = onDiscover;
+        } else if (onPipeline) {
+          active = activeSection === pill.anchor;
+        }
 
         const classes = ["pill"];
         if (active) classes.push("active");
 
-        // On /home: plain anchor — browser's smooth-scroll (via the V4
-        // CSS `scroll-behavior: smooth` on <html>) handles the scroll.
-        // Elsewhere: Next <Link> back to /home with the anchor.
         const pillContent = (
           <>
             <span className="pill-num">{pill.number}.</span>
@@ -123,7 +109,8 @@ export function TopNav() {
           </>
         );
 
-        if (onHome) {
+        // On /pipeline: pipeline pills are anchor scrolls
+        if (onPipeline && pill.page === "pipeline") {
           return (
             <a
               key={pill.anchor}
@@ -135,10 +122,12 @@ export function TopNav() {
             </a>
           );
         }
+
+        // All other cases: Link navigation
         return (
           <Link
             key={pill.anchor}
-            href={`/home#${pill.anchor}`}
+            href={pill.href}
             aria-current={active ? "page" : undefined}
             className={classes.join(" ")}
           >

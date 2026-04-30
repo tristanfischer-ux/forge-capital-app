@@ -84,7 +84,7 @@ export async function saveDraftEdits(input: {
   }
 
   revalidatePath("/drafts");
-  revalidatePath("/home");
+  revalidatePath("/pipeline");
   return { ok: true };
 }
 
@@ -162,7 +162,7 @@ export async function discardDraft(input: {
   // founder to delete the Gmail draft manually.
 
   revalidatePath("/drafts");
-  revalidatePath("/home");
+  revalidatePath("/pipeline");
   revalidatePath("/tracker");
   return { ok: true };
 }

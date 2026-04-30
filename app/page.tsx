@@ -63,7 +63,7 @@ export default function HomePage() {
             return;
           }
           const next =
-            new URLSearchParams(window.location.search).get("next") ?? "/home";
+            new URLSearchParams(window.location.search).get("next") ?? "/discover";
           window.location.replace(next);
         })();
         return;
@@ -89,8 +89,8 @@ export default function HomePage() {
       const supabase = createBrowserClient();
       const next =
         typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("next") ?? "/home"
-          : "/home";
+          ? new URLSearchParams(window.location.search).get("next") ?? "/discover"
+          : "/discover";
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {

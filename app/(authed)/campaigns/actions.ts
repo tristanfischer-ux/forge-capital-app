@@ -79,7 +79,7 @@ export async function updateCampaignMetadata(input: {
   }
 
   // Refresh every authed page that reads campaign metadata.
-  revalidatePath("/home");
+  revalidatePath("/pipeline");
   revalidatePath("/tracker");
   revalidatePath("/approval");
   revalidatePath("/weekly");

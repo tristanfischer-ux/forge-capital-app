@@ -13,7 +13,7 @@ import { createServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/tracker";
+  const next = url.searchParams.get("next") ?? "/discover";
 
   // Supabase can hand us an error directly as a query param (PKCE error path)
   // OR deliver it as a URL fragment (implicit/legacy error path). The fragment

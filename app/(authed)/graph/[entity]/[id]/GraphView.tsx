@@ -358,7 +358,7 @@ export function GraphView({ data }: { data: GraphNeighbourhoodData }) {
       >
         <span>Jump to centre&rsquo;s profile:</span>
         <Link
-          href={data.nodes[0]?.href ?? "/home"}
+          href={data.nodes[0]?.href ?? "/discover"}
           className="partner-link"
           style={{ fontWeight: 500 }}
         >

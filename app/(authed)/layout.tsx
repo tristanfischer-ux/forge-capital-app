@@ -94,8 +94,8 @@ export default async function AuthedLayout({
  * Top bar — renders V4's `.topbar` markup verbatim. The 8 pills use
  * `<NavPill>` (client, pathname-aware) — on /home they resolve to plain
  * `#anchor` scroll links, on any deep-link route they resolve to
- * `<Link href="/home#anchor">` so clicking the pill brings the user to
- * the single-page home scrolled to the section.
+ * `<Link href="/pipeline#anchor">` so clicking the pill brings the user to
+ * the pipeline page scrolled to the section.
  *
  * See ./NavPill.tsx for the routing logic. Anchor ids match the V4
  * mockup: #find-a-match, #approval, #automation, #templates, #review,
@@ -113,7 +113,7 @@ function TopBar({
   return (
     <header className="topbar">
       {/* Brand mark — V4 line 723 */}
-      <Link href="/home" className="brand">
+      <Link href="/discover" className="brand">
         <span className="dot" aria-hidden="true" />
         Fractional Forge
         <span className="sub">Outreach</span>

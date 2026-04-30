@@ -271,7 +271,7 @@ export async function saveSectionToTemplate(input: {
   // Refresh both the dedicated templates route and the home composite
   // page that includes the section.
   revalidatePath("/templates");
-  revalidatePath("/home");
+  revalidatePath("/pipeline");
   return { ok: true };
 }
 
@@ -319,7 +319,7 @@ export async function saveVoiceReference(input: {
   }
 
   revalidatePath("/templates");
-  revalidatePath("/home");
+  revalidatePath("/pipeline");
   return { ok: true };
 }
 
@@ -630,7 +630,7 @@ export async function duplicateTemplate(input: {
   }
 
   revalidatePath("/templates");
-  revalidatePath("/home");
+  revalidatePath("/pipeline");
 
   return { ok: true, newId: (inserted as { id: string }).id };
 }

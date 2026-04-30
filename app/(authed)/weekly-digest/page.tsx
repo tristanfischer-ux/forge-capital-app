@@ -83,8 +83,8 @@ export default async function WeeklyDigestPage({
             <b>Send to me now</b> to dispatch the email below right now.
           </div>
         </div>
-        <Link href="/home#weekly" className="section-link">
-          Back to home &rarr;
+        <Link href="/pipeline#weekly" className="section-link">
+          Back to pipeline &rarr;
         </Link>
       </div>
 
