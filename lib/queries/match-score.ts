@@ -739,26 +739,41 @@ export async function getMatchScore(
   if (embedResult.ok) {
     embedInfo = { dims: embedResult.dims, latencyMs: embedResult.latencyMs };
     // Fire both RPCs in parallel — ANN candidate selection and chunk evidence.
-    const [annResult, chunkResult] = await Promise.all([
+    // PostgREST caps responses at max-rows (default 1000). Paginate with
+    // .range() in parallel batches of 1000 to retrieve the full candidate pool.
+    const PAGE = 1000;
+    const total = Math.min(candidatePool, 5000);
+    const pages = Math.ceil(total / PAGE);
+    const annPages = Array.from({ length: pages }, (_, i) =>
       supabase.rpc("match_investors_by_embedding", {
         query_embedding: embedResult.vector,
-        match_count: Math.min(candidatePool, 5000),
-      }).limit(Math.min(candidatePool, 5000)),
+        match_count: total,
+      }).range(i * PAGE, Math.min((i + 1) * PAGE - 1, total - 1)),
+    );
+    const [chunkResult, ...annPageResults] = await Promise.all([
       supabase.rpc("match_investors_by_chunks", {
         query_embedding: embedResult.vector,
         per_investor_limit: 1,
         total_match_count: 500,
       }),
+      ...annPages,
     ]);
-    const { data: annRows, error: annErr } = annResult;
+    const allAnnRows: Array<{ id: number }> = [];
+    let annErr: { message: string } | null = null;
+    for (const res of annPageResults) {
+      if (res.error) {
+        annErr = res.error;
+        break;
+      }
+      allAnnRows.push(...((res.data ?? []) as Array<{ id: number }>));
+    }
     if (annErr) {
       console.warn(
         "[match-score] ANN RPC failed, falling back to lexical:",
         annErr.message,
       );
     } else {
-      const rows = (annRows ?? []) as Array<{ id: number }>;
-      annIds = rows
+      annIds = allAnnRows
         .map((r) => r.id)
         .filter((id) => !excludeIds.includes(id))
         .slice(0, candidatePool);
