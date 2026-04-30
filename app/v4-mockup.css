@@ -53,7 +53,7 @@ button { font-family: inherit; }
 .stage-banner .stage-num { font-size: 26px; font-weight: 800; opacity: 0.85; }
 .topbar .spacer { flex: 1; }
 
-.campaign-switcher { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px; background: var(--accent-softer); border: 1px solid #e4e1ff; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--accent); position: relative; flex-shrink: 0; }
+.campaign-switcher { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px; background: var(--accent-softer); border: 1px solid #e4e1ff; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--accent); position: relative; flex-shrink: 1; min-width: 0; z-index: 60; }
 .campaign-switcher .label { color: var(--text-dim); font-weight: 500; }
 .campaign-switcher .name { color: var(--accent); font-weight: 600; }
 .campaign-switcher .type-badge { font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 4px; }
