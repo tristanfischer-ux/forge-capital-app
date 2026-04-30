@@ -2,6 +2,88 @@ import { createServerClient } from "@/lib/supabase/server";
 import { refreshAccessToken } from "./oauth";
 import { verifyDeliverability } from "@/lib/email/verify-deliverability";
 
+// ---------------------------------------------------------------------------
+// Tracking helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * The canonical app URL for tracking endpoints. Falls back to the Vercel
+ * deployment URL at runtime, then a safe localhost for local dev.
+ */
+function appBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
+
+/**
+ * Encodes a tracking payload as a base64url string suitable for embedding
+ * in a URL path segment.
+ */
+function encodeTrackingPayload(payload: Record<string, unknown>): string {
+  return Buffer.from(JSON.stringify(payload), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+/**
+ * Wraps plain-text email body with HTML, injects a 1×1 tracking pixel,
+ * and replaces bare URLs with click-tracked redirects.
+ *
+ * @param body              The plain-text email body
+ * @param campaignPartnerId UUID of the campaign_partner row for this send
+ * @returns                 HTML string with tracking injected
+ */
+export function injectTracking(
+  body: string,
+  campaignPartnerId: string,
+): string {
+  const base = appBaseUrl();
+  const sentAt = Date.now();
+
+  // 1. Escape HTML special characters in the body text
+  const escaped = body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // 2. Convert plain-text URLs to tracked anchor tags.
+  //    Match http(s):// URLs not already inside an HTML tag attribute.
+  const withLinks = escaped.replace(
+    /https?:\/\/[^\s<>"]+/g,
+    (url) => {
+      const clickPayload = encodeTrackingPayload({
+        c: campaignPartnerId,
+        t: sentAt,
+        u: url,
+      });
+      const trackedUrl = `${base}/api/track/click/${clickPayload}`;
+      return `<a href="${trackedUrl}">${url}</a>`;
+    },
+  );
+
+  // 3. Convert newlines to <br> tags so the layout is preserved in HTML
+  const withBreaks = withLinks.replace(/\n/g, "<br>\n");
+
+  // 4. Build the tracking pixel URL
+  const openPayload = encodeTrackingPayload({
+    c: campaignPartnerId,
+    t: sentAt,
+  });
+  const pixelUrl = `${base}/api/track/open/${openPayload}`;
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#222;">
+<div>${withBreaks}</div>
+<img src="${pixelUrl}" width="1" height="1" border="0" alt="" style="display:block;width:1px;height:1px;overflow:hidden;">
+</body>
+</html>`;
+}
+
 /**
  * Create a Gmail draft on behalf of the signed-in user using their stored
  * refresh_token. The draft lives in the user's Drafts folder — this app
@@ -22,6 +104,10 @@ export interface CreateDraftInput {
   subject: string;
   body: string;
   attachments?: EmailAttachment[];
+  /** When provided, tracking pixel + click wrappers are injected into the
+   *  email body. Must be the UUID of the campaign_partner row so open/click
+   *  events are attributed to the right partner. */
+  campaignPartnerId?: string;
 }
 
 export interface CreateDraftResult {
@@ -76,6 +162,7 @@ function encodeRfc2822Message(
   subject: string,
   body: string,
   attachments?: EmailAttachment[],
+  campaignPartnerId?: string,
 ): string {
   const subjectHeader = /[^\x20-\x7e]/.test(subject)
     ? `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`
@@ -87,6 +174,14 @@ function encodeRfc2822Message(
     `MIME-Version: 1.0`,
   ];
 
+  // When a campaignPartnerId is supplied, inject tracking into the body and
+  // send as text/html so the pixel and click-wrapped links work correctly.
+  const useTracking = !!campaignPartnerId;
+  const finalBody = useTracking ? injectTracking(body, campaignPartnerId!) : body;
+  const bodyContentType = useTracking
+    ? "text/html; charset=UTF-8"
+    : "text/plain; charset=UTF-8";
+
   let messageBody: string;
 
   if (attachments && attachments.length > 0) {
@@ -97,10 +192,10 @@ function encodeRfc2822Message(
 
     parts.push(
       `--${boundary}\r\n` +
-      `Content-Type: text/plain; charset=UTF-8\r\n` +
+      `Content-Type: ${bodyContentType}\r\n` +
       `Content-Transfer-Encoding: 8bit\r\n` +
       `\r\n` +
-      body,
+      finalBody,
     );
 
     for (const att of attachments) {
@@ -119,9 +214,9 @@ function encodeRfc2822Message(
     parts.push(`--${boundary}--`);
     messageBody = parts.join("\r\n");
   } else {
-    headers.push(`Content-Type: text/plain; charset=UTF-8`);
+    headers.push(`Content-Type: ${bodyContentType}`);
     headers.push(`Content-Transfer-Encoding: 8bit`);
-    messageBody = body;
+    messageBody = finalBody;
   }
 
   const message = [...headers, ``, messageBody].join("\r\n");
@@ -134,7 +229,7 @@ function encodeRfc2822Message(
 
 export async function createGmailDraft(input: CreateDraftInput): Promise<CreateDraftResult> {
   const accessToken = await getAccessTokenForCurrentUser();
-  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments);
+  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments, input.campaignPartnerId);
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: {
@@ -187,7 +282,7 @@ export async function sendGmailMessage(
   }
 
   const accessToken = await getAccessTokenForCurrentUser();
-  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments);
+  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments, input.campaignPartnerId);
   const res = await fetch(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
     {
