@@ -545,6 +545,133 @@ function statusCodeRank(code: string | null): number {
   return STATUS_RANK[code] ?? -1;
 }
 
+// ── All-campaigns parse ───────────────────────────────────────────────
+
+export interface AllCampaignsParsed {
+  filename: string;
+  /** One entry per detected campaign column group. */
+  campaigns: Array<{
+    /** The raw group header from row 1 of the spreadsheet. */
+    group_name: string;
+    /** Matched DB campaign, or null when no campaign in the DB fuzzy-matches. */
+    campaign_id: string | null;
+    campaign_name: string | null;
+    /** Full parse result, or null when campaign_id is null. */
+    parsed: ParsedTracker | null;
+    /** Human-readable reason when we couldn't map the group to a DB campaign. */
+    skip_reason: string | null;
+  }>;
+  /** Group headers that look like "INVESTOR INFO" — shared columns, skipped. */
+  skipped_info_groups: string[];
+}
+
+/**
+ * Parse a multi-campaign xlsx in a single pass.
+ *
+ * Detects the campaign column groups from row 1, resolves each group to a
+ * campaign in the DB by fuzzy name-match, then calls parseTrackerXlsx for
+ * each matched campaign. Investor-info groups (the shared A-D columns) are
+ * detected and skipped.
+ *
+ * Returns an AllCampaignsParsed with one entry per campaign group, whether
+ * matched or not, so the UI can surface "PANATERE — no matching campaign in
+ * DB" alongside successful parses.
+ */
+export async function parseTrackerXlsxAllCampaigns(
+  buffer: Buffer,
+  filename: string,
+): Promise<AllCampaignsParsed> {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+
+  const supabase = await createServerClient();
+
+  // Fetch all campaigns once.
+  const { data: allCampaigns } = await supabase
+    .from("campaigns")
+    .select("id, name");
+  const campaigns = (allCampaigns ?? []) as Array<{ id: string; name: string }>;
+
+  const investorInfoAliases = ["investor info", "investor", "info", "shared"];
+
+  const result: AllCampaignsParsed = {
+    filename,
+    campaigns: [],
+    skipped_info_groups: [],
+  };
+
+  // We only need to detect groups once — use the first sheet that has a
+  // multi-campaign row 1.
+  for (const sheetName of wb.SheetNames) {
+    const sheet = wb.Sheets[sheetName];
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: null });
+    if (aoa.length < 2) continue;
+
+    const row1 = aoa[0] as unknown[];
+    const multiGroups = detectMultiCampaignGroups(row1);
+    if (!multiGroups) {
+      // Single-campaign sheet — nothing to do here for "import all".
+      continue;
+    }
+
+    // Separate info groups from campaign groups.
+    for (const group of multiGroups) {
+      if (investorInfoAliases.includes(normHeader(group.groupName))) {
+        result.skipped_info_groups.push(group.groupName);
+        continue;
+      }
+
+      // Find a matching campaign in the DB.
+      const matched = campaigns.find((c) => {
+        const normC = normHeader(c.name);
+        const normG = normHeader(group.groupName);
+        if (normC === normG) return true;
+        if (normC.includes(normG) || normG.includes(normC)) return true;
+        // Token subset.
+        const cTokens = normC.split(" ").filter((t) => t.length >= 2);
+        const gTokens = new Set(normG.split(" ").filter((t) => t.length >= 2));
+        return cTokens.length > 0 && cTokens.every((t) => gTokens.has(t));
+      });
+
+      if (!matched) {
+        result.campaigns.push({
+          group_name: group.groupName,
+          campaign_id: null,
+          campaign_name: null,
+          parsed: null,
+          skip_reason: `No campaign in the database matches "${group.groupName}". Create the campaign first, then re-import.`,
+        });
+        continue;
+      }
+
+      // Run the existing single-campaign parse for this campaign ID.
+      try {
+        const parsed = await parseTrackerXlsx(buffer, filename, matched.id);
+        result.campaigns.push({
+          group_name: group.groupName,
+          campaign_id: matched.id,
+          campaign_name: matched.name,
+          parsed,
+          skip_reason: null,
+        });
+      } catch (err) {
+        result.campaigns.push({
+          group_name: group.groupName,
+          campaign_id: matched.id,
+          campaign_name: matched.name,
+          parsed: null,
+          skip_reason: `Parse failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+
+    // Stop after the first sheet that had groups — subsequent sheets would
+    // duplicate the result.
+    break;
+  }
+
+  return result;
+}
+
 // ── Apply ─────────────────────────────────────────────────────────────
 
 export interface ApplyResult {
