@@ -7,6 +7,7 @@ import {
 } from "@/lib/queries/campaigns";
 import { getWeeklySummary } from "@/lib/queries/weekly";
 import { PipelineVolumeChart, StatusDistributionChart } from "./WeeklyCharts";
+import { WeeklyFooter } from "./WeeklyFooter";
 
 /**
  * Weekly counterpart update — V4 §10 port (Phase2-Mockup-V4.html
@@ -277,33 +278,11 @@ export default async function WeeklyPage({
         </div>
 
         {/* ---- Footer ---- */}
-        <div className="weekly-foot">
-          <span>
-            Generated automatically &middot;{" "}
-            <b>nothing is sent</b> until you click Send below. The Send
-            button in V1 opens a Gmail draft preview &mdash; Tristan still
-            hits Send from Gmail.
-          </span>
-          <span className="wf-spacer" />
-          <button
-            type="button"
-            className="btn"
-            title="Inline-edit of the weekly digest lands in a later phase"
-            style={{ cursor: "not-allowed", opacity: 0.7 }}
-            disabled
-          >
-            Edit copy
-          </button>
-          <button
-            type="button"
-            className="btn primary"
-            title="V1: renders a Gmail-draft preview only. No auto-send."
-            style={{ cursor: "not-allowed", opacity: 0.85 }}
-            disabled
-          >
-            Send to {summary.counterpartName ?? "counterpart"} &rarr;
-          </button>
-        </div>
+        <WeeklyFooter
+          campaignId={campaignId}
+          counterpartName={summary.counterpartName}
+          counterpartEmail={summary.counterpartEmail}
+        />
       </div>
 
       {/* V4 walk-callout tour strip — verbatim from V4 line 2174. */}

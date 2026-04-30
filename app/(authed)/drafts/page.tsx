@@ -172,8 +172,8 @@ function DraftsPanel({
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ color: "var(--accent)", fontWeight: 600 }}>
-          &larr; Gmail is authoritative. Open a draft, it opens the actual
-          Gmail compose window. We never touch &ldquo;send&rdquo;.
+          &larr; Click Draft ↗ to open the full composer — refine the synthesis,
+          create a Gmail draft, or send directly. We never auto-send.
         </span>
       </div>
     </div>
@@ -203,17 +203,13 @@ function DraftRow({ group, draft }: { group: DraftGroup; draft: DraftRow }) {
       <td>{draft.subject}</td>
       <td className="comment-af">{draft.snippet}</td>
       <td>{draft.saved_ago}</td>
-      <td>
-        {/* V1 stub — real Gmail-OAuth wiring is Phase 4. Click opens Gmail
-            in a new tab so Tristan can pick up the draft manually. */}
+      <td style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <a
           className="btn-gmail"
-          href="https://mail.google.com/mail/u/0/#inbox"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Opens Gmail in a new tab. Deep-linking to the specific draft lands in Phase 4."
+          href={`/tracker/${draft.partner_id}/draft`}
+          title="Open the full draft composer for this partner — edit, refine synthesis, create Gmail draft, or send."
         >
-          Open &#8599;
+          Draft &#8599;
         </a>
       </td>
     </tr>
