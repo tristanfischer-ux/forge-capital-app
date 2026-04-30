@@ -6,8 +6,38 @@ import {
   type CampaignSummary,
 } from "@/lib/queries/campaigns";
 import { getWeeklySummary } from "@/lib/queries/weekly";
+import { createServerClient } from "@/lib/supabase/server";
 import { PipelineVolumeChart, StatusDistributionChart } from "./WeeklyCharts";
 import { WeeklyFooter } from "./WeeklyFooter";
+
+/** One row from weekly_digest_log — used in the "Previous weeks" section. */
+interface DigestLogRow {
+  id: string;
+  subject: string;
+  to_email: string | null;
+  body_preview: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Fetch the last 10 digest sends for a campaign from weekly_digest_log.
+ * Returns an empty array if the table is missing or no rows exist yet.
+ */
+async function getDigestHistory(campaignId: string): Promise<DigestLogRow[]> {
+  try {
+    const supabase = await createServerClient();
+    const { data } = await supabase
+      .from("weekly_digest_log")
+      .select("id, subject, to_email, body_preview, sent_at, created_at")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    return (data ?? []) as DigestLogRow[];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Weekly counterpart update — V4 §10 port (Phase2-Mockup-V4.html
@@ -70,7 +100,10 @@ export default async function WeeklyPage({
     return <NoCampaignState />;
   }
 
-  const summary = await getWeeklySummary(campaignId);
+  const [summary, digestHistory] = await Promise.all([
+    getWeeklySummary(campaignId),
+    getDigestHistory(campaignId),
+  ]);
   if (!summary) {
     return (
       <section id="weekly" className="section" style={{ marginTop: 0 }}>
@@ -294,7 +327,44 @@ export default async function WeeklyPage({
         glances, hits Send. Total weekly counterpart-update cost: 90
         seconds.
       </div>
+
+      {/* Previous digest sends — logged on every send from /weekly and
+          /weekly-digest. Empty until the first digest is sent. */}
+      <DigestHistorySection entries={digestHistory} />
     </section>
+  );
+}
+
+function DigestHistorySection({ entries }: { entries: DigestLogRow[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="weekly-foot" style={{ marginTop: 24, opacity: 0.6 }}>
+        No digest history yet &mdash; entries will appear here after the first
+        weekly digest is sent.
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div className="section-sub" style={{ marginBottom: 8 }}>
+        Previous digests
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {entries.map((e) => (
+          <div
+            key={e.id}
+            className="wc-card"
+            style={{ padding: "8px 12px", fontSize: 13 }}
+          >
+            <span className="wc-firm">{e.subject}</span>
+            <span className="wc-sep" />
+            <span style={{ opacity: 0.6 }}>
+              {e.to_email} &middot; {formatGeneratedLabel(e.sent_at)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -338,6 +408,111 @@ function deltaGlyph(dir: "up" | "down" | "flat"): string {
   if (dir === "up") return "▲";
   if (dir === "down") return "▼";
   return "";
+}
+
+// ---------------------------------------------------------------------------
+// Digest history section
+// ---------------------------------------------------------------------------
+
+function DigestHistorySection({ entries }: { entries: DigestLogRow[] }) {
+  return (
+    <div
+      style={{
+        marginTop: 24,
+        borderTop: "1px solid var(--border)",
+        paddingTop: 20,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
+        Previous digests sent
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14 }}>
+        Every digest sent from this campaign — founder self-digests and
+        counterpart updates — appears here.
+      </div>
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--text-faint)", fontStyle: "italic" }}>
+          No digests sent yet — the history populates after the first send
+          from the weekly digest page or the counterpart update footer.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {entries.map((entry) => (
+            <DigestHistoryRow key={entry.id} entry={entry} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DigestHistoryRow({ entry }: { entry: DigestLogRow }) {
+  const sentDateStr = entry.sent_at ?? entry.created_at;
+  const sentDate = (() => {
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/London",
+        timeZoneName: "short",
+      }).format(new Date(sentDateStr));
+    } catch {
+      return sentDateStr;
+    }
+  })();
+
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 8,
+        padding: "10px 14px",
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
+        {entry.subject}
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: "var(--text-faint)",
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span>{sentDate}</span>
+        {entry.to_email ? (
+          <>
+            <span>&middot;</span>
+            <span>To: {entry.to_email}</span>
+          </>
+        ) : null}
+        {entry.body_preview ? (
+          <>
+            <span>&middot;</span>
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: 300,
+                display: "inline-block",
+                verticalAlign: "bottom",
+              }}
+            >
+              {entry.body_preview}
+            </span>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function NoCampaignState() {

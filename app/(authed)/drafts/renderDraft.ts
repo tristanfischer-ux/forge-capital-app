@@ -38,6 +38,9 @@ export interface RenderedDraft {
   subject: string;
   /** First ~160 chars of the first rendered paragraph. */
   snippet: string;
+  /** Full rendered body (newline-separated paragraphs). Used as the
+   *  initial value for inline editing on the drafts panel. */
+  full_body: string;
   /** Word-count of the full rendered body (not just the snippet). */
   word_count: number;
 }
@@ -177,12 +180,12 @@ function renderBody(
 export function renderDraftForPartner(input: RenderDraftInput): RenderedDraft {
   const subject = deriveSubject(input.campaign);
   const { paragraphs, openingLine } = renderBody(input.template, input.investor);
-  const fullBody = paragraphs.join("\n\n");
-  const word_count = fullBody.split(/\s+/).filter(Boolean).length;
+  const full_body = paragraphs.join("\n\n");
+  const word_count = full_body.split(/\s+/).filter(Boolean).length;
 
   // Snippet is the first paragraph only — matches the V4 mock's "Opening
   // line" column which shows one-line lead copy, not the whole email.
   const snippet = toSnippet(openingLine);
 
-  return { subject, snippet, word_count };
+  return { subject, snippet, full_body, word_count };
 }

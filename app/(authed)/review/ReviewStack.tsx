@@ -216,6 +216,7 @@ export function ReviewStack({ drafts }: { drafts: DraftReviewRow[] }) {
               onAccept={() => handleAccept(row)}
               onEdit={() => handleEdit(row)}
               onDiscard={() => handleDiscard(row)}
+              onSkip={() => setCursor((c) => Math.min(c + 1, remaining.length - 1))}
               onFocus={() => setCursor(idx)}
             />
           ))}
@@ -273,6 +274,7 @@ interface DraftCardProps {
   onAccept: () => void;
   onEdit: () => void;
   onDiscard: () => void;
+  onSkip: () => void;
   onFocus: () => void;
 }
 
@@ -293,6 +295,7 @@ function DraftCard({
   onAccept,
   onEdit,
   onDiscard,
+  onSkip,
   onFocus,
 }: DraftCardProps) {
   const blockedTier =
@@ -383,6 +386,15 @@ function DraftCard({
             title="Discard (D) — reverts to +1 Approved for regeneration."
           >
             Discard
+          </button>
+          <button
+            type="button"
+            className="er-btn"
+            onClick={onSkip}
+            title="Skip (S) — move to the next draft without changing anything."
+            style={{ background: "var(--bg-dim)", color: "var(--text-dim)" }}
+          >
+            Skip
           </button>
         </div>
       </div>

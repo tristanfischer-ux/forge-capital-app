@@ -86,8 +86,8 @@ export default async function ReviewPage({
           </div>
           <div className="section-sub">
             One draft at a time. J / K to move, Enter to accept, E to edit, D to
-            discard. Rule violations surface a suggested fix inline — you don&rsquo;t
-            have to remember the rules.
+            discard, S to skip. Rule violations surface a suggested fix inline —
+            you don&rsquo;t have to remember the rules.
           </div>
         </div>
         {/* V4 `.section-link` on the right (line 1532). Wired to the tracker

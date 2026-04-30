@@ -65,11 +65,25 @@ export async function sendWeeklyDigestToCounterpart(input: {
   }
 
   try {
-    await sendGmailMessage({
+    const res = await sendGmailMessage({
       to: counterpartEmail,
       subject,
       body,
     });
+
+    // Log the send to weekly_digest_log (migration 034) for the history
+    // section on /weekly. Non-fatal — never block the confirmation.
+    void supabase.from("weekly_digest_log").insert({
+      campaign_id: campaignId,
+      digest_type: "counterpart_update",
+      to_email: counterpartEmail,
+      subject,
+      body_preview: body.slice(0, 300),
+      gmail_message_id: (res as { id?: string })?.id ?? null,
+      created_by: auth.user.id,
+      sent_at: new Date().toISOString(),
+    });
+
     return { ok: true, to: counterpartEmail, subject };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

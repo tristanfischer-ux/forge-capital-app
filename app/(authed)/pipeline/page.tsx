@@ -4,6 +4,7 @@ import {
   type PipelineStage,
   type StageStatus,
 } from "@/lib/queries/pipeline-health";
+import { SyncNowButton } from "./SyncNowButton";
 
 /**
  * Automation pipeline — honest-state dashboard.
@@ -72,7 +73,7 @@ export default async function PipelinePage(_props: {
             web app.
           </div>
         </div>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
           <span
             className={headerChipClass}
             title="Aggregate health across all nine stages."
@@ -80,6 +81,7 @@ export default async function PipelinePage(_props: {
             <span className="dot" />
             {headerChipText}
           </span>
+          <SyncNowButton />
         </div>
       </div>
 

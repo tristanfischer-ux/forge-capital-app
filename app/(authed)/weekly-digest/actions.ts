@@ -590,6 +590,19 @@ export async function sendWeeklyDigestToMe(input: {
       subject: digest.subject,
       body: digest.body,
     });
+
+    // Log the send to weekly_digest_log (migration 034) for the history
+    // section on /weekly. Non-fatal — never block the confirmation.
+    void supabase.from("weekly_digest_log").insert({
+      campaign_id: input.campaignId,
+      digest_type: "founder_digest",
+      to_email: token.email,
+      subject: digest.subject,
+      body_preview: digest.body.slice(0, 300),
+      gmail_message_id: res.id,
+      created_by: auth.user.id,
+    });
+
     return {
       ok: true,
       to: token.email,

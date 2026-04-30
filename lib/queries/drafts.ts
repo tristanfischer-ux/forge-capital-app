@@ -24,10 +24,16 @@ export interface DraftRow {
   subject: string;
   /** First ~160 chars of the rendered body — the "opening line" column. */
   snippet: string;
+  /** Full rendered body — initial value for inline editing. */
+  full_body: string;
   /** Word-count of the full rendered body (not the snippet). */
   word_count: number;
   /** Short relative-time string: "23m ago" / "2h ago" / "—". */
   saved_ago: string;
+  /** Founder-edited subject override (migration 034), or null. */
+  draft_subject_override: string | null;
+  /** Founder-edited body override (migration 034), or null. */
+  draft_body_override: string | null;
 }
 
 /** One campaign group in the V4 §8 panel. */
@@ -43,6 +49,8 @@ interface DraftJoinRow {
   id: string;
   campaign_id: string;
   last_contact_at: string | null;
+  draft_subject_override: string | null;
+  draft_body_override: string | null;
   partners_mirror: {
     name: string | null;
     title: string | null;
@@ -110,7 +118,9 @@ function formatSavedAgo(isoTimestamp: string | null): string {
 export async function getDraftsByCampaign(): Promise<DraftGroup[]> {
   const supabase = await createServerClient();
 
-  // 1) +2 tracker rows across every campaign.
+  // 1) +2 tracker rows across every campaign. Includes the draft override
+  //    columns added in migration 034 so the inline editor starts from
+  //    saved values when present.
   const { data: rowsRaw, error: rowsErr } = await supabase
     .from("campaign_partners")
     .select(
@@ -118,6 +128,8 @@ export async function getDraftsByCampaign(): Promise<DraftGroup[]> {
       id,
       campaign_id,
       last_contact_at,
+      draft_subject_override,
+      draft_body_override,
       partners_mirror:partner_id (
         name,
         title,
@@ -211,15 +223,24 @@ export async function getDraftsByCampaign(): Promise<DraftGroup[]> {
       },
     });
 
+    // Prefer founder-edited override values over composed values when
+    // present — migration 034 added draft_subject_override +
+    // draft_body_override so inline edits on the drafts panel persist.
+    const effectiveSubject = row.draft_subject_override ?? composed.subject;
+    const effectiveBody = row.draft_body_override ?? composed.full_body;
+
     const draft: DraftRow = {
       partner_id: row.id,
       partner_name: partner?.name ?? null,
       partner_title: partner?.title ?? null,
       firm_name: investor?.firm_name ?? null,
-      subject: composed.subject,
+      subject: effectiveSubject,
       snippet: composed.snippet,
-      word_count: composed.word_count,
+      full_body: effectiveBody,
+      word_count: effectiveBody.split(/\s+/).filter(Boolean).length,
       saved_ago: formatSavedAgo(row.last_contact_at),
+      draft_subject_override: row.draft_subject_override ?? null,
+      draft_body_override: row.draft_body_override ?? null,
     };
 
     const existing = groups.get(campaign.id);
