@@ -24,6 +24,7 @@ import { EmailApprovalListButton } from "./EmailApprovalListButton";
 import { IncomingDecisionCell } from "./IncomingDecisionCell";
 import { ContactPicker } from "../ContactPicker";
 import { IngestIntoTrackerButton } from "./IngestIntoTrackerButton";
+import { OutgoingApprovalClient } from "./OutgoingApprovalClient";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -369,23 +370,29 @@ function OutgoingColumn({
         </div>
       </div>
 
-      {/* V4 lines 1177-1212 — the sheet table itself. */}
-      <table className="sheet">
-        <thead>
-          <tr>
-            <th style={{ width: "30%" }}>{contactColumnHeader}</th>
-            <th>Why them (synthesis)</th>
-            <th style={{ width: "16%" }}>Comment SW</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
+      {/* V4 lines 1177-1212 — the sheet table itself.
+          When rows are present: rendered by OutgoingApprovalClient so
+          bulk-approve checkboxes, batch bar, and keyboard shortcuts are
+          wired in. When empty: static server-rendered table only. */}
+      {rows.length === 0 ? (
+        <table className="sheet">
+          <thead>
+            <tr>
+              <th style={{ width: "30%" }}>{contactColumnHeader}</th>
+              <th>Why them (synthesis)</th>
+              <th style={{ width: "16%" }}>Comment SW</th>
+            </tr>
+          </thead>
+          <tbody>
             <OutgoingEmptyRow />
-          ) : (
-            rows.map((row) => <OutgoingRow key={row.campaign_partner_id} row={row} />)
-          )}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      ) : (
+        <OutgoingApprovalClient
+          rows={rows}
+          contactColumnHeader={contactColumnHeader}
+        />
+      )}
 
       {/* V4 lines 1213-1215 — the evidence-footer explainer. */}
       <div
