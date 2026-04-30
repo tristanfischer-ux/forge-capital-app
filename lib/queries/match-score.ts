@@ -743,7 +743,7 @@ export async function getMatchScore(
       supabase.rpc("match_investors_by_embedding", {
         query_embedding: embedResult.vector,
         match_count: Math.min(candidatePool, 5000),
-      }),
+      }).limit(Math.min(candidatePool, 5000)),
       supabase.rpc("match_investors_by_chunks", {
         query_embedding: embedResult.vector,
         per_investor_limit: 1,
