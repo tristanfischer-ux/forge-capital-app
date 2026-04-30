@@ -578,7 +578,7 @@ export async function getMatchScore(
     archetype,
     campaignId,
     limit = 25,
-    candidatePool = 2000,
+    candidatePool = 5000,
     tab = "best",
     minMatch = 0,
     hideContacted = true,
@@ -742,7 +742,7 @@ export async function getMatchScore(
     const [annResult, chunkResult] = await Promise.all([
       supabase.rpc("match_investors_by_embedding", {
         query_embedding: embedResult.vector,
-        match_count: Math.min(candidatePool, 2000),
+        match_count: Math.min(candidatePool, 5000),
       }),
       supabase.rpc("match_investors_by_chunks", {
         query_embedding: embedResult.vector,
