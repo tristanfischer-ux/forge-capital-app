@@ -23,6 +23,7 @@ import ApprovalReturnDropZone from "./ApprovalReturnDropZone";
 import { EmailApprovalListButton } from "./EmailApprovalListButton";
 import { IncomingDecisionCell } from "./IncomingDecisionCell";
 import { ContactPicker } from "../ContactPicker";
+import { IngestIntoTrackerButton } from "./IngestIntoTrackerButton";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -637,16 +638,10 @@ function IncomingColumn({
             ? `${stats.approved} approved row${stats.approved === 1 ? "" : "s"} → queue for verification, ${stats.flag} flagged → your queue, ${stats.rejected} rejected → archived with reason.`
             : "13 approved rows → queue for verification, 2 flagged → your queue, 5 rejected → archived with reason."}
         </div>
-        {/* V1 stub — Phase-6 Gmail reply parser writes the real transitions. */}
-        <button
-          type="button"
-          className="ic-btn"
-          disabled
-          title="Ingest wiring lands with the Phase 6 Gmail reply parser. Today this surfaces what the parser will push."
-          style={{ opacity: 0.7, cursor: "not-allowed" }}
-        >
-          Ingest into tracker &rarr;
-        </button>
+        <IngestIntoTrackerButton
+          campaignId={campaignId}
+          approvedCount={stats.approved}
+        />
       </div>
     </div>
   );

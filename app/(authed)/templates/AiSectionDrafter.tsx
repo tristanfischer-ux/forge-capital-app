@@ -39,11 +39,11 @@ export function AiSectionDrafter({
   const [isOpen, setIsOpen] = useState(false);
   const [savedNote, setSavedNote] = useState<string | null>(null);
 
-  if (!hasAnthropicKey) {
-    // Render nothing — the action would error anyway. Keeps the label
-    // row tidy. The page header already shows the "missing key" state
-    // if we ever want to surface it.
-    return null;
+  function openManualEdit() {
+    setError(null);
+    setSavedNote(null);
+    setDraft(existingBody ?? "");
+    setIsOpen(true);
   }
 
   function runDraft() {
@@ -101,26 +101,48 @@ export function AiSectionDrafter({
       <button
         type="button"
         className="btn sm"
-        onClick={runDraft}
+        onClick={openManualEdit}
         disabled={isPending}
-        title={
-          existingBody
-            ? "Generate a fresh draft for this section using Claude Opus 4.7."
-            : "Generate a first draft for this section using Claude Opus 4.7."
-        }
+        title="Edit this section directly — type your own text without using the AI drafter."
         style={{
           fontSize: 10,
           padding: "3px 8px",
-          borderColor: accentColor,
-          color: accentColor,
-          background: accentSoft,
+          borderColor: "var(--border)",
+          color: "var(--text-dim)",
+          background: "var(--surface-alt, #f8f9fa)",
           fontWeight: 600,
           textTransform: "none",
           letterSpacing: 0,
         }}
       >
-        {isPending && !draft ? "Drafting…" : buttonLabel}
+        Edit ✎
       </button>
+
+      {hasAnthropicKey ? (
+        <button
+          type="button"
+          className="btn sm"
+          onClick={runDraft}
+          disabled={isPending}
+          title={
+            existingBody
+              ? "Generate a fresh draft for this section using the AI drafter."
+              : "Generate a first draft for this section using the AI drafter."
+          }
+          style={{
+            fontSize: 10,
+            padding: "3px 8px",
+            borderColor: accentColor,
+            color: accentColor,
+            background: accentSoft,
+            fontWeight: 600,
+            textTransform: "none",
+            letterSpacing: 0,
+          }}
+        >
+          {isPending && !draft ? "Drafting…" : buttonLabel}
+        </button>
+      ) : null}
 
       {isOpen ? (
         <DrafterPanel
@@ -130,7 +152,7 @@ export function AiSectionDrafter({
           isPending={isPending}
           sectionKind={sectionKind}
           onChange={setDraft}
-          onRegenerate={runDraft}
+          onRegenerate={hasAnthropicKey ? runDraft : undefined}
           onSave={runSave}
           onClose={() => {
             setIsOpen(false);
@@ -161,7 +183,7 @@ function DrafterPanel({
   isPending: boolean;
   sectionKind: SectionKind;
   onChange: (v: string) => void;
-  onRegenerate: () => void;
+  onRegenerate?: () => void;
   onSave: () => void;
   onClose: () => void;
 }) {
@@ -259,15 +281,17 @@ function DrafterPanel({
           flexWrap: "wrap",
         }}
       >
-        <button
-          type="button"
-          className="btn sm"
-          onClick={onRegenerate}
-          disabled={isPending}
-          style={{ fontSize: 11 }}
-        >
-          {isPending ? "Working…" : "Regenerate"}
-        </button>
+        {onRegenerate ? (
+          <button
+            type="button"
+            className="btn sm"
+            onClick={onRegenerate}
+            disabled={isPending}
+            style={{ fontSize: 11 }}
+          >
+            {isPending ? "Working…" : "Regenerate"}
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn sm primary"
@@ -299,9 +323,9 @@ function DrafterPanel({
           fontWeight: 400,
         }}
       >
-        Model: claude-opus-4-7. Edit freely before saving. Save overwrites the
+        Edit freely before saving. Save overwrites the
         {sectionKind === "cta" ? " cta_variant" : ` ${sectionKind}`} column on
-        the campaign&rsquo;s email_templates row.
+        the campaign&rsquo;s email_templates row.{onRegenerate ? " Use Regenerate for a fresh AI draft." : ""}
       </div>
     </div>
   );

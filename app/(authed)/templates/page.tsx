@@ -666,8 +666,8 @@ function TemplateFoot({
           fontStyle: "italic",
         }}
       >
-        Edit any paragraph via <b>Redraft with Opus →</b> on the section
-        header.
+        Edit any paragraph via <b>Edit ✎</b> or draft with AI via <b>Draft
+        with Opus →</b> on each section header.
       </span>
     </div>
   );
