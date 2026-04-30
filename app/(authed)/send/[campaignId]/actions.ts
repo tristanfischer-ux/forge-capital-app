@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { createServerClient } from "@/lib/supabase/server";
 import { getInvestorModalData } from "@/lib/queries/investorModal";
 import { composeDraft } from "@/app/(authed)/tracker/[campaignPartnerId]/draft/compose";
@@ -192,11 +192,9 @@ export async function draftSelected(
   if (!Array.isArray(campaignPartnerIds) || campaignPartnerIds.length === 0) {
     return { ok: false, error: "No rows selected." };
   }
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { ok: false, error: "ANTHROPIC_API_KEY missing in env." };
+  if (!process.env.OPENROUTER_API_KEY) {
+    return { ok: false, error: "OPENROUTER_API_KEY missing in env." };
   }
-  const client = new Anthropic({ apiKey });
 
   const supabase = await createServerClient();
   let drafted = 0;
@@ -222,11 +220,14 @@ export async function draftSelected(
       const brief = data.campaign?.company_description ?? "";
       const template = (data.campaign?.voice_reference_email ?? "") + "\n\n";
 
-      const msg = await client.messages.create({
-        model: "claude-opus-4-7",
+      const whyThem = await callOpenRouter({
+        model: "openai/gpt-4.1",
         max_tokens: 1200,
-        system: `You are drafting the "why them" paragraph for a first-touch customer outreach email. The paragraph is ONE paragraph, 3-5 sentences, written in the first person by Tristan Fischer (founder, Fischer Farms). It goes BETWEEN the economics paragraph and the meeting ask — it is the part that explains why THIS specific customer is a good fit, drawing on their channel, geography, regulatory exposure, and any public commitments. British spelling. No bracketed placeholders. Do NOT include the salutation, subject, or sign-off — just the one paragraph.`,
         messages: [
+          {
+            role: "system",
+            content: `You are drafting the "why them" paragraph for a first-touch customer outreach email. The paragraph is ONE paragraph, 3-5 sentences, written in the first person by Tristan Fischer (founder, Fischer Farms). It goes BETWEEN the economics paragraph and the meeting ask — it is the part that explains why THIS specific customer is a good fit, drawing on their channel, geography, regulatory exposure, and any public commitments. British spelling. No bracketed placeholders. Do NOT include the salutation, subject, or sign-off — just the one paragraph.`,
+          },
           {
             role: "user",
             content: `Our product brief (what we sell): ${brief}\n\nThe customer: ${firm}\nChannel: ${channel}\nGeography: ${geo}\nOne-line pitch hook (briefing view): ${pitchHook}\nBio: ${firmBio}\n\nWrite the "why them" paragraph for a cold outreach email to a plant-category buyer at ${firm}.`,
@@ -234,32 +235,24 @@ export async function draftSelected(
         ],
       });
 
-      const whyThem =
-        msg.content
-          .map((c) => (c.type === "text" ? c.text : ""))
-          .join("")
-          .trim();
-
-      // Also ask Opus for a 2-5 word subject angle.
-      const subjMsg = await client.messages.create({
-        model: "claude-opus-4-7",
+      // Also ask for a 2-5 word subject angle.
+      const subjectAngle = (await callOpenRouter({
+        model: "openai/gpt-4.1",
         max_tokens: 60,
-        system:
-          "Return a 2-5 word subject-line angle specific to this customer. No quotes, no ending punctuation. Examples: 'Swedish-sited container', 'Quebec hydro 2.9p/kWh', 'EU 2026 residue shield'. Just the phrase.",
         messages: [
+          {
+            role: "system",
+            content:
+              "Return a 2-5 word subject-line angle specific to this customer. No quotes, no ending punctuation. Examples: 'Swedish-sited container', 'Quebec hydro 2.9p/kWh', 'EU 2026 residue shield'. Just the phrase.",
+          },
           {
             role: "user",
             content: `Customer: ${firm} | Channel: ${channel} | Geography: ${geo} | Pitch hook: ${pitchHook}. Give me a 2-5 word subject angle.`,
           },
         ],
-      });
-      const subjectAngle =
-        subjMsg.content
-          .map((c) => (c.type === "text" ? c.text : ""))
-          .join("")
-          .trim()
-          .replace(/^["'"]+|["'"]+$/g, "")
-          .slice(0, 80);
+      }))
+        .replace(/^["'"]+|["'"]+$/g, "")
+        .slice(0, 80);
 
       const { error: updateErr } = await supabase
         .from("campaign_partners")

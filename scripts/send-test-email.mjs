@@ -46,9 +46,9 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-if (!SUPABASE_URL || !SERVICE_KEY || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !ANTHROPIC_API_KEY) {
+if (!SUPABASE_URL || !SERVICE_KEY || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !OPENROUTER_API_KEY) {
   console.error("[send] missing env");
   process.exit(2);
 }
@@ -81,7 +81,7 @@ function base64UrlEncode(bytes) {
     .replace(/=+$/, "");
 }
 
-async function haikuComposeBody({ apiKey, investor, founderName, companyOneLine, raise }) {
+async function haikuComposeBody({ investor, founderName, companyOneLine, raise }) {
   const system =
     "You write founder-to-investor introduction emails. Voice: Tristan Fischer's — first-person, British spelling, specific over abstract, NO acronyms (spell every term out, including 'high-altitude platform stations' not 'HAPS'), NO 'AI-powered' / 'Smart' / 'Intelligent' marketing verbs. Concise: 4 short paragraphs. Sign 'Tristan — Founder, Fractional Forge'. Output ONLY the email body — no subject, no salutation prefix beyond the actual greeting line, no boilerplate.";
   const user = [
@@ -107,27 +107,26 @@ async function haikuComposeBody({ apiKey, investor, founderName, companyOneLine,
     "Output the email body only.",
   ].join("\n");
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
+      "HTTP-Referer": "https://forge-capital-app.vercel.app",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5",
-      max_tokens: 700,
-      system,
-      messages: [{ role: "user", content: [{ type: "text", text: user }] }],
+      model: "deepseek/deepseek-v4-flash",
+      max_tokens: 16000,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
     }),
   });
-  if (!res.ok) throw new Error(`haiku ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  if (!res.ok) throw new Error(`openrouter ${res.status}: ${(await res.text()).slice(0, 400)}`);
   const body = await res.json();
-  const text = body.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
+  const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+  if (!text) throw new Error("OpenRouter returned empty content.");
   return text;
 }
 
@@ -154,7 +153,6 @@ async function haikuComposeBody({ apiKey, investor, founderName, companyOneLine,
   console.log("[send] composing body via Haiku for " + investor.firm_name);
 
   const composedBody = await haikuComposeBody({
-    apiKey: ANTHROPIC_API_KEY,
     investor,
     founderName: "Tristan Fischer (introducing Wren Aerospace's CEO)",
     companyOneLine:

@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getGmailThread } from "@/lib/gmail/read-thread";
@@ -29,7 +29,10 @@ import { STATUS_BY_CODE } from "@/lib/status-codes";
  * → one-click-send) without blocking on slow Opus calls.
  */
 
-const OPUS_MODEL = "claude-opus-4-7";
+// classifyAndDraftResponse uses GPT-4.1 (voice-critical reply drafting).
+// dispatchApprovedResponses uses DeepSeek V4-Pro (structured parsing).
+const CLASSIFY_DRAFT_MODEL = "openai/gpt-4.1";
+const DISPATCH_PARSE_MODEL = "deepseek/deepseek-v4-pro";
 
 export interface TestReplyRow {
   campaignPartnerId: string;
@@ -183,8 +186,8 @@ export async function classifyAndDraftResponse(
     return { ok: false, error: "campaignPartnerId + replyBody required." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY not set." };
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return { ok: false, error: "OPENROUTER_API_KEY not set." };
 
   const data = await getInvestorModalData(campaignPartnerId);
   if (!data) return { ok: false, error: "Partner not found." };
@@ -255,15 +258,14 @@ export async function classifyAndDraftResponse(
     .join("\n");
 
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
-      model: OPUS_MODEL,
+    const raw = await callOpenRouter({
+      model: CLASSIFY_DRAFT_MODEL,
       max_tokens: 1200,
-      system,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
     });
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw = textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
     const cleaned = raw
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/, "")
@@ -277,7 +279,7 @@ export async function classifyAndDraftResponse(
       parsed = JSON.parse(cleaned);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "parse error";
-      return { ok: false, error: `Opus returned non-JSON (${msg}). Raw: ${raw.slice(0, 160)}` };
+      return { ok: false, error: `Model returned non-JSON (${msg}). Raw: ${raw.slice(0, 160)}` };
     }
 
     const sentiment =
@@ -329,7 +331,7 @@ export async function classifyAndDraftResponse(
     return { ok: true, sentiment: effective, reasons, draftResponse };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Opus call failed: ${msg}` };
+    return { ok: false, error: `Model call failed: ${msg}` };
   }
 }
 
@@ -520,8 +522,8 @@ export async function dispatchApprovedResponses(
   if (!approvedText?.trim())
     return { ok: false, error: "Paste the approval reply text first." };
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY not set." };
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return { ok: false, error: "OPENROUTER_API_KEY not set." };
 
   const loaded = await loadTestReplies({ campaignId });
   if (!loaded.ok) return { ok: false, error: loaded.error };
@@ -580,26 +582,25 @@ export async function dispatchApprovedResponses(
     edited_text?: string;
   }>;
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
-      model: OPUS_MODEL,
-      max_tokens: 3000,
-      system,
-      messages: [{ role: "user", content: userPrompt }],
+    const raw = await callOpenRouter({
+      model: DISPATCH_PARSE_MODEL,
+      max_tokens: 16000,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
     });
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw = textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
     const cleaned = raw
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/, "")
       .trim();
     decisions = JSON.parse(cleaned) as typeof decisions;
     if (!Array.isArray(decisions)) {
-      return { ok: false, error: "Opus parser did not return an array." };
+      return { ok: false, error: "Model parser did not return an array." };
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Opus parse failed: ${msg}` };
+    return { ok: false, error: `Model parse failed: ${msg}` };
   }
 
   const outcomes: DispatchRowOutcome[] = [];

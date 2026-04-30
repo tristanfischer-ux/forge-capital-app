@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -21,7 +21,8 @@ import { createServerClient } from "@/lib/supabase/server";
  * cached version over template substitution.
  */
 
-const DRAFTER_MODEL = "claude-opus-4-7";
+// Voice-critical copy — use GPT-4.1 for best quality on outreach drafting.
+const DRAFTER_MODEL = "openai/gpt-4.1";
 
 export interface RefineSynthesisInput {
   campaignPartnerId: string;
@@ -52,9 +53,9 @@ export async function refineSynthesisWithOpus(
     return { ok: false, error: "campaignPartnerId is required." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
-    return { ok: false, error: "ANTHROPIC_API_KEY not set." };
+    return { ok: false, error: "OPENROUTER_API_KEY not set." };
   }
 
   const supabase = await createServerClient();
@@ -164,18 +165,16 @@ export async function refineSynthesisWithOpus(
   ].filter(Boolean);
 
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
+    const raw = await callOpenRouter({
       model: DRAFTER_MODEL,
       max_tokens: 1400,
-      system,
-      messages: [{ role: "user", content: userPromptLines.join("\n") }],
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPromptLines.join("\n") },
+      ],
     });
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw =
-      textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
     if (!raw) {
-      return { ok: false, error: "Opus returned an empty response." };
+      return { ok: false, error: "Model returned an empty response." };
     }
 
     const cleaned = raw
@@ -202,7 +201,7 @@ export async function refineSynthesisWithOpus(
         : null;
 
     if (!rendered) {
-      return { ok: false, error: "Opus returned an empty synthesis." };
+      return { ok: false, error: "Model returned an empty synthesis." };
     }
 
     // Bracket guard on both outputs.
@@ -237,6 +236,6 @@ export async function refineSynthesisWithOpus(
     return { ok: true, rendered, subjectAngle };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Opus call failed: ${msg}` };
+    return { ok: false, error: `Model call failed: ${msg}` };
   }
 }

@@ -1,15 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
-import type {
-  MessageParam,
-  ContentBlockParam,
-} from "@anthropic-ai/sdk/resources/messages/messages";
 import { createServerClient } from "@/lib/supabase/server";
 import { CHAT_TOOLS, dispatchTool } from "./tools";
 
 /**
- * In-app Opus 4.7 chat endpoint. Streams responses back to the client.
+ * In-app GPT-4.1 chat endpoint (migrated from Anthropic Opus 4.7
+ * to OpenRouter on 2026-04-30). Streams responses back to the client.
  *
- * V2 (2026-04-23): tool-using. Opus can call search_partners,
+ * V2 (2026-04-23): tool-using. The model can call search_partners,
  * resolve_campaign_partner, log_interaction, refine_synthesis — each
  * is a thin wrapper around an existing server action (see ./tools.ts).
  *
@@ -24,6 +20,11 @@ import { CHAT_TOOLS, dispatchTool } from "./tools";
  * Tool loop is capped at 5 iterations per user turn to prevent runaway.
  * Q&A-only conversations (no tool use) fall through the loop once and
  * stream identically to the V1 implementation — no regression.
+ *
+ * OpenAI tool-use protocol (used by OpenRouter):
+ *   - Tools are defined as { type: "function", function: { name, description, parameters } }
+ *   - Model emits `tool_calls` array in the delta when invoking tools
+ *   - Results are sent back as { role: "tool", tool_call_id, content }
  */
 
 export const runtime = "nodejs";
@@ -39,13 +40,28 @@ interface ChatRequest {
   currentCampaignName?: string | null;
 }
 
-const OPUS_MODEL = "claude-opus-4-7";
+// Voice-critical interactive chat — use GPT-4.1 for quality.
+const CHAT_MODEL = "openai/gpt-4.1";
 const MAX_TOOL_ITERATIONS = 5;
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
+const HTTP_REFERER = "https://forge-capital-app.vercel.app";
+
+// Convert Anthropic-style tool definitions to OpenAI function-calling format.
+function toOpenAITools(tools: typeof CHAT_TOOLS) {
+  return tools.map((t) => ({
+    type: "function" as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema,
+    },
+  }));
+}
 
 export async function POST(req: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    return new Response("ANTHROPIC_API_KEY not set", { status: 500 });
+    return new Response("OPENROUTER_API_KEY not set", { status: 500 });
   }
 
   const supabase = await createServerClient();
@@ -67,7 +83,7 @@ export async function POST(req: Request) {
   }
 
   const systemLines = [
-    "You are Claude Opus 4.7, embedded as an in-app assistant inside the Forge Capital app (fractional-forge outreach tool Tristan Fischer built for his fundraising work).",
+    "You are an in-app assistant inside the Forge Capital app (fractional-forge outreach tool Tristan Fischer built for his fundraising work).",
     "",
     "You help Tristan think through the app, its flow, its copy, its data model, and its code. You also have tools that let you make real changes to his outreach database on his behalf. You are running in a chat widget that sits at the top of every authed page.",
     "",
@@ -80,7 +96,7 @@ export async function POST(req: Request) {
     "  - Keep responses tight. He's scanning on a phone a lot of the time.",
     "",
     "TOOL USE:",
-    "  - You have tools. Use them when the user asks for something concrete (log a call, refine a synthesis, find a partner). Do NOT hallucinate action outcomes; always wait for the tool_result before claiming something happened.",
+    "  - You have tools. Use them when the user asks for something concrete (log a call, refine a synthesis, find a partner). Do NOT hallucinate action outcomes; always wait for the tool result before claiming something happened.",
     "  - Before calling log_interaction, ALWAYS call search_partners to resolve the partner name to an id. Never invent a partner_id — if search_partners returns nothing, tell Tristan the partner isn't in the database and stop.",
     "  - When calling log_interaction, set event_type to one of: call | meeting | linkedin_message | linkedin_connect | whatsapp | slack | personal_note | handover_note | intel. Use 'call' by default for voice conversations.",
     "  - If the user pastes a Wispr transcript and says 'log this call with X', call log_interaction with the transcript as notes and run_synthesis=true (the action auto-synthesises).",
@@ -99,13 +115,23 @@ export async function POST(req: Request) {
   systemLines.push(`  - Now: ${new Date().toISOString()}`);
 
   const system = systemLines.join("\n");
+  const openAITools = toOpenAITools(CHAT_TOOLS);
 
-  const client = new Anthropic({ apiKey });
+  // Running conversation history sent to the model. Mutable across
+  // tool iterations — we append assistant responses + tool result turns.
+  type HistoryMessage = {
+    role: string;
+    content: string | null;
+    tool_calls?: Array<{
+      id: string;
+      type: "function";
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+    name?: string;
+  };
 
-  // Running conversation history sent to Opus. We mutate this across
-  // tool iterations by appending assistant responses + user-role
-  // tool_result turns per the Anthropic tool-use protocol.
-  const history: MessageParam[] = messages.map((m) => ({
+  const history: HistoryMessage[] = messages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
@@ -125,114 +151,173 @@ export async function POST(req: Request) {
 
       try {
         for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
-          const stream = client.messages.stream({
-            model: OPUS_MODEL,
-            max_tokens: 4096,
-            system,
-            tools: CHAT_TOOLS,
-            messages: history,
+          // Make a streaming request to OpenRouter.
+          const response = await fetch(OPENROUTER_BASE, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": HTTP_REFERER,
+            },
+            body: JSON.stringify({
+              model: CHAT_MODEL,
+              max_tokens: 4096,
+              stream: true,
+              tools: openAITools,
+              tool_choice: "auto",
+              messages: [
+                { role: "system", content: system },
+                ...history,
+              ],
+            }),
           });
 
-          // Accumulate tool-use blocks during the stream so we can
-          // execute them once the message finishes.
-          const toolUseBlocks: Array<{
-            index: number;
-            id: string;
-            name: string;
-            inputJson: string;
-          }> = [];
-
-          for await (const event of stream) {
-            if (event.type === "content_block_start") {
-              const block = event.content_block;
-              if (block.type === "tool_use") {
-                toolUseBlocks.push({
-                  index: event.index,
-                  id: block.id,
-                  name: block.name,
-                  inputJson: "",
-                });
-                emitTool({
-                  phase: "start",
-                  id: block.id,
-                  name: block.name,
-                });
-              }
-            } else if (event.type === "content_block_delta") {
-              if (event.delta.type === "text_delta") {
-                emitText(event.delta.text);
-              } else if (event.delta.type === "input_json_delta") {
-                const pending = toolUseBlocks.find(
-                  (b) => b.index === event.index,
-                );
-                if (pending) {
-                  pending.inputJson += event.delta.partial_json;
-                }
-              }
-            }
-          }
-
-          const finalMessage = await stream.finalMessage();
-          const stopReason = finalMessage.stop_reason;
-
-          // Assemble the assistant message we need to push back onto
-          // history — Anthropic's protocol requires the assistant
-          // tool_use blocks before we send tool_result.
-          const assistantContent: ContentBlockParam[] = [];
-          for (const block of finalMessage.content) {
-            if (block.type === "text") {
-              assistantContent.push({ type: "text", text: block.text });
-            } else if (block.type === "tool_use") {
-              assistantContent.push({
-                type: "tool_use",
-                id: block.id,
-                name: block.name,
-                input: block.input,
-              });
-            }
-          }
-          history.push({ role: "assistant", content: assistantContent });
-
-          if (stopReason !== "tool_use" || toolUseBlocks.length === 0) {
-            // Either a clean end_turn or max_tokens — nothing to
-            // dispatch, exit the loop.
+          if (!response.ok || !response.body) {
+            const errText = await response.text().catch(() => "");
+            emitText(`\n\n[OpenRouter error ${response.status}: ${errText.slice(0, 200)}]`);
             break;
           }
 
-          // Execute every tool_use in parallel, then push the batch of
-          // tool_result blocks as a single user-role message.
-          const toolResultBlocks: ContentBlockParam[] = [];
-          const results = await Promise.all(
-            finalMessage.content
-              .filter(
-                (b): b is Extract<typeof b, { type: "tool_use" }> =>
-                  b.type === "tool_use",
-              )
-              .map(async (block) => {
-                const result = await dispatchTool(block.name, block.input, {
-                  supabase,
-                });
-                return { block, result };
-              }),
-          );
+          // Parse SSE stream from OpenRouter.
+          // Each line is either `data: <json>` or `data: [DONE]`.
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
 
-          for (const { block, result } of results) {
-            emitTool({
-              phase: "result",
-              id: block.id,
-              name: block.name,
-              summary: result.summary,
-              isError: result.isError ?? false,
-            });
-            toolResultBlocks.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              content: JSON.stringify(result.data).slice(0, 20_000),
-              is_error: result.isError ?? false,
-            });
+          // Accumulate tool calls across the stream.
+          const pendingToolCalls: Map<
+            number,
+            { id: string; name: string; argumentsJson: string }
+          > = new Map();
+          let assistantTextContent = "";
+          let finishReason: string | null = null;
+
+          outer: while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith("data:")) continue;
+              const data = trimmed.slice(5).trim();
+              if (data === "[DONE]") break outer;
+              let chunk: {
+                choices?: Array<{
+                  delta?: {
+                    content?: string | null;
+                    tool_calls?: Array<{
+                      index?: number;
+                      id?: string;
+                      type?: string;
+                      function?: { name?: string; arguments?: string };
+                    }>;
+                  };
+                  finish_reason?: string | null;
+                }>;
+              };
+              try {
+                chunk = JSON.parse(data);
+              } catch {
+                continue;
+              }
+              const choice = chunk.choices?.[0];
+              if (!choice) continue;
+              const delta = choice.delta;
+
+              if (delta?.content) {
+                assistantTextContent += delta.content;
+                emitText(delta.content);
+              }
+
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index ?? 0;
+                  if (!pendingToolCalls.has(idx)) {
+                    pendingToolCalls.set(idx, {
+                      id: tc.id ?? `tool_${idx}`,
+                      name: tc.function?.name ?? "",
+                      argumentsJson: "",
+                    });
+                    // Emit tool start event.
+                    emitTool({
+                      phase: "start",
+                      id: tc.id ?? `tool_${idx}`,
+                      name: tc.function?.name ?? "",
+                    });
+                  }
+                  const pending = pendingToolCalls.get(idx)!;
+                  if (tc.id) pending.id = tc.id;
+                  if (tc.function?.name) pending.name = tc.function.name;
+                  if (tc.function?.arguments) {
+                    pending.argumentsJson += tc.function.arguments;
+                  }
+                }
+              }
+
+              if (choice.finish_reason) {
+                finishReason = choice.finish_reason;
+              }
+            }
           }
 
-          history.push({ role: "user", content: toolResultBlocks });
+          // Push the assistant turn onto history.
+          const toolCallsForHistory =
+            pendingToolCalls.size > 0
+              ? Array.from(pendingToolCalls.values()).map((tc) => ({
+                  id: tc.id,
+                  type: "function" as const,
+                  function: { name: tc.name, arguments: tc.argumentsJson },
+                }))
+              : undefined;
+
+          history.push({
+            role: "assistant",
+            content: assistantTextContent || null,
+            ...(toolCallsForHistory ? { tool_calls: toolCallsForHistory } : {}),
+          });
+
+          // If no tool calls or non-tool finish, we're done.
+          if (
+            pendingToolCalls.size === 0 ||
+            (finishReason && finishReason !== "tool_calls")
+          ) {
+            break;
+          }
+
+          // Execute each tool call and push results back.
+          const toolResults = await Promise.all(
+            Array.from(pendingToolCalls.values()).map(async (tc) => {
+              let input: unknown;
+              try {
+                input = JSON.parse(tc.argumentsJson || "{}");
+              } catch {
+                input = {};
+              }
+              const result = await dispatchTool(tc.name, input, { supabase });
+              emitTool({
+                phase: "result",
+                id: tc.id,
+                name: tc.name,
+                summary: result.summary,
+                isError: result.isError ?? false,
+              });
+              return { tc, result };
+            }),
+          );
+
+          // Append tool result messages (OpenAI protocol: role="tool").
+          for (const { tc, result } of toolResults) {
+            history.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              name: tc.name,
+              content: JSON.stringify(result.data).slice(0, 20_000),
+            });
+          }
 
           if (iter === MAX_TOOL_ITERATIONS - 1) {
             emitText(

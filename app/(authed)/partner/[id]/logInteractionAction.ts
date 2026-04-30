@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -23,7 +23,8 @@ import { createServerClient } from "@/lib/supabase/server";
  *      partner's timeline updates.
  */
 
-const OPUS_MODEL = "claude-opus-4-7";
+// Structured transcript synthesis — use DeepSeek V4-Pro for reasoning quality.
+const OPUS_MODEL = "deepseek/deepseek-v4-pro";
 
 export interface LogInteractionInput {
   /** Partner being logged against — campaign_partner_id OR partner_id.
@@ -213,8 +214,8 @@ export type SynthesiseResult =
 export async function synthesiseNotes(
   input: SynthesiseInput,
 ): Promise<SynthesiseResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY not set." };
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return { ok: false, error: "OPENROUTER_API_KEY not set." };
 
   const supabase = await createServerClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -285,16 +286,14 @@ export async function synthesiseNotes(
     .join("\n");
 
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
+    const raw = await callOpenRouter({
       model: OPUS_MODEL,
-      max_tokens: 3000,
-      system,
-      messages: [{ role: "user", content: userPrompt }],
+      max_tokens: 16000,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
     });
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw =
-      textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
     const cleaned = raw
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/, "")
@@ -306,7 +305,7 @@ export async function synthesiseNotes(
       const msg = err instanceof Error ? err.message : "parse error";
       return {
         ok: false,
-        error: `Opus returned non-JSON (${msg}). Raw: ${raw.slice(0, 200)}`,
+        error: `Model returned non-JSON (${msg}). Raw: ${raw.slice(0, 200)}`,
       };
     }
 
@@ -339,7 +338,7 @@ export async function synthesiseNotes(
     return { ok: true, synthesis };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Opus synthesis failed: ${msg}` };
+    return { ok: false, error: `Synthesis failed: ${msg}` };
   }
 }
 

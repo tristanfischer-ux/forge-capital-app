@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseOffice } from "officeparser";
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
@@ -163,15 +163,14 @@ export async function POST(req: NextRequest) {
     // textarea — a 13,000-char deck dump is noise; the summary is signal.
     // Raw text stays available in the response for an "expand original"
     // affordance on the client.
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const openRouterKeyForSynth = process.env.OPENROUTER_API_KEY?.trim();
     let summary: string | null = null;
     let profile: ExtractedProfile | null = null;
     let haikuUsage: { input_tokens: number | null; output_tokens: number | null } | null = null;
     let haikuError: string | null = null;
-    if (apiKey && cleaned.length >= 40) {
+    if (openRouterKeyForSynth && cleaned.length >= 40) {
       const synth = await synthesisePitchText(
         cleaned.slice(0, MAX_PROFILE_INPUT_CHARS),
-        apiKey,
       );
       if (synth.ok) {
         summary = synth.summary;
@@ -180,8 +179,8 @@ export async function POST(req: NextRequest) {
       } else {
         haikuError = synth.error;
       }
-    } else if (!apiKey) {
-      haikuError = "ANTHROPIC_API_KEY not set — raw text returned without synthesis.";
+    } else if (!openRouterKeyForSynth) {
+      haikuError = "OPENROUTER_API_KEY not set — raw text returned without synthesis.";
     }
 
     // Prefer the summary as the "text" field so the client hero textarea
@@ -246,8 +245,8 @@ async function handleProfileMode(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!openRouterKey) {
     // Graceful degradation path — client falls back to "paste into the
     // textarea" behaviour. Return 200 so the fetch resolves cleanly.
     return NextResponse.json({
@@ -260,42 +259,29 @@ async function handleProfileMode(req: NextRequest): Promise<NextResponse> {
 
   const capped = text.slice(0, MAX_PROFILE_INPUT_CHARS);
   try {
-    const client = new Anthropic({ apiKey });
-    const res = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 600,
-      system:
-        "You extract structured fundraising / matching signals from arbitrary founder text (decks, emails, bios, product briefs). Return ONLY a JSON object that matches the requested schema — no prose, no markdown fence. British spelling. Do not invent values: if a field is not in the text, return null (or [] for sectors).",
+    const rawText = await callOpenRouter({
+      model: "deepseek/deepseek-v4-flash",
+      max_tokens: 16000,
       messages: [
         {
+          role: "system",
+          content:
+            "You extract structured fundraising / matching signals from arbitrary founder text (decks, emails, bios, product briefs). Return ONLY a JSON object that matches the requested schema — no prose, no markdown fence. British spelling. Do not invent values: if a field is not in the text, return null (or [] for sectors).",
+        },
+        {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text:
-                "Extract these fields from the snippet below and return a single JSON object with exactly these keys:\n" +
-                "- stage: one of 'Pre-seed' | 'Seed' | 'Series A' | 'Series B' | 'Growth' | null\n" +
-                "- geography: one of 'UK' | 'EU' | 'US' | 'Global' | null\n" +
-                "- raise_amount: short string (e.g. '£500K-£2M', '$10M+', '€2M') or null\n" +
-                "- sectors: array of short sector tags (e.g. ['maritime', 'energy']) — empty array if unclear\n" +
-                "- description: one cleaned-up paragraph (<= 600 chars) describing the company and the round, or null if the text is too thin\n\n" +
-                "SNIPPET:\n" +
-                capped,
-            },
-          ],
+          content:
+            "Extract these fields from the snippet below and return a single JSON object with exactly these keys:\n" +
+            "- stage: one of 'Pre-seed' | 'Seed' | 'Series A' | 'Series B' | 'Growth' | null\n" +
+            "- geography: one of 'UK' | 'EU' | 'US' | 'Global' | null\n" +
+            "- raise_amount: short string (e.g. '£500K-£2M', '$10M+', '€2M') or null\n" +
+            "- sectors: array of short sector tags (e.g. ['maritime', 'energy']) — empty array if unclear\n" +
+            "- description: one cleaned-up paragraph (<= 600 chars) describing the company and the round, or null if the text is too thin\n\n" +
+            "SNIPPET:\n" +
+            capped,
         },
       ],
     });
-
-    // Concatenate text blocks defensively — Haiku can chunk responses.
-    const rawText = res.content
-      .filter(
-        (b): b is Anthropic.TextBlock =>
-          (b as { type?: string }).type === "text",
-      )
-      .map((b) => b.text)
-      .join("")
-      .trim();
 
     // Strip any accidental ```json fences.
     const cleaned = rawText
@@ -333,15 +319,15 @@ async function handleProfileMode(req: NextRequest): Promise<NextResponse> {
       ok: true,
       profile: parsed,
       usage: {
-        input_tokens: res.usage?.input_tokens ?? null,
-        output_tokens: res.usage?.output_tokens ?? null,
+        input_tokens: null,
+        output_tokens: null,
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown Haiku error";
+    const msg = err instanceof Error ? err.message : "Unknown extraction error";
     console.error("extract-pitch profile mode failed:", msg);
     return NextResponse.json(
-      { ok: false, error: `Haiku call failed: ${msg}` },
+      { ok: false, error: `Extraction call failed: ${msg}` },
       { status: 502 },
     );
   }
@@ -358,7 +344,6 @@ async function handleProfileMode(req: NextRequest): Promise<NextResponse> {
  */
 async function synthesisePitchText(
   text: string,
-  apiKey: string,
 ): Promise<
   | {
       ok: true;
@@ -369,41 +354,29 @@ async function synthesisePitchText(
   | { ok: false; error: string }
 > {
   try {
-    const client = new Anthropic({ apiKey });
-    const res = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 700,
-      system:
-        "You extract match signals from a founder's pitch deck text. Output ONLY one JSON object matching the requested schema — no prose, no markdown fence. British spelling. Never invent values: if a field is genuinely absent from the text, return null (or [] for sectors). Description should read like a pitch elevator paragraph — what the company does, stage, sector, geography, raise size — not a summary of the document structure.",
+    const raw = await callOpenRouter({
+      model: "deepseek/deepseek-v4-flash",
+      max_tokens: 16000,
       messages: [
         {
+          role: "system",
+          content:
+            "You extract match signals from a founder's pitch deck text. Output ONLY one JSON object matching the requested schema — no prose, no markdown fence. British spelling. Never invent values: if a field is genuinely absent from the text, return null (or [] for sectors). Description should read like a pitch elevator paragraph — what the company does, stage, sector, geography, raise size — not a summary of the document structure.",
+        },
+        {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text:
-                "You are helping a startup founder find investors. Below is text extracted from their pitch deck or business plan. Extract a concise 2-3 sentence description of what this company does, what stage they are at, what sector they're in, where they're based, and how much they're raising (if mentioned). Also extract structured match signals into a single JSON object with exactly these keys:\n" +
-                "- description: 2-3 sentence elevator pitch (<= 600 chars). This replaces the deck text in the match textarea, so write it as a crisp pitch paragraph — NOT 'this deck covers X'. Null only if the text is too thin to summarise.\n" +
-                "- stage: one of 'Pre-seed' | 'Seed' | 'Series A' | 'Series B' | 'Growth' | null\n" +
-                "- geography: one of 'UK' | 'EU' | 'US' | 'Global' | null\n" +
-                "- raise_amount: short string (e.g. '£500K-£2M', '$10M+', '€2M') or null\n" +
-                "- sectors: array of short sector tags (e.g. ['maritime', 'energy']) — empty array if unclear\n\n" +
-                "DECK TEXT:\n" +
-                text,
-            },
-          ],
+          content:
+            "You are helping a startup founder find investors. Below is text extracted from their pitch deck or business plan. Extract a concise 2-3 sentence description of what this company does, what stage they are at, what sector they're in, where they're based, and how much they're raising (if mentioned). Also extract structured match signals into a single JSON object with exactly these keys:\n" +
+            "- description: 2-3 sentence elevator pitch (<= 600 chars). This replaces the deck text in the match textarea, so write it as a crisp pitch paragraph — NOT 'this deck covers X'. Null only if the text is too thin to summarise.\n" +
+            "- stage: one of 'Pre-seed' | 'Seed' | 'Series A' | 'Series B' | 'Growth' | null\n" +
+            "- geography: one of 'UK' | 'EU' | 'US' | 'Global' | null\n" +
+            "- raise_amount: short string (e.g. '£500K-£2M', '$10M+', '€2M') or null\n" +
+            "- sectors: array of short sector tags (e.g. ['maritime', 'energy']) — empty array if unclear\n\n" +
+            "DECK TEXT:\n" +
+            text,
         },
       ],
     });
-
-    const raw = res.content
-      .filter(
-        (b): b is Anthropic.TextBlock =>
-          (b as { type?: string }).type === "text",
-      )
-      .map((b) => b.text)
-      .join("")
-      .trim();
     const cleaned = raw
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/, "")
@@ -432,14 +405,14 @@ async function synthesisePitchText(
         description,
       },
       usage: {
-        input_tokens: res.usage?.input_tokens ?? null,
-        output_tokens: res.usage?.output_tokens ?? null,
+        input_tokens: null,
+        output_tokens: null,
       },
     };
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Unknown Haiku error",
+      error: err instanceof Error ? err.message : "Unknown extraction error",
     };
   }
 }

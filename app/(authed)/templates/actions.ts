@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import type { SectionKind } from "./types";
@@ -33,7 +33,8 @@ import type { SectionKind } from "./types";
  * and action call in dev.
  */
 
-const DRAFTER_MODEL = "claude-opus-4-7";
+// Voice-critical copy — use GPT-4.1 for outreach email drafting quality.
+const DRAFTER_MODEL = "openai/gpt-4.1";
 
 type CampaignContext = {
   id: string;
@@ -83,11 +84,11 @@ export async function draftSectionWithHaiku(input: {
     return { ok: false, error: "campaignId is required." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
     return {
       ok: false,
-      error: "ANTHROPIC_API_KEY not set — add to .env.local",
+      error: "OPENROUTER_API_KEY not set — add to .env.local",
     };
   }
 
@@ -100,7 +101,7 @@ export async function draftSectionWithHaiku(input: {
   }
 
   // Load campaign context. RLS restricts to the signed-in founder.
-  // founder_bio + voice_reference_email (migration 020) give Haiku
+  // founder_bio + voice_reference_email (migration 020) give the model
   // concrete facts + a few-shot exemplar so it doesn't fall back to
   // [bracketed placeholders] when specifics are missing.
   const { data: campaignRow, error: campaignErr } = await supabase
@@ -133,28 +134,23 @@ export async function draftSectionWithHaiku(input: {
   }
 
   try {
-    const client = new Anthropic({ apiKey });
     const { system, user: userPrompt } = buildPromptForSection(
       sectionKind,
       campaign,
       partner,
     );
 
-    const response = await client.messages.create({
+    const draft = await callOpenRouter({
       model: DRAFTER_MODEL,
       max_tokens: 2048,
-      system,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
     });
 
-    // Extract the first text block. Haiku returns a content array — for
-    // a single-turn non-tool call this is always [{ type: 'text', ... }].
-    const textBlock = response.content.find((b) => b.type === "text");
-    const draft =
-      textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
-
     if (!draft) {
-      return { ok: false, error: "Haiku returned an empty draft." };
+      return { ok: false, error: "Model returned an empty draft." };
     }
 
     // Belt-and-braces guard against the 2026-04-23 bracket failure.
@@ -177,7 +173,7 @@ export async function draftSectionWithHaiku(input: {
     return { ok: true, draft };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Haiku call failed: ${msg}` };
+    return { ok: false, error: `Model call failed: ${msg}` };
   }
 }
 
@@ -376,18 +372,18 @@ export async function previewCredibilityWithOpus(input: {
     };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
     return {
       ok: false,
-      error: "ANTHROPIC_API_KEY not set — add to .env.local",
+      error: "OPENROUTER_API_KEY not set — add to .env.local",
     };
   }
 
   // Auth gate — same posture as the other actions in this file. No DB
   // read is performed (the inputs come from the client), but the action
   // still only runs for a signed-in session so unauthenticated traffic
-  // can't burn Opus calls.
+  // can't burn model API calls.
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -437,20 +433,17 @@ export async function previewCredibilityWithOpus(input: {
     .join("\n");
 
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
+    const preview = await callOpenRouter({
       model: DRAFTER_MODEL,
       max_tokens: 1024,
-      system,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
     });
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    const preview =
-      textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
-
     if (!preview) {
-      return { ok: false, error: "Opus returned an empty preview." };
+      return { ok: false, error: "Model returned an empty preview." };
     }
 
     // Same bracket guard as the drafter — the whole point of this
@@ -460,14 +453,14 @@ export async function previewCredibilityWithOpus(input: {
     if (bracketMatch) {
       return {
         ok: false,
-        error: `Opus emitted a bracketed placeholder (${bracketMatch[0]}) — extend the founder bio with the missing specific, then try Test draft again.`,
+        error: `Model emitted a bracketed placeholder (${bracketMatch[0]}) — extend the founder bio with the missing specific, then try Test draft again.`,
       };
     }
 
     return { ok: true, preview };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Opus preview failed: ${msg}` };
+    return { ok: false, error: `Preview failed: ${msg}` };
   }
 }
 
@@ -503,9 +496,9 @@ export async function auditSectionWithOpus(input: {
     return { ok: false, error: "No current body to audit — draft first." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
-    return { ok: false, error: "ANTHROPIC_API_KEY not set." };
+    return { ok: false, error: "OPENROUTER_API_KEY not set." };
   }
 
   const supabase = await createServerClient();
@@ -585,17 +578,15 @@ export async function auditSectionWithOpus(input: {
     .join("\n");
 
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
+    const raw = await callOpenRouter({
       model: DRAFTER_MODEL,
       max_tokens: 2048,
-      system,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
     });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw = textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
-    if (!raw) return { ok: false, error: "Opus returned an empty audit." };
+    if (!raw) return { ok: false, error: "Model returned an empty audit." };
 
     // Strip any accidental markdown fence.
     const cleaned = raw
@@ -610,7 +601,7 @@ export async function auditSectionWithOpus(input: {
       const msg = err instanceof Error ? err.message : "parse error";
       return {
         ok: false,
-        error: `Opus returned non-JSON (${msg}). Raw: ${raw.slice(0, 200)}`,
+        error: `Model returned non-JSON (${msg}). Raw: ${raw.slice(0, 200)}`,
       };
     }
 
@@ -625,7 +616,7 @@ export async function auditSectionWithOpus(input: {
       if (bracketMatch) {
         return {
           ok: false,
-          error: `Opus rewrite contained a bracketed placeholder (${bracketMatch[0]}) — re-run the audit.`,
+          error: `Model rewrite contained a bracketed placeholder (${bracketMatch[0]}) — re-run the audit.`,
         };
       }
     }
@@ -640,7 +631,7 @@ export async function auditSectionWithOpus(input: {
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Opus audit failed: ${msg}` };
+    return { ok: false, error: `Audit failed: ${msg}` };
   }
 }
 

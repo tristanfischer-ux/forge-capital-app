@@ -1,6 +1,5 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
@@ -37,11 +36,9 @@ export interface HunterCandidate {
   /** One-sentence reasoning for why this candidate fits (or doesn't)
    *  this specific pitch. Null before the ranker has run. */
   reason: string | null;
-  /** Which model produced the rank — "deepseek-v4-flash" (primary via
-   *  OpenRouter) or "haiku-4-5" (fallback via Anthropic). Null before
-   *  the ranker has run. Displayed in the UI so Tristan knows when
-   *  we've fallen back. */
-  ranker_model: "deepseek-v4-flash" | "haiku-4-5" | null;
+  /** Which model produced the rank — "deepseek-v4-flash" via OpenRouter.
+   *  Null before the ranker has run. */
+  ranker_model: "deepseek-v4-flash" | null;
 }
 
 export type HunterHuntResult =
@@ -250,9 +247,8 @@ export type RankCandidatesResult =
   | {
       ok: true;
       ranked: HunterCandidate[];
-      /** Which model produced the rank. Surfaced to the UI banner so
-       *  Tristan can tell when we've fallen back to Haiku. */
-      model: "deepseek-v4-flash" | "haiku-4-5";
+      /** Which model produced the rank. */
+      model: "deepseek-v4-flash";
     }
   | { ok: false; error: string };
 
@@ -293,12 +289,11 @@ export async function rankCandidatesForCampaignPartner(
   }
 
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!openRouterKey && !anthropicKey) {
+  if (!openRouterKey) {
     return {
       ok: false,
       error:
-        "Neither OPENROUTER_API_KEY nor ANTHROPIC_API_KEY is set — cannot rank candidates. Falling back to Hunter's native order.",
+        "OPENROUTER_API_KEY is not set — cannot rank candidates. Falling back to Hunter's native order.",
     };
   }
 
@@ -398,94 +393,8 @@ ${candidateLines}
 
 Return the JSON object now.`;
 
-  // Try DeepSeek v4 Flash first (primary), fall back to Haiku 4.5.
-  // Each attempt returns either parsed JSON or a failure reason; we
-  // try Haiku only if DeepSeek fails (network error, HTTP non-200, or
-  // unparseable response).
-  type RankerAttempt =
-    | { ok: true; raw: string; model: "deepseek-v4-flash" | "haiku-4-5" }
-    | { ok: false; error: string };
-
-  async function tryDeepSeek(): Promise<RankerAttempt> {
-    if (!openRouterKey) {
-      return { ok: false, error: "OPENROUTER_API_KEY missing" };
-    }
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${openRouterKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "deepseek/deepseek-v4-flash",
-          // JSON-mode keeps Flash from wrapping output in prose.
-          response_format: { type: "json_object" },
-          // DeepSeek v4 Flash is a reasoning model — it emits thinking
-          // tokens into the `reasoning` field BEFORE producing the
-          // actual `content`. At max_tokens: 4000 a 23-candidate rank
-          // blew the budget on reasoning and returned content=null,
-          // silently falling through to Haiku. 16K gives enough
-          // headroom for any realistic candidate list. Per
-          // `v4_flash_production_gotchas.md` memory.
-          max_tokens: 16_000,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        }),
-        // Longer timeout too — reasoning tokens add latency.
-        signal: AbortSignal.timeout(45_000),
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        return {
-          ok: false,
-          error: `DeepSeek HTTP ${res.status}: ${text.slice(0, 200)}`,
-        };
-      }
-      const payload = (await res.json()) as {
-        choices?: Array<{ message?: { content?: unknown } }>;
-      };
-      const content = payload?.choices?.[0]?.message?.content;
-      if (typeof content !== "string" || content.trim().length === 0) {
-        return { ok: false, error: "DeepSeek returned empty content." };
-      }
-      return { ok: true, raw: content.trim(), model: "deepseek-v4-flash" };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? `DeepSeek fetch failed: ${err.message}` : "DeepSeek fetch failed.",
-      };
-    }
-  }
-
-  async function tryHaiku(): Promise<RankerAttempt> {
-    if (!anthropicKey) {
-      return { ok: false, error: "ANTHROPIC_API_KEY missing (no fallback available)" };
-    }
-    try {
-      const client = new Anthropic({ apiKey: anthropicKey });
-      const msg = await client.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-      const raw = msg.content
-        .map((c) => (c.type === "text" ? c.text : ""))
-        .join("")
-        .trim();
-      if (!raw) return { ok: false, error: "Haiku returned empty content." };
-      return { ok: true, raw, model: "haiku-4-5" };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? `Haiku call failed: ${err.message}` : "Haiku call failed.",
-      };
-    }
-  }
-
+  // Call DeepSeek v4 Flash via OpenRouter. If it fails, return unranked
+  // (Hunter's native order) rather than falling back to Haiku.
   function parseRankerJson(raw: string):
     | { ok: true; rankedRaw: Array<{ email?: unknown; rank?: unknown; reason?: unknown }> }
     | { ok: false; error: string } {
@@ -509,26 +418,62 @@ Return the JSON object now.`;
     }
   }
 
-  // Attempt DeepSeek, parse; if anything fails, retry with Haiku.
-  let attempt = await tryDeepSeek();
-  let parsedResult = attempt.ok ? parseRankerJson(attempt.raw) : null;
-  if (!attempt.ok || (parsedResult && !parsedResult.ok)) {
-    const firstError = !attempt.ok ? attempt.error : (parsedResult as { ok: false; error: string }).error;
-    console.warn("[ranker] DeepSeek failed, falling back to Haiku:", firstError);
-    attempt = await tryHaiku();
-    parsedResult = attempt.ok ? parseRankerJson(attempt.raw) : null;
-    if (!attempt.ok) {
-      return { ok: false, error: `Both models failed. Last error: ${attempt.error}` };
+  let rawContent: string;
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openRouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://forge-capital-app.vercel.app",
+      },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-v4-flash",
+        // JSON-mode keeps Flash from wrapping output in prose.
+        response_format: { type: "json_object" },
+        // DeepSeek v4 Flash is a reasoning model — it emits thinking
+        // tokens into the `reasoning` field BEFORE producing the
+        // actual `content`. At max_tokens: 4000 a 23-candidate rank
+        // blew the budget on reasoning and returned content=null. 16K
+        // gives enough headroom for any realistic candidate list. Per
+        // `v4_flash_production_gotchas.md` memory.
+        max_tokens: 16_000,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+      // Longer timeout — reasoning tokens add latency.
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.warn(`[ranker] DeepSeek HTTP ${res.status}: ${text.slice(0, 200)}`);
+      return { ok: true, ranked: candidates, model: "deepseek-v4-flash" };
     }
-    if (!parsedResult || !parsedResult.ok) {
-      return {
-        ok: false,
-        error: (parsedResult as { ok: false; error: string } | null)?.error ?? "Haiku parse failed.",
-      };
+    const payload = (await res.json()) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = payload?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || content.trim().length === 0) {
+      console.warn("[ranker] DeepSeek returned empty content — using unranked order.");
+      return { ok: true, ranked: candidates, model: "deepseek-v4-flash" };
     }
+    rawContent = content.trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[ranker] DeepSeek fetch failed, using unranked order:", msg);
+    return { ok: true, ranked: candidates, model: "deepseek-v4-flash" };
   }
-  const modelUsed = attempt.model;
-  const rankedRaw = (parsedResult as { ok: true; rankedRaw: Array<{ email?: unknown; rank?: unknown; reason?: unknown }> }).rankedRaw;
+
+  const parsedResult = parseRankerJson(rawContent);
+  if (!parsedResult.ok) {
+    console.warn("[ranker] JSON parse failed, using unranked order:", parsedResult.error);
+    return { ok: true, ranked: candidates, model: "deepseek-v4-flash" };
+  }
+
+  const modelUsed: "deepseek-v4-flash" = "deepseek-v4-flash";
+  const rankedRaw = parsedResult.rankedRaw;
 
   // Build rank + reason lookup by email.
   const rankByEmail = new Map<string, { rank: number; reason: string | null }>();

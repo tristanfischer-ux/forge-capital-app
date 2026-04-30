@@ -132,7 +132,7 @@ export default async function TemplatesPage({
   // The drafter falls back to an honest error in the UI when the key is
   // absent (per the action contract) — this flag just lets us hide the
   // button entirely when we already know it won't work.
-  const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasAnthropicKey = Boolean(process.env.OPENROUTER_API_KEY);
 
   return (
     <section id="templates" className="section" style={{ marginTop: 0 }}>

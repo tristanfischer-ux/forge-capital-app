@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { callOpenRouter } from "@/lib/openrouter";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { labelFor, STATUS_BY_CODE } from "@/lib/status-codes";
@@ -104,7 +104,8 @@ export type ParseApprovalReplyResult =
 /* parseApprovalReply                                                         */
 /* -------------------------------------------------------------------------- */
 
-const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+// Simple extraction task — use DeepSeek V4-Flash (cheap, fast).
+const HAIKU_MODEL = "deepseek/deepseek-v4-flash";
 
 const SYSTEM_PROMPT = `You are a strict email-reply parser for a venture-capital outreach tool.
 
@@ -153,12 +154,12 @@ export async function parseApprovalReply(input: {
     };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
     return {
       ok: false,
       error:
-        "ANTHROPIC_API_KEY missing in .env.local — add the key and restart the dev server. The drop-zone cannot parse without it.",
+        "OPENROUTER_API_KEY missing in .env.local — add the key and restart the dev server. The drop-zone cannot parse without it.",
     };
   }
 
@@ -168,26 +169,22 @@ export async function parseApprovalReply(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
-  // 1. Call Haiku with strict JSON instructions.
+  // 1. Call the model with strict JSON instructions.
   let parsedLines: ParsedLine[];
   try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
+    const content = await callOpenRouter({
       model: HAIKU_MODEL,
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: trimmed }],
+      max_tokens: 16000,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: trimmed },
+      ],
     });
-    // We only asked for one text block. Concatenate defensively.
-    const content = response.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("\n")
-      .trim();
     parsedLines = extractLines(content);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("parseApprovalReply: Haiku call failed", msg);
-    return { ok: false, error: `Haiku call failed: ${msg}` };
+    console.error("parseApprovalReply: model call failed", msg);
+    return { ok: false, error: `Model call failed: ${msg}` };
   }
 
   if (parsedLines.length === 0) {
