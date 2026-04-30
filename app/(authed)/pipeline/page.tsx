@@ -5,6 +5,7 @@ import {
   type StageStatus,
 } from "@/lib/queries/pipeline-health";
 import { SyncNowButton } from "./SyncNowButton";
+import { StageBanner } from "../StageBanner";
 
 /**
  * Automation pipeline — honest-state dashboard.
@@ -59,6 +60,8 @@ export default async function PipelinePage(_props: {
         : `${okCount} / ${health.stages.length} stages healthy`;
 
   return (
+    <>
+    <StageBanner number={3} title="Automation" />
     <section id="automation" className="section" style={{ marginTop: 0 }}>
       <div className="section-head">
         <div>
@@ -169,6 +172,7 @@ export default async function PipelinePage(_props: {
         cron failed.
       </div>
     </section>
+    </>
   );
 }
 

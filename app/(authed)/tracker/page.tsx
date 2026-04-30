@@ -15,6 +15,7 @@ import { StatusSummary } from "./StatusSummary";
 import { TrackerActionPanel } from "./TrackerActionPanel";
 import { TrackerHealthCallout } from "./TrackerHealthCallout";
 import { TrackerDropZone } from "./TrackerDropZone";
+import { StageBanner } from "../StageBanner";
 
 /**
  * Tracker page — V4 §2 "Tracker — master sheet preview" re-port.
@@ -102,6 +103,8 @@ export default async function TrackerPage({
   ]);
 
   return (
+    <>
+    <StageBanner number={7} title="Tracker" />
     <section id="tracker" className="section" style={{ marginTop: 0 }}>
       {/* V4 `.section-head` (line 1800) — title on the left, "Open master
           sheet" link on the right. */}
@@ -215,6 +218,7 @@ export default async function TrackerPage({
         </>
       )}
     </section>
+    </>
   );
 }
 

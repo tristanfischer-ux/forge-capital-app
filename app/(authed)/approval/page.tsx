@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { StageBanner } from "../StageBanner";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
@@ -141,6 +142,8 @@ export default async function ApprovalPage({
       : "the counterpart's";
 
   return (
+    <>
+    <StageBanner number={2} title="Approval" />
     <section id="approval" className="section" style={{ marginTop: 0 }}>
       {/* V4 `.section-head` — V4 lines 1150-1156, title + subtitle verbatim. */}
       <div className="section-head">
@@ -259,6 +262,7 @@ export default async function ApprovalPage({
         />
       </div>
     </section>
+    </>
   );
 }
 

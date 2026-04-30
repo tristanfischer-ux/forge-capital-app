@@ -2,6 +2,7 @@ import { getDraftsByCampaign } from "@/lib/queries/drafts";
 import type { DraftGroup, DraftRow } from "@/lib/queries/drafts";
 import { InlineEditDraft } from "./InlineEditDraft";
 import { DiscardDraftButton } from "./DiscardDraftButton";
+import { StageBanner } from "../StageBanner";
 
 /**
  * V4 §8 Gmail drafts panel — 1:1 port of Phase2-Mockup-V4.html lines
@@ -41,6 +42,8 @@ export default async function DraftsPage() {
   const campaignCount = groups.length;
 
   return (
+    <>
+    <StageBanner number={6} title="Drafts" />
     <section id="drafts" className="section" style={{ marginTop: 0 }}>
       {/* V4 `.section-head` (lines 1716-1722) — title + subtitle verbatim. */}
       <div className="section-head">
@@ -88,6 +91,7 @@ export default async function DraftsPage() {
         />
       )}
     </section>
+    </>
   );
 }
 

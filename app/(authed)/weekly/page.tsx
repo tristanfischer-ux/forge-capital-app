@@ -9,6 +9,7 @@ import { getWeeklySummary } from "@/lib/queries/weekly";
 import { createServerClient } from "@/lib/supabase/server";
 import { PipelineVolumeChart, StatusDistributionChart } from "./WeeklyCharts";
 import { WeeklyFooter } from "./WeeklyFooter";
+import { StageBanner } from "../StageBanner";
 
 /** One row from weekly_digest_log — used in the "Previous weeks" section. */
 interface DigestLogRow {
@@ -106,6 +107,8 @@ export default async function WeeklyPage({
   ]);
   if (!summary) {
     return (
+      <>
+      <StageBanner number={8} title="Weekly" />
       <section id="weekly" className="section" style={{ marginTop: 0 }}>
         <div className="section-head">
           <div>
@@ -121,6 +124,7 @@ export default async function WeeklyPage({
           </div>
         </div>
       </section>
+      </>
     );
   }
 
@@ -146,6 +150,8 @@ export default async function WeeklyPage({
   const generatedHuman = formatGeneratedLabel(summary.generatedAt);
 
   return (
+    <>
+    <StageBanner number={8} title="Weekly" />
     <section id="weekly" className="section" style={{ marginTop: 0 }}>
       <div className="section-head">
         <div>
@@ -332,6 +338,7 @@ export default async function WeeklyPage({
           /weekly-digest. Empty until the first digest is sent. */}
       <DigestHistorySection entries={digestHistory} />
     </section>
+    </>
   );
 }
 

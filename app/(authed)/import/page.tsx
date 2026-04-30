@@ -3,6 +3,7 @@ import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
 } from "@/lib/queries/campaigns";
+import { StageBanner } from "../StageBanner";
 import { ImportTrackerClient } from "./ImportTrackerClient";
 
 /**
@@ -25,6 +26,8 @@ export default async function ImportTrackerPage() {
   const active = campaigns.find((c) => c.id === campaignId) ?? null;
 
   return (
+    <>
+    <StageBanner number={10} title="Import Tracker" />
     <section className="section" style={{ marginTop: 0 }}>
       <div className="section-head">
         <div>
@@ -57,5 +60,6 @@ export default async function ImportTrackerPage() {
         </div>
       )}
     </section>
+    </>
   );
 }

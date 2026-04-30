@@ -1,5 +1,6 @@
 import { getInboxReplies } from "@/lib/queries/inbox";
 import { StatusBadge } from "../tracker/StatusBadge";
+import { StageBanner } from "../StageBanner";
 
 /**
  * Inbox / Replies — surfaces inbound contact events so Tristan doesn't
@@ -43,6 +44,8 @@ export default async function InboxPage() {
   const replies = await getInboxReplies();
 
   return (
+    <>
+    <StageBanner number={11} title="Inbox" />
     <section id="inbox" className="section" style={{ marginTop: 0 }}>
       <div className="section-head">
         <div>
@@ -62,6 +65,7 @@ export default async function InboxPage() {
         <InboxTable replies={replies} />
       )}
     </section>
+    </>
   );
 }
 

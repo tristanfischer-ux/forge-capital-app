@@ -7,6 +7,7 @@ import { getMatchScore, type Archetype } from "@/lib/queries/match-score";
 import { FindAMatch } from "./FindAMatch";
 import { heroTextForArchetype } from "./match-constants";
 import { listCustomerCampaignPartners } from "@/lib/queries/customer-partners";
+import { StageBanner } from "../StageBanner";
 
 /**
  * Match page — §3 Find-a-Match. Ports Phase2-Mockup-V4.html §"Find a
@@ -92,12 +93,15 @@ export default async function MatchPage({
   ]);
 
   return (
-    <FindAMatch
-      campaignId={campaignId}
-      campaignName={activeCampaign?.name ?? "this campaign"}
-      initialData={initialData}
-      initialArchetype={archetype}
-      customerPartners={customerPartners}
-    />
+    <>
+      <StageBanner number={1} title="Find a Match" />
+      <FindAMatch
+        campaignId={campaignId}
+        campaignName={activeCampaign?.name ?? "this campaign"}
+        initialData={initialData}
+        initialArchetype={archetype}
+        customerPartners={customerPartners}
+      />
+    </>
   );
 }

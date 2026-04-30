@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { StageBanner } from "../StageBanner";
 import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
@@ -71,6 +72,8 @@ export default async function ReviewPage({
   const drafts = await getDraftsReadyForReview(campaignId);
 
   return (
+    <>
+    <StageBanner number={5} title="Review" />
     <section id="review" className="section" style={{ marginTop: 0 }}>
       {/* V4 `.section-head` (lines 1527-1533) — title + subtitle verbatim. */}
       <div className="section-head">
@@ -105,6 +108,7 @@ export default async function ReviewPage({
 
       <ReviewStack drafts={drafts} />
     </section>
+    </>
   );
 }
 

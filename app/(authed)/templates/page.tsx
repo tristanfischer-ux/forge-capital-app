@@ -4,6 +4,7 @@ import {
   resolveCurrentCampaignId,
   type CampaignSummary,
 } from "@/lib/queries/campaigns";
+import { StageBanner } from "../StageBanner";
 import {
   getCampaignTemplates,
   type CampaignTemplate,
@@ -137,6 +138,8 @@ export default async function TemplatesPage({
   const hasAnthropicKey = Boolean(process.env.OPENROUTER_API_KEY);
 
   return (
+    <>
+    <StageBanner number={4} title="Templates" />
     <section id="templates" className="section" style={{ marginTop: 0 }}>
       {/* V4 lines 1449–1455 — section head, subtitle, right-side link. */}
       <div className="section-head">
@@ -217,6 +220,7 @@ export default async function TemplatesPage({
         </Link>
       </div>
     </section>
+    </>
   );
 }
 
