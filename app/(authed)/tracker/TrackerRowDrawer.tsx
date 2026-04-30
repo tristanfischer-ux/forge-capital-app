@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useCallback } from "react";
 import { STATUS_CODES } from "@/lib/status-codes";
 import { statusCodesVisibleFor } from "@/lib/queries/self-managed";
-import { fetchContactEvents, updateCampaignPartnerStatus } from "./actions";
+import { fetchContactEvents, updateCampaignPartnerStatus, findPartnerEmail } from "./actions";
 import type { ContactEventRow } from "@/lib/queries/campaignPartner";
 import { ContactPicker } from "../ContactPicker";
 
@@ -28,16 +28,7 @@ export interface TrackerRowDrawerProps {
   campaignPartnerId: string;
   currentStatusCode: string | null;
   firmName: string | null;
-  /**
-   * Campaign counterpart email — drives the self-managed check that
-   * hides +6.5 from the status dropdown. Multi-party campaigns
-   * (FishFrom) keep +6.5 visible; self-managed campaigns (SkySails,
-   * Panatere, ForgeOS, Fischer Farms Customer) drop it since there's
-   * no external company side to hand over to.
-   *
-   * Plumbed from TrackerTable to avoid a second DB round-trip on
-   * drawer-open. Pass null when no counterpart is configured.
-   */
+  partnerName: string | null;
   campaignCounterpartEmail: string | null;
 }
 
@@ -55,6 +46,7 @@ export function TrackerRowDrawer({
   campaignPartnerId,
   currentStatusCode,
   firmName,
+  partnerName,
   campaignCounterpartEmail,
 }: TrackerRowDrawerProps) {
   const [statusCode, setStatusCode] = useState<string>(currentStatusCode ?? "");
@@ -68,6 +60,26 @@ export function TrackerRowDrawer({
   const [result, setResult] = useState<
     { kind: "idle" } | { kind: "ok" } | { kind: "error"; message: string }
   >({ kind: "idle" });
+
+  const [hunterDomain, setHunterDomain] = useState("");
+  const [hunterResult, setHunterResult] = useState<
+    { kind: "idle" } | { kind: "loading" } | { kind: "found"; email: string } | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  const onHunterLookup = useCallback(async () => {
+    if (!hunterDomain.trim() || !partnerName) return;
+    setHunterResult({ kind: "loading" });
+    const out = await findPartnerEmail({
+      campaignPartnerId,
+      fullName: partnerName,
+      domain: hunterDomain.trim(),
+    });
+    if (out.ok) {
+      setHunterResult({ kind: "found", email: out.email });
+    } else {
+      setHunterResult({ kind: "error", message: out.error });
+    }
+  }, [campaignPartnerId, partnerName, hunterDomain]);
 
   // Fetch commentary log on mount. Cheap — one query, ≤50 rows.
   useEffect(() => {
@@ -129,6 +141,37 @@ export function TrackerRowDrawer({
               campaignPartnerId={campaignPartnerId}
               currentLabel="View / switch contact"
             />
+          </div>
+
+          {/* Hunter email finder */}
+          <div className="mb-3 rounded-sm border border-border-soft bg-surface px-3 py-2">
+            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-accent">
+              Find email via Hunter
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={hunterDomain}
+                onChange={(e) => setHunterDomain(e.target.value)}
+                placeholder="e.g. acme-capital.com"
+                className="flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-[11px] text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={onHunterLookup}
+                disabled={!hunterDomain.trim() || !partnerName || hunterResult.kind === "loading"}
+                className="rounded-sm bg-accent px-2 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {hunterResult.kind === "loading" ? "Searching…" : "Find email"}
+              </button>
+            </div>
+            {hunterResult.kind === "found" ? (
+              <div className="mt-1 text-[11px] text-green">
+                Found: {hunterResult.email} — saved to partner record.
+              </div>
+            ) : hunterResult.kind === "error" ? (
+              <div className="mt-1 text-[11px] text-red">{hunterResult.message}</div>
+            ) : null}
           </div>
 
           <div className="space-y-3">

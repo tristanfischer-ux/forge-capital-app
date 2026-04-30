@@ -14,10 +14,18 @@ import { sendGmailMessage } from "@/lib/gmail/create-draft";
  * step before reaching this action.
  */
 
+export interface AttachmentInput {
+  filename: string;
+  mimeType: string;
+  /** Base64-encoded file content. */
+  base64: string;
+}
+
 export interface SendGmailMessageInput {
   to: string;
   subject: string;
   body: string;
+  attachments?: AttachmentInput[];
 }
 
 export type SendGmailMessageResult =
@@ -28,7 +36,17 @@ export async function sendGmailMessageAction(
   input: SendGmailMessageInput,
 ): Promise<SendGmailMessageResult> {
   try {
-    const sent = await sendGmailMessage(input);
+    const gmailAttachments = (input.attachments ?? []).map((a) => ({
+      filename: a.filename,
+      mimeType: a.mimeType,
+      content: Buffer.from(a.base64, "base64"),
+    }));
+    const sent = await sendGmailMessage({
+      to: input.to,
+      subject: input.subject,
+      body: input.body,
+      attachments: gmailAttachments.length > 0 ? gmailAttachments : undefined,
+    });
     // Sent items live under #sent in Gmail's UI.
     const gmailUrl = `https://mail.google.com/mail/u/0/#sent/${sent.threadId}`;
     return {

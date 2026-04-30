@@ -6,6 +6,54 @@ import { labelFor, STATUS_BY_CODE } from "@/lib/status-codes";
 import type { ContactEventRow } from "@/lib/queries/campaignPartner";
 
 /**
+ * Server action: look up a partner's email via the Hunter.io Email Finder
+ * API. On success, writes the discovered email to
+ * `campaign_partners.partner_email_overrides` so subsequent draft
+ * composition picks it up.
+ */
+export async function findPartnerEmail(input: {
+  campaignPartnerId: string;
+  fullName: string;
+  domain: string;
+}): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+  const { campaignPartnerId, fullName, domain } = input;
+  if (!campaignPartnerId) return { ok: false, error: "campaignPartnerId required" };
+  if (!fullName.trim()) return { ok: false, error: "Name is required" };
+  if (!domain.trim()) return { ok: false, error: "Domain is required" };
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const apiKey = process.env.HUNTER_API_KEY;
+  if (!apiKey) return { ok: false, error: "Hunter API key not configured" };
+
+  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const url = `https://api.hunter.io/v2/email-finder?domain=${encodeURIComponent(cleanDomain)}&full_name=${encodeURIComponent(fullName.trim())}&api_key=${encodeURIComponent(apiKey)}`;
+
+  const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    return { ok: false, error: `Hunter API ${resp.status}: ${body.slice(0, 200)}` };
+  }
+
+  const json = await resp.json();
+  const email = json?.data?.email;
+  if (!email) return { ok: false, error: "No email found for this name + domain" };
+
+  const { error: updateErr } = await supabase
+    .from("campaign_partners")
+    .update({ partner_email_overrides: email })
+    .eq("id", campaignPartnerId);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  revalidatePath("/tracker");
+  return { ok: true, email };
+}
+
+/**
  * Server action: apply a synthesised note (from the tracker drop-zone)
  * to an existing campaign_partners row. Optional status bump via
  * `suggestedStatusCode`. The note is appended as a contact_events

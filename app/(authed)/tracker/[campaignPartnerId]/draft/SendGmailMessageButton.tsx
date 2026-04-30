@@ -17,6 +17,7 @@ export function SendGmailMessageButton(props: {
   to: string;
   subject: string;
   body: string;
+  attachments?: Array<{ filename: string; mimeType: string; base64: string }>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [state, setState] = useState<
@@ -30,7 +31,12 @@ export function SendGmailMessageButton(props: {
   function onSend() {
     if (isPending) return;
     startTransition(async () => {
-      const out = await sendGmailMessageAction(props);
+      const out = await sendGmailMessageAction({
+        to: props.to,
+        subject: props.subject,
+        body: props.body,
+        attachments: props.attachments,
+      });
       if (out.ok) {
         setState({ kind: "sent", url: out.gmailUrl });
       } else if (out.error === "NOT_CONNECTED") {

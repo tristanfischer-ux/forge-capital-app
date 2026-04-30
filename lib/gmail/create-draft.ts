@@ -11,10 +11,17 @@ import { verifyDeliverability } from "@/lib/email/verify-deliverability";
  * draft in Gmail's compose window.
  */
 
+export interface EmailAttachment {
+  filename: string;
+  mimeType: string;
+  content: Buffer;
+}
+
 export interface CreateDraftInput {
   to: string;
   subject: string;
   body: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface CreateDraftResult {
@@ -64,20 +71,60 @@ async function getAccessTokenForCurrentUser(): Promise<string> {
 }
 
 /** Base64-URL-encode an RFC 2822 message. */
-function encodeRfc2822Message(to: string, subject: string, body: string): string {
-  // Subject may contain non-ASCII; MIME-encode if so.
+function encodeRfc2822Message(
+  to: string,
+  subject: string,
+  body: string,
+  attachments?: EmailAttachment[],
+): string {
   const subjectHeader = /[^\x20-\x7e]/.test(subject)
     ? `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`
     : subject;
-  const message = [
+
+  const headers = [
     `To: ${to}`,
     `Subject: ${subjectHeader}`,
     `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: 8bit`,
-    ``,
-    body,
-  ].join("\r\n");
+  ];
+
+  let messageBody: string;
+
+  if (attachments && attachments.length > 0) {
+    const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+
+    const parts: string[] = [];
+
+    parts.push(
+      `--${boundary}\r\n` +
+      `Content-Type: text/plain; charset=UTF-8\r\n` +
+      `Content-Transfer-Encoding: 8bit\r\n` +
+      `\r\n` +
+      body,
+    );
+
+    for (const att of attachments) {
+      const b64 = att.content.toString("base64");
+      const lines = b64.match(/.{1,76}/g) ?? [b64];
+      parts.push(
+        `--${boundary}\r\n` +
+        `Content-Type: ${att.mimeType}; name="${att.filename}"\r\n` +
+        `Content-Disposition: attachment; filename="${att.filename}"\r\n` +
+        `Content-Transfer-Encoding: base64\r\n` +
+        `\r\n` +
+        lines.join("\r\n"),
+      );
+    }
+
+    parts.push(`--${boundary}--`);
+    messageBody = parts.join("\r\n");
+  } else {
+    headers.push(`Content-Type: text/plain; charset=UTF-8`);
+    headers.push(`Content-Transfer-Encoding: 8bit`);
+    messageBody = body;
+  }
+
+  const message = [...headers, ``, messageBody].join("\r\n");
   return Buffer.from(message, "utf8")
     .toString("base64")
     .replace(/\+/g, "-")
@@ -87,7 +134,7 @@ function encodeRfc2822Message(to: string, subject: string, body: string): string
 
 export async function createGmailDraft(input: CreateDraftInput): Promise<CreateDraftResult> {
   const accessToken = await getAccessTokenForCurrentUser();
-  const raw = encodeRfc2822Message(input.to, input.subject, input.body);
+  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments);
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: {
@@ -140,7 +187,7 @@ export async function sendGmailMessage(
   }
 
   const accessToken = await getAccessTokenForCurrentUser();
-  const raw = encodeRfc2822Message(input.to, input.subject, input.body);
+  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments);
   const res = await fetch(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
     {

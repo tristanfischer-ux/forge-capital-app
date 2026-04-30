@@ -1,10 +1,14 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import * as XLSX from "xlsx";
 import type { TrackerRow } from "@/lib/queries/tracker";
+import { STATUS_CODES } from "@/lib/status-codes";
 import { StatusBadge } from "./StatusBadge";
 import { TrackerRowDrawer } from "./TrackerRowDrawer";
+import { updateCampaignPartnerStatus } from "./actions";
 
 /**
  * Tracker grid — V4 §2 "Tracker — master sheet preview" re-port
@@ -156,13 +160,79 @@ export function TrackerTable({
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [bulkPending, setBulkPending] = useState(false);
+
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return rows;
+    const q = searchTerm.trim().toLowerCase();
+    return rows.filter(
+      (r) =>
+        (r.firm_name ?? "").toLowerCase().includes(q) ||
+        (r.partner_name ?? "").toLowerCase().includes(q),
+    );
+  }, [rows, searchTerm]);
 
   const sorted = useMemo(
-    () => sortRows(rows, sortKey, sortDir),
-    [rows, sortKey, sortDir],
+    () => sortRows(filtered, sortKey, sortDir),
+    [filtered, sortKey, sortDir],
   );
 
+  const router = useRouter();
   const syncedLabel = useMemo(() => formatRelativeSync(rows), [rows]);
+
+  function exportXlsx() {
+    const data = sorted.map((r) => ({
+      Firm: r.firm_name ?? "",
+      Contact: r.partner_name ?? "",
+      Title: r.partner_title ?? "",
+      Status: r.status_code ? `${r.status_code} ${r.status_label ?? ""}`.trim() : "",
+      "Days since": r.days_since_last_contact ?? "",
+      "Emails in": r.emails_in,
+      "Emails out": r.emails_out,
+      "Last event": r.last_event_at ?? "",
+      Commentary: r.company_summary ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Tracker");
+    XLSX.writeFile(wb, `tracker-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === sorted.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sorted.map((r) => r.id)));
+    }
+  }
+
+  async function applyBulkStatus() {
+    if (!bulkStatus || selectedIds.size === 0 || bulkPending) return;
+    setBulkPending(true);
+    for (const id of selectedIds) {
+      await updateCampaignPartnerStatus({
+        campaignPartnerId: id,
+        statusCode: bulkStatus,
+        commentary: null,
+      });
+    }
+    setSelectedIds(new Set());
+    setBulkStatus("");
+    setBulkPending(false);
+    router.refresh();
+  }
 
   function onSort(nextKey: SortKey) {
     if (nextKey === sortKey) {
@@ -183,6 +253,7 @@ export function TrackerTable({
   }
 
   const rowLabel = rows.length === 1 ? "row" : "rows";
+  const isFiltered = searchTerm.trim().length > 0;
 
   return (
     <div className="approval-col" style={{ overflow: "hidden" }}>
@@ -195,16 +266,92 @@ export function TrackerTable({
               : `Master tracker${counterpartName ? ` (${counterpartName} view)` : ""}`}
           </span>
           <span className="sh-meta">
-            · {rows.length} {rowLabel} · last synced {syncedLabel}
+            · {isFiltered ? `${filtered.length} of ${rows.length}` : `${rows.length}`} {rowLabel} · last synced {syncedLabel}
           </span>
         </div>
-        <div className="sh-right">
+        <div className="sh-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search firm or contact…"
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              padding: "4px 8px",
+              fontSize: 12,
+              width: 180,
+              background: "var(--surface)",
+              color: "var(--text)",
+            }}
+          />
+          <button
+            type="button"
+            className="btn-gmail"
+            onClick={exportXlsx}
+            title="Export tracker as .xlsx spreadsheet"
+          >
+            Export ↓
+          </button>
           <span className="evidence-chip">
             <span className="dot"></span>
-            Status vocabulary locked to the 16-code Legend sheet
+            16-code Legend
           </span>
         </div>
       </div>
+
+      {/* Bulk action bar — visible when rows are selected */}
+      {selectedIds.size > 0 ? (
+        <div className="batch-bar armed">
+          <div className="bb-sel">
+            <span className="bb-count">{selectedIds.size}</span>
+            <span className="bb-label">selected</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              disabled={bulkPending}
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "4px 8px",
+                fontSize: 12,
+                background: "var(--surface)",
+                color: "var(--text)",
+              }}
+            >
+              <option value="">Change status →</option>
+              {STATUS_CODES.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.code} · {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn-gmail"
+              disabled={!bulkStatus || bulkPending}
+              onClick={applyBulkStatus}
+            >
+              {bulkPending ? "Applying…" : "Apply"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-dim)",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Results table — V4 `table.sheet` (line 1818). Columns (L→R):
           Firm · Contact · Status · Days since · Emails · Commentary.
@@ -215,8 +362,17 @@ export function TrackerTable({
       <table className="sheet">
         <thead>
           <tr>
+            <th style={{ width: "3%", textAlign: "center" }}>
+              <input
+                type="checkbox"
+                checked={selectedIds.size === sorted.length && sorted.length > 0}
+                onChange={toggleSelectAll}
+                title="Select all"
+                style={{ cursor: "pointer" }}
+              />
+            </th>
             <th
-              style={{ width: "22%", cursor: "pointer" }}
+              style={{ width: "20%", cursor: "pointer" }}
               onClick={() => onSort("firm")}
             >
               Firm · Contact{sortIndicator("firm")}
@@ -250,6 +406,14 @@ export function TrackerTable({
                     )
                   }
                 >
+                  <td style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row.id)}
+                      onChange={() => toggleSelect(row.id)}
+                      style={{ cursor: "pointer" }}
+                    />
+                  </td>
                   <td>
                     <div className="firm-c">{row.firm_name ?? "—"}</div>
                     <div className="contact-c">
@@ -291,11 +455,12 @@ export function TrackerTable({
                 </tr>
                 {expanded ? (
                   <tr onClick={(e) => e.stopPropagation()}>
-                    <td colSpan={5} style={{ padding: 0 }}>
+                    <td colSpan={6} style={{ padding: 0 }}>
                       <TrackerRowDrawer
                         campaignPartnerId={row.id}
                         currentStatusCode={row.status_code}
                         firmName={row.firm_name}
+                        partnerName={row.partner_name}
                         campaignCounterpartEmail={counterpartEmail ?? null}
                       />
                     </td>

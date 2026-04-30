@@ -80,6 +80,15 @@ export function GoogleConnectionStatus() {
   const expired =
     data?.gmail.status === "expired" || data?.calendar.status === "expired";
 
+  const syncAgeMinutes = (() => {
+    const syncAt = data?.gmail.lastSyncAt;
+    if (!syncAt) return null;
+    const ms = Date.now() - new Date(syncAt).getTime();
+    return Math.max(0, Math.floor(ms / 60_000));
+  })();
+  const isSyncStale = syncAgeMinutes !== null && syncAgeMinutes > 30;
+  const isSyncVeryStale = syncAgeMinutes !== null && syncAgeMinutes > 120;
+
   const { label, colour, background, border } = (() => {
     if (error) {
       return {
@@ -125,6 +134,22 @@ export function GoogleConnectionStatus() {
       };
     }
     if (bothOk) {
+      if (isSyncVeryStale) {
+        return {
+          label: `Sync stale — ${syncAgeMinutes}m ago`,
+          colour: "var(--red)",
+          background: "var(--red-light)",
+          border: "var(--red)",
+        };
+      }
+      if (isSyncStale) {
+        return {
+          label: `Sync may be stale — ${syncAgeMinutes}m ago`,
+          colour: "var(--amber)",
+          background: "var(--amber-light)",
+          border: "var(--amber)",
+        };
+      }
       return {
         label: "Gmail + Calendar live",
         colour: "var(--green)",

@@ -5,10 +5,8 @@ import type { EmailTier } from "@/lib/queries/tracker";
 import { TierBadge } from "../../TierBadge";
 import { StatusBadge } from "../../StatusBadge";
 import { composeDraft, isTierBlocked } from "./compose";
-import { CopyToClipboardButton } from "./CopyToClipboardButton";
-import { CreateGmailDraftButton } from "./CreateGmailDraftButton";
-import { SendGmailMessageButton } from "./SendGmailMessageButton";
 import { RefineSynthesisButton } from "./RefineSynthesisButton";
+import { DraftActions } from "./DraftActions";
 
 /**
  * Full-page preview of the draft email that WOULD be sent to this partner.
@@ -175,28 +173,12 @@ export default async function DraftPage({
 
       {/* Primary action — only when not blocked */}
       {!blocked ? (
-        <section className="rounded-[10px] border border-border bg-surface-alt p-5">
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <SendGmailMessageButton
-              to={data.primary_partner?.email ?? ""}
-              subject={draft.subject}
-              body={draft.fullBody}
-            />
-            <CreateGmailDraftButton
-              to={data.primary_partner?.email ?? ""}
-              subject={draft.subject}
-              body={draft.fullBody}
-            />
-            <CopyToClipboardButton fullText={draft.fullClipboardText} />
-          </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-text-dim">
-            <strong>Send via Gmail</strong> dispatches immediately (after a
-            confirm step). <strong>Create Gmail draft</strong> parks it in
-            your Drafts folder for one more review. <strong>Copy to
-            clipboard</strong> is the fallback. All three use your
-            connected Gmail account.
-          </p>
-        </section>
+        <DraftActions
+          to={data.primary_partner?.email ?? ""}
+          subject={draft.subject}
+          body={draft.fullBody}
+          fullClipboardText={draft.fullClipboardText}
+        />
       ) : null}
     </main>
   );
