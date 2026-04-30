@@ -120,24 +120,6 @@ export default async function HomePage({
     parseArchetype(params.a) ??
     archetypeFromCampaignIntent(activeCampaign?.campaign_intent ?? null);
 
-  // §3 Find-a-Match — initial scored top-10 against an
-  // archetype-appropriate sample text so the first paint has real
-  // cards on investor campaigns and a Fischer Farms-shaped description
-  // on customer campaigns. Client-side edits re-run the query via the
-  // shared server action (see match/match-v4-actions.ts).
-  const [findMatchInitial, customerPartners] = await Promise.all([
-    getMatchScore({
-      heroText: heroTextForArchetype(archetype),
-      archetype,
-      campaignId,
-      limit: 10,
-      tab: "best",
-    }),
-    archetype === "customer"
-      ? listCustomerCampaignPartners(campaignId)
-      : Promise.resolve(null),
-  ]);
-
   // Each section's existing page component takes the same `searchParams`
   // promise. We forward ours so they see the same `?c=` and can resolve
   // the campaign identically. DraftsPage ignores searchParams (it spans
@@ -158,13 +140,13 @@ export default async function HomePage({
     <>
       {/* ──────────────── 1. Find a Match ──────────────── */}
       <div id="find-a-match">
-        <FindAMatch
-          campaignId={campaignId}
-          campaignName={activeCampaign?.name ?? "this campaign"}
-          initialData={findMatchInitial}
-          initialArchetype={archetype}
-          customerPartners={customerPartners}
-        />
+        <Suspense fallback={<SectionSkeleton label="Find a Match" height={600} />}>
+          <FindAMatchSection
+            campaignId={campaignId}
+            campaignName={activeCampaign?.name ?? "this campaign"}
+            archetype={archetype}
+          />
+        </Suspense>
       </div>
 
       {/* ──────────────── 2. Approval ──────────────── */}
@@ -262,6 +244,39 @@ export default async function HomePage({
         </Suspense>
       </div>
     </>
+  );
+}
+
+async function FindAMatchSection({
+  campaignId,
+  campaignName,
+  archetype,
+}: {
+  campaignId: string;
+  campaignName: string;
+  archetype: Archetype;
+}) {
+  const [initialData, customerPartners] = await Promise.all([
+    getMatchScore({
+      heroText: heroTextForArchetype(archetype),
+      archetype,
+      campaignId,
+      limit: 10,
+      tab: "best",
+    }),
+    archetype === "customer"
+      ? listCustomerCampaignPartners(campaignId)
+      : Promise.resolve(null),
+  ]);
+
+  return (
+    <FindAMatch
+      campaignId={campaignId}
+      campaignName={campaignName}
+      initialData={initialData}
+      initialArchetype={archetype}
+      customerPartners={customerPartners}
+    />
   );
 }
 
