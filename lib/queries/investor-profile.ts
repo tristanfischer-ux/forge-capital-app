@@ -196,6 +196,7 @@ export async function getInvestorProfile(
   investorId: number,
 ): Promise<InvestorProfileData | null> {
   if (!Number.isFinite(investorId)) return null;
+  try {
   const supabase = await createServerClient();
 
   const { data: firm, error: firmErr } = await supabase
@@ -334,7 +335,8 @@ export async function getInvestorProfile(
   // this one. Grouped + ranked client-side (portfolioIds is bounded).
   type RelatedFirms = InvestorProfileData["related_firms"];
   let relatedFirms: RelatedFirms = [];
-  if (portfolioIds.length > 0) {
+  const cappedPortfolioIds = portfolioIds.slice(0, 100);
+  if (cappedPortfolioIds.length > 0) {
     const { data: relRows, error: relErr } = await supabase
       .from("investor_portfolio_links")
       .select(
@@ -342,7 +344,7 @@ export async function getInvestorProfile(
          investors_mirror:investor_id ( id, firm_name, actively_deploying ),
          portfolio_companies:portfolio_company_id ( name )`,
       )
-      .in("portfolio_company_id", portfolioIds)
+      .in("portfolio_company_id", cappedPortfolioIds)
       .neq("investor_id", investorId);
     if (relErr) {
       console.error("getInvestorProfile related firms fetch failed:", relErr.message);
@@ -492,4 +494,8 @@ export async function getInvestorProfile(
     campaign_links: campaignLinks,
     deep_profile: deepProfile,
   };
+  } catch (err) {
+    console.error("getInvestorProfile unexpected error for id", investorId, err);
+    return null;
+  }
 }
