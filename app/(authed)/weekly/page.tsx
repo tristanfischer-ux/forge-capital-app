@@ -335,39 +335,6 @@ export default async function WeeklyPage({
   );
 }
 
-function DigestHistorySection({ entries }: { entries: DigestLogRow[] }) {
-  if (entries.length === 0) {
-    return (
-      <div className="weekly-foot" style={{ marginTop: 24, opacity: 0.6 }}>
-        No digest history yet &mdash; entries will appear here after the first
-        weekly digest is sent.
-      </div>
-    );
-  }
-  return (
-    <div style={{ marginTop: 24 }}>
-      <div className="section-sub" style={{ marginBottom: 8 }}>
-        Previous digests
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {entries.map((e) => (
-          <div
-            key={e.id}
-            className="wc-card"
-            style={{ padding: "8px 12px", fontSize: 13 }}
-          >
-            <span className="wc-firm">{e.subject}</span>
-            <span className="wc-sep" />
-            <span style={{ opacity: 0.6 }}>
-              {e.to_email} &middot; {formatGeneratedLabel(e.sent_at)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /**
  * Friendly "Fri 24 Apr 17:00 BST" label matching V4 style. Falls back
  * to the raw ISO if Intl formatting fails (should never happen in

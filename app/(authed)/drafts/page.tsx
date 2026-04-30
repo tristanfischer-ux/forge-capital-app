@@ -189,6 +189,9 @@ function DraftsPanel({
 function DraftRow({ group, draft }: { group: DraftGroup; draft: DraftRow }) {
   const partnerLabel = draft.partner_name ?? "—";
   const firmLabel = draft.firm_name ?? "—";
+  const hasOverride = Boolean(
+    draft.draft_subject_override || draft.draft_body_override,
+  );
 
   return (
     <tr>
@@ -202,17 +205,58 @@ function DraftRow({ group, draft }: { group: DraftGroup; draft: DraftRow }) {
           {group.campaign_name}
         </div>
       </td>
-      <td>{draft.subject}</td>
+      <td>
+        {draft.subject}
+        {hasOverride ? (
+          <span
+            style={{
+              marginLeft: 6,
+              fontSize: 9,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              color: "var(--accent)",
+              verticalAlign: "middle",
+            }}
+            title="This draft has inline edits saved — these will be used when creating a Gmail draft."
+          >
+            edited
+          </span>
+        ) : null}
+      </td>
       <td className="comment-af">{draft.snippet}</td>
       <td>{draft.saved_ago}</td>
-      <td style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <a
-          className="btn-gmail"
-          href={`/tracker/${draft.partner_id}/draft`}
-          title="Open the full draft composer for this partner — edit, refine synthesis, create Gmail draft, or send."
+      <td>
+        <div
+          style={{
+            display: "flex",
+            gap: 5,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
         >
-          Draft &#8599;
-        </a>
+          <a
+            className="btn-gmail"
+            href={`/tracker/${draft.partner_id}/draft`}
+            title="Open the full draft composer for this partner — refine synthesis, create Gmail draft, or send."
+            style={{ fontSize: 11 }}
+          >
+            Draft &#8599;
+          </a>
+          <InlineEditDraft
+            campaignPartnerId={draft.partner_id}
+            initialSubject={draft.subject}
+            initialBody={draft.full_body}
+          />
+          <DiscardDraftButton
+            campaignPartnerId={draft.partner_id}
+            partnerLabel={
+              draft.partner_name && draft.firm_name
+                ? `${draft.partner_name} at ${draft.firm_name}`
+                : (draft.partner_name ?? draft.firm_name ?? "this partner")
+            }
+          />
+        </div>
       </td>
     </tr>
   );
