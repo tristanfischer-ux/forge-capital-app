@@ -48,6 +48,11 @@ export interface ParsedTrackerRow {
   match_reason: "exact" | "contains" | "token_subset" | "ambiguous" | "none";
   /** Pre-existing tracker row we'd update, or null for a new insert. */
   existing_campaign_partner_id: string | null;
+  /** Current DB values for the existing row — used during apply to merge
+   *  correctly. All null when this is a new insert. */
+  existing_status_code: string | null;
+  existing_commentary: string | null;
+  existing_last_contact_at: string | null;
   /** What the final upsert would look like — shown to user for confirm. */
   planned_action: "insert" | "update" | "skip_no_match" | "skip_ambiguous";
   /** Warnings attached to this row — stale commentary, status-code
@@ -359,7 +364,7 @@ export async function parseTrackerXlsx(
     supabase.from("investors_mirror").select("id, firm_name").eq("actively_deploying", true).limit(15000),
     supabase
       .from("campaign_partners")
-      .select("id, partner_id, status_code, approver_note, partners_mirror:partner_id(investor_id)")
+      .select("id, partner_id, status_code, approver_note, last_contact_at, partners_mirror:partner_id(investor_id)")
       .eq("campaign_id", campaignId),
   ]);
 
@@ -372,12 +377,13 @@ export async function parseTrackerXlsx(
   // Build an index from investor_id → existing campaign_partners row.
   const existingByInvestor = new Map<
     number,
-    { id: string; status_code: string | null; approver_note: string | null }
+    { id: string; status_code: string | null; approver_note: string | null; last_contact_at: string | null }
   >();
   for (const row of (cpRes.data ?? []) as unknown as Array<{
     id: string;
     status_code: string | null;
     approver_note: string | null;
+    last_contact_at: string | null;
     partners_mirror: { investor_id: number } | null;
   }>) {
     const invId = row.partners_mirror?.investor_id;
@@ -386,6 +392,7 @@ export async function parseTrackerXlsx(
         id: row.id,
         status_code: row.status_code,
         approver_note: row.approver_note,
+        last_contact_at: row.last_contact_at,
       });
     }
   }
@@ -487,6 +494,9 @@ export async function parseTrackerXlsx(
         matched_investor_firm: match?.firm_name ?? null,
         match_reason: reason,
         existing_campaign_partner_id: existing?.id ?? null,
+        existing_status_code: existing?.status_code ?? null,
+        existing_commentary: existing?.approver_note ?? null,
+        existing_last_contact_at: existing?.last_contact_at ?? null,
         planned_action: plannedAction,
         warnings,
       });
@@ -540,6 +550,10 @@ function statusCodeRank(code: string | null): number {
 export interface ApplyResult {
   inserted: number;
   updated: number;
+  /** Rows that were identical to what's already in the database — no
+   *  write was needed. Surfaced so the user can see the spreadsheet was
+   *  genuinely a duplicate rather than silently swallowed. */
+  duplicates: number;
   skipped: number;
   errors: Array<{ firm: string; reason: string }>;
 }
@@ -555,8 +569,12 @@ export async function applyTrackerIngest(
 
   let inserted = 0;
   let updated = 0;
+  let duplicates = 0;
   let skipped = 0;
   const errors: ApplyResult["errors"] = [];
+
+  // Fetch auth user once — reused for email override writes.
+  const { data: { user: authUser } } = await supabase.auth.getUser();
 
   for (const row of parsed.rows) {
     if (!wanted.has(`${row.sheet_name}:${row.row_number}`)) {
@@ -570,17 +588,46 @@ export async function applyTrackerIngest(
 
     try {
       if (row.planned_action === "update" && row.existing_campaign_partner_id) {
+        // ── Merge logic ────────────────────────────────────────────────
+        // Status: only advance, never downgrade.
+        // Commentary: append with date stamp, never overwrite.
+        // last_contact_at: take the more recent of the two.
+
         const patch: Record<string, unknown> = {};
-        if (row.status_code) {
+
+        // Status — only update if the incoming rank is equal or higher.
+        if (
+          row.status_code &&
+          statusCodeRank(row.status_code) >= statusCodeRank(row.existing_status_code)
+        ) {
           patch.status_code = row.status_code;
           patch.status_label = row.status_label;
         }
-        if (row.commentary) patch.approver_note = mergeCommentary(null, row.commentary);
-        if (row.last_contact_at) patch.last_contact_at = row.last_contact_at;
+
+        // Commentary — merge-append; never clobber existing notes.
+        const mergedCommentary = mergeCommentary(row.existing_commentary, row.commentary);
+        if (mergedCommentary !== row.existing_commentary) {
+          patch.approver_note = mergedCommentary;
+        }
+
+        // last_contact_at — take the more recent of the two dates.
+        if (row.last_contact_at) {
+          const incoming = new Date(row.last_contact_at).getTime();
+          const existing = row.existing_last_contact_at
+            ? new Date(row.existing_last_contact_at).getTime()
+            : null;
+          if (existing === null || incoming > existing) {
+            patch.last_contact_at = row.last_contact_at;
+          }
+        }
+
+        // If nothing meaningful changed (and no email to write), this is
+        // a true duplicate — record it as such without touching the DB.
         if (Object.keys(patch).length === 0 && !row.email) {
-          skipped++;
+          duplicates++;
           continue;
         }
+
         if (Object.keys(patch).length > 0) {
           const { error } = await supabase
             .from("campaign_partners")
@@ -588,7 +635,8 @@ export async function applyTrackerIngest(
             .eq("id", row.existing_campaign_partner_id);
           if (error) throw error;
         }
-        // Write email override if the sheet has one.
+
+        // Write email override if the sheet has one that differs.
         if (row.email) {
           const { data: cpRow } = await supabase
             .from("campaign_partners")
@@ -596,25 +644,24 @@ export async function applyTrackerIngest(
             .eq("id", row.existing_campaign_partner_id)
             .maybeSingle();
           const cp = cpRow as unknown as { partner_id: number; partners_mirror: { email: string | null } | null } | null;
-          if (cp) {
+          if (cp && authUser) {
             const existingEmail = cp.partners_mirror?.email;
             if (!existingEmail || existingEmail.toLowerCase() !== row.email.toLowerCase()) {
-              const { data: { user: authUser } } = await supabase.auth.getUser();
-              if (authUser) {
-                await supabase.from("partner_email_overrides").upsert({
-                  partner_id: cp.partner_id,
-                  email: row.email,
-                  email_tier: "unverified",
-                  source_note: `Imported from ${parsed.filename}`,
-                  created_by: authUser.id,
-                }, { onConflict: "partner_id" });
-              }
+              await supabase.from("partner_email_overrides").upsert({
+                partner_id: cp.partner_id,
+                email: row.email,
+                email_tier: "unverified",
+                source_note: `Imported from ${parsed.filename}`,
+                created_by: authUser.id,
+              }, { onConflict: "partner_id" });
             }
           }
         }
+
         updated++;
+
       } else if (row.planned_action === "insert") {
-        // Find a partner. Use contact_name from the sheet when available.
+        // ── Find or select a partner ───────────────────────────────────
         const { data: partners } = await supabase
           .from("partners_mirror")
           .select("id, name, is_primary_contact, email")
@@ -633,9 +680,9 @@ export async function applyTrackerIngest(
           skipped++;
           continue;
         }
+
         let partnerId: number;
         if (row.contact_name && pList.length > 1) {
-          // Fuzzy-match the sheet's contact name against partner names.
           const normContact = normFirm(row.contact_name);
           const nameMatch = pList.find((p) =>
             p.name && (normFirm(p.name) === normContact ||
@@ -648,35 +695,45 @@ export async function applyTrackerIngest(
         } else {
           partnerId = pList.find((p) => p.is_primary_contact)?.id ?? pList[0].id;
         }
-        const insertPayload: Record<string, unknown> = {
+
+        const upsertPayload: Record<string, unknown> = {
           campaign_id: parsed.campaign_id,
           partner_id: partnerId,
           status_code: row.status_code ?? "+0",
           status_label: row.status_label ?? labelFor("+0"),
         };
-        if (row.commentary) insertPayload.approver_note = mergeCommentary(null, row.commentary);
-        if (row.last_contact_at) insertPayload.last_contact_at = row.last_contact_at;
-        const { error } = await supabase.from("campaign_partners").insert(insertPayload);
+        if (row.commentary) upsertPayload.approver_note = mergeCommentary(null, row.commentary);
+        if (row.last_contact_at) upsertPayload.last_contact_at = row.last_contact_at;
+
+        // Use upsert so that importing the same spreadsheet twice is safe.
+        // On conflict the existing row wins — we do NOT blindly overwrite a
+        // row that the parse phase already classified as "insert" (which can
+        // only happen if the DB state changed between parse and apply, e.g.
+        // two imports in rapid succession). Ignore is the conservative choice.
+        const { error } = await supabase
+          .from("campaign_partners")
+          .upsert(upsertPayload, {
+            onConflict: "campaign_id,partner_id",
+            ignoreDuplicates: true,
+          });
         if (error) throw error;
         inserted++;
 
-        // Write email override if the sheet has an email that differs from the partner's.
-        if (row.email) {
+        // Write email override if the sheet has one that differs.
+        if (row.email && authUser) {
           const matchedPartner = pList.find((p) => p.id === partnerId);
           const existingEmail = matchedPartner?.email;
           if (!existingEmail || existingEmail.toLowerCase() !== row.email.toLowerCase()) {
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser) {
-              await supabase.from("partner_email_overrides").upsert({
-                partner_id: partnerId,
-                email: row.email,
-                email_tier: "unverified",
-                source_note: `Imported from ${parsed.filename}`,
-                created_by: authUser.id,
-              }, { onConflict: "partner_id" });
-            }
+            await supabase.from("partner_email_overrides").upsert({
+              partner_id: partnerId,
+              email: row.email,
+              email_tier: "unverified",
+              source_note: `Imported from ${parsed.filename}`,
+              created_by: authUser.id,
+            }, { onConflict: "partner_id" });
           }
         }
+
       } else {
         skipped++;
       }
@@ -688,7 +745,7 @@ export async function applyTrackerIngest(
     }
   }
 
-  return { inserted, updated, skipped, errors };
+  return { inserted, updated, duplicates, skipped, errors };
 }
 
 function mergeCommentary(

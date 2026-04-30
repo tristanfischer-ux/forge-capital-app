@@ -11,6 +11,7 @@ import {
 import { createServerClient } from "@/lib/supabase/server";
 import { AiSectionDrafter } from "./AiSectionDrafter";
 import VoiceReferenceCard from "./VoiceReferenceCard";
+import { TemplatePreviewModal } from "./TemplatePreviewModal";
 import type { SectionKind } from "./types";
 
 /**
@@ -278,7 +279,11 @@ function TemplateColumn({
         />
       )}
 
-      <TemplateFoot template={template} side={side} />
+      <TemplateFoot
+        template={template}
+        side={side}
+        activeCampaignId={activeCampaignId}
+      />
     </div>
   );
 }
@@ -620,9 +625,11 @@ function MissingTemplateBody({
 function TemplateFoot({
   template,
   side,
+  activeCampaignId,
 }: {
   template: CampaignTemplate | null;
   side: "asking" | "offering";
+  activeCampaignId: string | null;
 }) {
   const tone =
     side === "asking" ? "confident, hedged" : "directive buyer";
@@ -655,6 +662,15 @@ function TemplateFoot({
         </>
       ) : null}
       <span style={{ flex: 1 }} />
+      {/* Preview with real investor data — fetches the most recent
+          campaign_partner and renders the full composed draft inline.
+          Only shown when a campaign is active (activeCampaignId present). */}
+      {activeCampaignId ? (
+        <TemplatePreviewModal
+          campaignId={activeCampaignId}
+          side={side}
+        />
+      ) : null}
       {/* Editing happens inline via the "Redraft with Opus →" button on
           each section header (see AiSectionDrafter). The foot used to
           carry a disabled "Edit" stub — removed 2026-04-23 to stop the

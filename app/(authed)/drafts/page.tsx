@@ -266,10 +266,79 @@ function IntentChip({ intent }: { intent: DraftGroup["campaign_intent"] }) {
 }
 
 /**
+ * Small count pill shown inside a campaign chip — displays the number of
+ * drafts in that campaign as a distinct badge so the count reads clearly
+ * at a glance alongside the campaign name.
+ */
+function DraftCountPill({
+  count,
+  intent,
+}: {
+  count: number;
+  intent: DraftGroup["campaign_intent"];
+}) {
+  const style: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 18,
+    height: 18,
+    padding: "0 5px",
+    borderRadius: 999,
+    fontSize: 10,
+    fontWeight: 700,
+    lineHeight: 1,
+    marginLeft: 5,
+  };
+
+  if (intent === "investor") {
+    return (
+      <span
+        style={{
+          ...style,
+          background: "var(--accent)",
+          color: "#fff",
+        }}
+      >
+        {count}
+      </span>
+    );
+  }
+  if (intent === "customer") {
+    return (
+      <span
+        style={{
+          ...style,
+          background: "var(--green)",
+          color: "#fff",
+        }}
+      >
+        {count}
+      </span>
+    );
+  }
+  // Supplier — amber
+  return (
+    <span
+      style={{
+        ...style,
+        background: "var(--amber)",
+        color: "#fff",
+      }}
+    >
+      {count}
+    </span>
+  );
+}
+
+/**
  * Campaign summary chip on the right of the sheet-head-strip. Colours
  * match V4's hard-coded pill swatches: investor = indigo (default
  * `.evidence-chip` is green, so we colour investor indigo inline);
  * customer = green (default); supplier = amber (`.pending` variant).
+ *
+ * The draft count is now shown as a distinct `DraftCountPill` badge
+ * rather than inline text, so the number reads clearly at a glance.
  */
 function CampaignChip({ group }: { group: DraftGroup }) {
   const count = group.drafts.length;
@@ -277,7 +346,8 @@ function CampaignChip({ group }: { group: DraftGroup }) {
     return (
       <span className="evidence-chip pending">
         <span className="dot" />
-        {group.campaign_name}: {count}
+        {group.campaign_name}
+        <DraftCountPill count={count} intent="supplier" />
       </span>
     );
   }
@@ -285,7 +355,8 @@ function CampaignChip({ group }: { group: DraftGroup }) {
     return (
       <span className="evidence-chip">
         <span className="dot" style={{ background: "var(--green)" }} />
-        {group.campaign_name}: {count}
+        {group.campaign_name}
+        <DraftCountPill count={count} intent="customer" />
       </span>
     );
   }
@@ -300,7 +371,8 @@ function CampaignChip({ group }: { group: DraftGroup }) {
       }}
     >
       <span className="dot" style={{ background: "var(--accent)" }} />
-      {group.campaign_name}: {count}
+      {group.campaign_name}
+      <DraftCountPill count={count} intent="investor" />
     </span>
   );
 }

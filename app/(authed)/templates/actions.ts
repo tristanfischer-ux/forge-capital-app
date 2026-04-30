@@ -464,6 +464,81 @@ export async function previewCredibilityWithOpus(input: {
   }
 }
 
+/**
+ * Server action: fetch one real campaign_partner for the active campaign
+ * and render the full composed draft so the modal can show what a template
+ * looks like with real investor data substituted.
+ *
+ * Returns the rendered subject + full body (salutation → paragraphs →
+ * sign-off). Falls back gracefully when no partner data is available —
+ * the modal should always show something useful.
+ */
+export type TemplatePreviewData =
+  | {
+      ok: true;
+      subject: string;
+      fullBody: string;
+      partnerName: string | null;
+      firmName: string | null;
+    }
+  | { ok: false; error: string };
+
+export async function getTemplatePreviewData(
+  campaignId: string,
+): Promise<TemplatePreviewData> {
+  if (!campaignId) return { ok: false, error: "campaignId is required." };
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Find the most recently active campaign_partner for this campaign.
+  // Prefer approved (+1 or +2) partners so the preview uses realistic data;
+  // fall back to any partner so the feature works even with a fresh campaign.
+  const { data: cpRow, error: cpErr } = await supabase
+    .from("campaign_partners")
+    .select("id")
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (cpErr) {
+    return { ok: false, error: `Partner lookup failed: ${cpErr.message}` };
+  }
+  if (!cpRow) {
+    return {
+      ok: false,
+      error:
+        "No partners in this campaign yet — add a partner to the tracker first, then preview.",
+    };
+  }
+
+  // Reuse the full modal data fetch so variable substitution is identical
+  // to what the tracker draft page does.
+  const { getInvestorModalData } = await import("@/lib/queries/investorModal");
+  const { composeDraft } = await import(
+    "@/app/(authed)/tracker/[campaignPartnerId]/draft/compose"
+  );
+
+  const data = await getInvestorModalData(cpRow.id);
+  if (!data) {
+    return { ok: false, error: "Could not load partner data for preview." };
+  }
+
+  const draft = composeDraft(data);
+
+  return {
+    ok: true,
+    subject: draft.subject,
+    fullBody: draft.fullBody,
+    partnerName: data.primary_partner?.name ?? null,
+    firmName: data.investor.firm_name ?? null,
+  };
+}
+
 export type AuditResult =
   | {
       ok: true;

@@ -51,6 +51,9 @@ interface ParsedTracker {
 interface ApplyResult {
   inserted: number;
   updated: number;
+  /** Rows that were identical to what's already in the database — no
+   *  write was needed. */
+  duplicates: number;
   skipped: number;
   errors: Array<{ firm: string; reason: string }>;
 }
@@ -226,6 +229,12 @@ export function ImportTrackerClient({
             <b style={{ color: "var(--accent)" }}>{applied.updated}</b> existing
             rows updated
           </li>
+          {applied.duplicates > 0 && (
+            <li>
+              <b style={{ color: "var(--text-dim)" }}>{applied.duplicates}</b>{" "}
+              identical to database — no changes needed (safe to re-import)
+            </li>
+          )}
           <li>
             <b style={{ color: "var(--text-dim)" }}>{applied.skipped}</b>{" "}
             skipped (unmatched / ambiguous / excluded from selection)
