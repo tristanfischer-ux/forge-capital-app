@@ -809,10 +809,45 @@ export async function getMatchScore(
     )
     .eq("actively_deploying", true);
 
+  let candidates: CandidateRow[] = [];
+
   if (usingHybrid) {
-    // Fetch exactly the semantically-similar ids. Order is lost on the
-    // `.in()` PostgREST roundtrip — we re-sort by the ANN rank below.
-    candidatesQuery = candidatesQuery.in("id", annIds!);
+    // Batch the .in() call in chunks of 1000 to avoid PostgREST URL-length limit.
+    const CHUNK = 1000;
+    const chunks: number[][] = [];
+    for (let i = 0; i < annIds!.length; i += CHUNK) {
+      chunks.push(annIds!.slice(i, i + CHUNK));
+    }
+    const batchResults = await Promise.all(
+      chunks.map((chunk) =>
+        supabase
+          .from("investors_mirror")
+          .select(
+            `
+            id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
+            cheque_min_usd, cheque_max_usd, fund_size_usd,
+            thesis_summary, thesis_deep, ideal_company_profile,
+            hardware_fit_score,
+            synthesis_data, investment_pattern, connection_brief,
+            team_expertise, value_add, recent_activity,
+            synthesized_at, last_enriched,
+            chrome_verified, last_synced_at,
+            partners_mirror:partners_mirror!partners_mirror_investor_id_fkey (
+              id, name, title, email_tier, is_primary_contact, email
+            )
+            `,
+          )
+          .eq("actively_deploying", true)
+          .in("id", chunk),
+      ),
+    );
+    for (const { data, error } of batchResults) {
+      if (error) {
+        console.warn("[match-score] batch chunk failed:", error.message);
+        continue;
+      }
+      candidates.push(...((data ?? []) as unknown as CandidateRow[]));
+    }
   } else {
     // Legacy lexical pool — ordered by freshness, limited to candidatePool.
     candidatesQuery = candidatesQuery
@@ -823,22 +858,21 @@ export async function getMatchScore(
       const idList = excludeIds.join(",");
       candidatesQuery = candidatesQuery.not("id", "in", `(${idList})`);
     }
+    const { data: poolData, error: poolErr } = await candidatesQuery;
+    if (poolErr) {
+      console.error("match-score pool query failed:", poolErr.message);
+      return {
+        rows: [],
+        totalScored: 0,
+        totalPool: 0,
+        archetypePoolSize: poolSize.investor,
+        firstConflict: null,
+        detectedSignals: signals,
+        suggestedArchetype: suggested,
+      };
+    }
+    candidates = (poolData ?? []) as unknown as CandidateRow[];
   }
-
-  const { data: poolData, error: poolErr } = await candidatesQuery;
-  if (poolErr) {
-    console.error("match-score pool query failed:", poolErr.message);
-    return {
-      rows: [],
-      totalScored: 0,
-      totalPool: 0,
-      archetypePoolSize: poolSize.investor,
-      firstConflict: null,
-      detectedSignals: signals,
-      suggestedArchetype: suggested,
-    };
-  }
-  let candidates = (poolData ?? []) as unknown as CandidateRow[];
 
   // When hybrid retrieval is active, preserve ANN rank by sorting the
   // fetched rows against the original annIds order — PostgREST's .in()
