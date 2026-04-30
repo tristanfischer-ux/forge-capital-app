@@ -539,6 +539,102 @@ export async function getTemplatePreviewData(
   };
 }
 
+export type DuplicateTemplateResult =
+  | { ok: true; newId: string }
+  | { ok: false; error: string };
+
+/**
+ * Server action: duplicate the most recent email_templates row for a campaign.
+ * Appends " (copy)" to the template_name. All content columns are copied
+ * verbatim — no AI involvement, no reformatting. The new row gets a fresh
+ * captured_at so it sorts above the original in the latest-first ordering.
+ *
+ * Takes `campaignId` (not `templateId`) because the templates page only
+ * exposes the campaign — the DB-level row ID is not surfaced in the UI.
+ * Duplicates the most recent row for the campaign (same resolution rule
+ * used by the templates query).
+ */
+export async function duplicateTemplate(input: {
+  campaignId: string;
+}): Promise<DuplicateTemplateResult> {
+  const { campaignId } = input;
+  if (!campaignId) return { ok: false, error: "campaignId is required." };
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Read the most recent template row for this campaign — RLS ensures
+  // only the founder can read it.
+  const { data: src, error: readErr } = await supabase
+    .from("email_templates")
+    .select(
+      [
+        "id",
+        "campaign_id",
+        "template_name",
+        "credibility_paragraph_short",
+        "credibility_paragraph_full",
+        "company_paragraph",
+        "intelligent_synthesis_template",
+        "cta_variant",
+        "full_template_rendered",
+        "source_thread_id",
+        "captured_from",
+      ].join(","),
+    )
+    .eq("campaign_id", campaignId)
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (readErr) {
+    return { ok: false, error: `Template read failed: ${readErr.message}` };
+  }
+  if (!src) {
+    return {
+      ok: false,
+      error:
+        "No template found for this campaign yet — draft at least one section first, then duplicate.",
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sourceRow = src as any as Record<string, string | null>;
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("email_templates")
+    .insert({
+      campaign_id: sourceRow.campaign_id,
+      template_name: sourceRow.template_name
+        ? `${sourceRow.template_name} (copy)`
+        : "(copy)",
+      credibility_paragraph_short: sourceRow.credibility_paragraph_short,
+      credibility_paragraph_full: sourceRow.credibility_paragraph_full,
+      company_paragraph: sourceRow.company_paragraph,
+      intelligent_synthesis_template: sourceRow.intelligent_synthesis_template,
+      cta_variant: sourceRow.cta_variant,
+      full_template_rendered: sourceRow.full_template_rendered,
+      source_thread_id: sourceRow.source_thread_id,
+      captured_from: sourceRow.captured_from,
+      // captured_at defaults to now() — places the copy above the original
+      // in latest-first ordering.
+    })
+    .select("id")
+    .single();
+
+  if (insErr) {
+    return { ok: false, error: `Duplicate insert failed: ${insErr.message}` };
+  }
+
+  revalidatePath("/templates");
+  revalidatePath("/home");
+
+  return { ok: true, newId: (inserted as { id: string }).id };
+}
+
 export type AuditResult =
   | {
       ok: true;
@@ -841,3 +937,4 @@ function buildPromptForSection(
     }
   }
 }
+

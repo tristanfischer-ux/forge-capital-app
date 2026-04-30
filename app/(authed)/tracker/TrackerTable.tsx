@@ -442,6 +442,25 @@ export function TrackerTable({
                       statusCode={row.status_code}
                       statusLabel={row.status_label}
                     />
+                    {row.needs_follow_up ? (
+                      <span
+                        title="Last outbound email sent 5+ days ago with no reply — consider following up"
+                        style={{
+                          display: "inline-block",
+                          marginLeft: 6,
+                          padding: "1px 6px",
+                          borderRadius: 999,
+                          fontSize: 9,
+                          fontWeight: 600,
+                          background: "var(--amber-light, #fef3c7)",
+                          color: "var(--amber, #d97706)",
+                          border: "1px solid #fde68a",
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        Follow up?
+                      </span>
+                    ) : null}
                   </td>
                   <td style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 11 }}>
                     {formatDays(row.days_since_last_contact)}
@@ -512,6 +531,10 @@ function CommentaryCell({ row }: { row: TrackerRow }) {
  *   1. `↓ N in · ↑ N out · Xd ago` — counts + relative last-touched
  *   2. latest subject (truncated to 60 chars)
  *
+ * Tracking indicators shown as small icon badges when data is present:
+ *   ✉︎ (envelope icon, green) — email was opened (tracking pixel fired)
+ *   ↗ (link icon, accent)    — a tracked link was clicked
+ *
  * When a partner has zero contact_events, shows the faint
  * "no email traffic yet" line — matches the empty-state vocabulary used
  * elsewhere in the app (weekly section, drawer commentary log).
@@ -554,6 +577,33 @@ function EmailStatsCell({ row }: { row: TrackerRow }) {
         </span>
         <span style={{ color: "var(--text-faint)" }}>·</span>
         <span style={{ color: "var(--text-faint)" }}>{relative}</span>
+        {/* Tracking indicators — only shown when tracking events exist */}
+        {row.email_opened ? (
+          <span
+            title="Email opened (tracking pixel loaded by recipient)"
+            style={{
+              fontSize: 12,
+              color: "var(--green)",
+              cursor: "default",
+              userSelect: "none",
+            }}
+          >
+            ✉︎
+          </span>
+        ) : null}
+        {row.link_clicked ? (
+          <span
+            title="A link in this email was clicked"
+            style={{
+              fontSize: 12,
+              color: "var(--accent)",
+              cursor: "default",
+              userSelect: "none",
+            }}
+          >
+            ↗
+          </span>
+        ) : null}
       </div>
       {truncated ? (
         <div

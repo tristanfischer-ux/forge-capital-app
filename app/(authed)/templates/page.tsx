@@ -12,6 +12,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { AiSectionDrafter } from "./AiSectionDrafter";
 import VoiceReferenceCard from "./VoiceReferenceCard";
 import { TemplatePreviewModal } from "./TemplatePreviewModal";
+import { DuplicateTemplateButton } from "./DuplicateTemplateButton";
 import type { SectionKind } from "./types";
 
 /**
@@ -670,6 +671,11 @@ function TemplateFoot({
           campaignId={activeCampaignId}
           side={side}
         />
+      ) : null}
+      {/* Duplicate button — creates a copy of the current template for
+          variant testing (A/B subject lines, paragraph tweaks). */}
+      {activeCampaignId && template ? (
+        <DuplicateTemplateButton campaignId={activeCampaignId} />
       ) : null}
       {/* Editing happens inline via the "Redraft with Opus →" button on
           each section header (see AiSectionDrafter). The foot used to

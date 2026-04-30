@@ -439,17 +439,21 @@ export async function getPipelineHealth(): Promise<PipelineHealth> {
 
   // ----- 7. Gmail sync ---------------------------------------------
   //
-  // Not yet deployed. contact_events table is empty. Render an honest
-  // "not yet deployed" state with count from whatever is there (0 today).
+  // Gmail sync may run via launchd (com.forgecapital.gmail-sync) or via
+  // an external script — we can't rely on launchd job detection alone.
+  // Instead, check contact_events for recent activity: if rows exist
+  // with event_at within the last 30 minutes, the pipeline IS healthy
+  // regardless of how it runs.
   {
     const events = contactEventsTotal < 0 ? 0 : contactEventsTotal;
     const latest = latestEvent ? new Date(latestEvent) : null;
     let status: StageStatus;
     let reason: string;
-    if (events === 0) {
+    if (events === 0 && !latest) {
+      // No events at all — sync genuinely hasn't run yet.
       status = "warn";
       reason =
-        "Gmail sync not yet deployed — stats will populate once com.forgecapital.gmail-sync lands.";
+        "No contact events found — Gmail sync will populate this once it runs.";
     } else if (!latest) {
       status = "warn";
       reason = "Events present but no MAX(event_at) — check the table.";
@@ -458,6 +462,9 @@ export async function getPipelineHealth(): Promise<PipelineHealth> {
       if (ageMin < 15) {
         status = "ok";
         reason = `Last Gmail event ${Math.round(ageMin)} min ago.`;
+      } else if (ageMin < 30) {
+        status = "ok";
+        reason = `Last Gmail event ${Math.round(ageMin)} min ago — within healthy window.`;
       } else if (ageMin < 60) {
         status = "warn";
         reason = `Last Gmail event ${Math.round(ageMin)} min ago.`;
@@ -471,7 +478,7 @@ export async function getPipelineHealth(): Promise<PipelineHealth> {
       label: "Gmail sync",
       hint: "Pulls sent / replies / bounces into contact_events.",
       launchdLabel: "com.forgecapital.gmail-sync",
-      cadence: "Not yet deployed (planned: every 10 min)",
+      cadence: "Every 15 min via Vercel Cron (/api/cron/gmail-sync)",
       count: events,
       countLabel: "contact events ingested",
       countSource: "COUNT(*) FROM public.contact_events",

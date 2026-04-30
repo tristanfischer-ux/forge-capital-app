@@ -144,7 +144,9 @@ export default async function TrackerPage({
             prefix with ` | ` separator; newest appended.
           </div>
         </div>
-        <span className="section-link">Open master sheet ↗</span>
+        {/* "Open master sheet" was a V4 artefact — the app IS the master
+            sheet now. Removed the inert span; the Export button in the
+            TrackerTable header serves the same purpose. */}
       </div>
 
       {/* Tier-filter banner — only renders when ?tier=... is active. Gives

@@ -63,6 +63,14 @@ export interface TrackerRow {
   last_event_at: string | null;
   /** Summary text of the most recent event — usually the email subject. Truncated to 120 chars. */
   latest_subject: string | null;
+  /** True when status_code >= +1 (email sent), the most recent contact
+   *  event is outbound, and it is older than 5 days with no inbound
+   *  reply since. Read-only UI hint — not automation. */
+  needs_follow_up: boolean;
+  /** True if at least one email_opened tracking event exists for this partner. */
+  email_opened: boolean;
+  /** True if at least one link_clicked tracking event exists for this partner. */
+  link_clicked: boolean;
 }
 
 /**
@@ -186,6 +194,12 @@ interface EventAggregate {
   emails_out: number;
   last_event_at: string | null;
   latest_subject: string | null;
+  /** Direction of the most recent event — used by the follow-up hint. */
+  latest_direction: "inbound" | "outbound" | null;
+  /** Set to true if any event has event_type='email_opened'. */
+  email_opened: boolean;
+  /** Set to true if any event has event_type='link_clicked'. */
+  link_clicked: boolean;
 }
 
 /**
@@ -216,7 +230,7 @@ async function fetchEventAggregates(
 
   const { data, error } = await supabase
     .from("contact_events")
-    .select("campaign_partner_id, direction, event_at, summary")
+    .select("campaign_partner_id, direction, event_at, summary, event_type")
     .in("campaign_partner_id", ids)
     .order("event_at", { ascending: false });
 
@@ -232,6 +246,7 @@ async function fetchEventAggregates(
     direction: string | null;
     event_at: string;
     summary: string | null;
+    event_type: string | null;
   };
   const rows = (data ?? []) as unknown as EvRow[];
   for (const ev of rows) {
@@ -245,11 +260,19 @@ async function fetchEventAggregates(
         latest_subject: summary.length > 0
           ? (summary.length > 120 ? summary.slice(0, 120) : summary)
           : null,
+        latest_direction:
+          ev.direction === "inbound" || ev.direction === "outbound"
+            ? ev.direction
+            : null,
+        email_opened: false,
+        link_clicked: false,
       };
       out.set(ev.campaign_partner_id, agg);
     }
     if (ev.direction === "inbound") agg.emails_in += 1;
     else if (ev.direction === "outbound") agg.emails_out += 1;
+    if (ev.event_type === "email_opened") agg.email_opened = true;
+    if (ev.event_type === "link_clicked") agg.link_clicked = true;
   }
   return out;
 }
@@ -297,6 +320,38 @@ const VALID_TIER_FILTERS: readonly TrackerTierFilter[] = [
  */
 export function isTrackerTierFilter(v: unknown): v is TrackerTierFilter {
   return typeof v === "string" && (VALID_TIER_FILTERS as readonly string[]).includes(v);
+}
+
+/**
+ * Determines whether a tracker row should show a "Follow up?" hint.
+ *
+ * Conditions (all must be true):
+ *   1. status_code is a positive integer >= 1 (email has been sent)
+ *   2. The most recent contact_event is outbound
+ *   3. That outbound event is older than 5 days
+ *   4. There are zero inbound replies (emails_in === 0)
+ *
+ * This is a read-only UI hint — it does not trigger any automation.
+ */
+function computeFollowUpHint(
+  statusCode: string | null,
+  latestDirection: "inbound" | "outbound" | null,
+  lastEventAt: string | null,
+  emailsIn: number,
+): boolean {
+  if (!statusCode) return false;
+  // Parse the status_code (e.g. "+1", "+2"). Must be >= 1.
+  const codeNum = parseInt(statusCode, 10);
+  if (!Number.isFinite(codeNum) || codeNum < 1) return false;
+  // Most recent event must be outbound.
+  if (latestDirection !== "outbound") return false;
+  // Must have no inbound replies.
+  if (emailsIn > 0) return false;
+  // Last event must be older than 5 days.
+  if (!lastEventAt) return false;
+  const ageMs = Date.now() - new Date(lastEventAt).getTime();
+  const fiveDaysMs = 5 * 24 * 60 * 60 * 1000;
+  return ageMs > fiveDaysMs;
 }
 
 /**
@@ -415,6 +470,14 @@ export async function getTrackerRows(
       emails_out: agg?.emails_out ?? 0,
       last_event_at: agg?.last_event_at ?? null,
       latest_subject: agg?.latest_subject ?? null,
+      needs_follow_up: computeFollowUpHint(
+        row.status_code,
+        agg?.latest_direction ?? null,
+        agg?.last_event_at ?? null,
+        agg?.emails_in ?? 0,
+      ),
+      email_opened: agg?.email_opened ?? false,
+      link_clicked: agg?.link_clicked ?? false,
     };
   });
 }
