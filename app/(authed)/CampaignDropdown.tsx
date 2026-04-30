@@ -274,7 +274,8 @@ function CampaignOption({
   return (
     <Link
       href={fallbackHref}
-      onClick={onClick}
+      onMouseDown={onClick}
+      onClick={(e) => e.preventDefault()}
       className={active ? "camp-opt active" : "camp-opt"}
       role="option"
       aria-selected={active}

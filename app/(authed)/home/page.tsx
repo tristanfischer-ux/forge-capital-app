@@ -140,7 +140,7 @@ export default async function HomePage({
     <>
       {/* ──────────────── 1. Find a Match ──────────────── */}
       <div id="find-a-match">
-        <Suspense fallback={<SectionSkeleton label="Find a Match" height={600} />}>
+        <Suspense key={`match-${campaignId}`} fallback={<SectionSkeleton label="Find a Match" height={600} />}>
           <FindAMatchSection
             campaignId={campaignId}
             campaignName={activeCampaign?.name ?? "this campaign"}
@@ -151,7 +151,7 @@ export default async function HomePage({
 
       {/* ──────────────── 2. Approval ──────────────── */}
       <div id="approval">
-        <Suspense fallback={<SectionSkeleton label="Approval" height={480} />}>
+        <Suspense key={`approval-${campaignId}`} fallback={<SectionSkeleton label="Approval" height={480} />}>
           <ApprovalPage
             searchParams={searchParams}
             initialCampaigns={campaigns}
@@ -162,7 +162,7 @@ export default async function HomePage({
 
       {/* ──────────────── 3. Automation pipeline ──────────────── */}
       <div id="automation">
-        <Suspense fallback={<SectionSkeleton label="Automation pipeline" height={320} />}>
+        <Suspense key={`pipeline-${campaignId}`} fallback={<SectionSkeleton label="Automation pipeline" height={320} />}>
           <PipelinePage
             searchParams={searchParams}
             initialCampaigns={campaigns}
@@ -173,7 +173,7 @@ export default async function HomePage({
 
       {/* ──────────────── 4. Templates ──────────────── */}
       <div id="templates">
-        <Suspense fallback={<SectionSkeleton label="Templates" height={260} />}>
+        <Suspense key={`templates-${campaignId}`} fallback={<SectionSkeleton label="Templates" height={260} />}>
           <TemplatesPage
             searchParams={searchParams}
             initialCampaigns={campaigns}
@@ -184,7 +184,7 @@ export default async function HomePage({
 
       {/* ──────────────── 5. Eyeball review ──────────────── */}
       <div id="review">
-        <Suspense fallback={<SectionSkeleton label="Review" height={380} />}>
+        <Suspense key={`review-${campaignId}`} fallback={<SectionSkeleton label="Review" height={380} />}>
           <ReviewPage
             searchParams={searchParams}
             initialCampaigns={campaigns}
@@ -202,7 +202,7 @@ export default async function HomePage({
 
       {/* ──────────────── 7. Tracker ──────────────── */}
       <div id="tracker">
-        <Suspense fallback={<SectionSkeleton label="Tracker" height={520} />}>
+        <Suspense key={`tracker-${campaignId}`} fallback={<SectionSkeleton label="Tracker" height={520} />}>
           <TrackerPage
             searchParams={searchParams}
             initialCampaigns={campaigns}
@@ -213,7 +213,7 @@ export default async function HomePage({
 
       {/* ──────────────── 8. Weekly ──────────────── */}
       <div id="weekly">
-        <Suspense fallback={<SectionSkeleton label="Weekly" height={460} />}>
+        <Suspense key={`weekly-${campaignId}`} fallback={<SectionSkeleton label="Weekly" height={460} />}>
           <WeeklyPage
             searchParams={searchParams}
             initialCampaigns={campaigns}
