@@ -47,6 +47,7 @@ const PILLS: PillConfig[] = [
   { anchor: "drafts", label: "Drafts", deepLinkPath: "/drafts" },
   { anchor: "tracker", label: "Tracker", deepLinkPath: "/tracker" },
   { anchor: "weekly", label: "Weekly", deepLinkPath: "/weekly" },
+  { anchor: "inbox", label: "Inbox", deepLinkPath: "/inbox" },
 ];
 
 export function TopNav() {
