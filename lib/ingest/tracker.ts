@@ -95,7 +95,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
   ],
   last_contact_at: [
     "last contact", "last contacted", "date", "last email", "contact date",
-    "last touch", "last_contact_at",
+    "last touch", "last_contact_at", "latest", "first sent",
   ],
 };
 
@@ -103,7 +103,79 @@ function normHeader(h: string): string {
   return h.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function detectColumns(headers: string[]): Record<string, number | null> {
+/** Detect a multi-campaign layout: row 1 has group headers like
+ *  "SKYSAILS POWER", "FISHFROM", "PANATERE" that span column ranges.
+ *  Returns null for single-campaign sheets. */
+interface CampaignColumnGroup {
+  groupName: string;
+  startCol: number;
+  endCol: number; // exclusive
+}
+
+function detectMultiCampaignGroups(
+  row1: unknown[],
+): CampaignColumnGroup[] | null {
+  const groups: CampaignColumnGroup[] = [];
+  let lastNonEmpty = -1;
+
+  for (let i = 0; i < row1.length; i++) {
+    const val = cellToString(row1[i]);
+    if (val) {
+      if (lastNonEmpty >= 0 && groups.length > 0) {
+        groups[groups.length - 1].endCol = i;
+      }
+      groups.push({ groupName: val, startCol: i, endCol: row1.length });
+      lastNonEmpty = i;
+    }
+  }
+
+  // Need at least 2 groups to be multi-campaign (e.g. "INVESTOR INFO" + one campaign group)
+  if (groups.length < 2) return null;
+
+  // Check if any group header looks like a campaign (not "INVESTOR INFO")
+  const investorInfoAliases = ["investor info", "investor", "info", "shared"];
+  const campaignGroups = groups.filter(
+    (g) => !investorInfoAliases.includes(normHeader(g.groupName)),
+  );
+  if (campaignGroups.length < 1) return null;
+
+  return groups;
+}
+
+/** Fuzzy-match a campaign name against group headers.
+ *  "SkySails" matches "SKYSAILS POWER", "FishFrom" matches "FISHFROM", etc. */
+function matchCampaignToGroup(
+  campaignName: string,
+  groups: CampaignColumnGroup[],
+): CampaignColumnGroup | null {
+  const normCampaign = normHeader(campaignName);
+  // Exact normalised match
+  for (const g of groups) {
+    if (normHeader(g.groupName) === normCampaign) return g;
+  }
+  // Either contains the other
+  for (const g of groups) {
+    const normGroup = normHeader(g.groupName);
+    if (normGroup.includes(normCampaign) || normCampaign.includes(normGroup)) {
+      return g;
+    }
+  }
+  // Token subset: all campaign tokens appear in the group header
+  const campaignTokens = normCampaign.split(" ").filter((t) => t.length >= 2);
+  for (const g of groups) {
+    const groupTokens = new Set(normHeader(g.groupName).split(" ").filter((t) => t.length >= 2));
+    if (campaignTokens.length > 0 && campaignTokens.every((t) => groupTokens.has(t))) {
+      return g;
+    }
+  }
+  return null;
+}
+
+function detectColumns(
+  headers: string[],
+  scopeStart?: number,
+  scopeEnd?: number,
+): Record<string, number | null> {
   const out: Record<string, number | null> = {
     firm_name: null,
     contact_name: null,
@@ -113,14 +185,29 @@ function detectColumns(headers: string[]): Record<string, number | null> {
     last_contact_at: null,
   };
   const normed = headers.map(normHeader);
+  const lo = scopeStart ?? 0;
+  const hi = scopeEnd ?? headers.length;
+
   for (const [key, aliases] of Object.entries(HEADER_ALIASES)) {
-    // First pass: exact match against normalised header.
-    let idx = normed.findIndex((h) => aliases.includes(h));
+    // Per-campaign fields (status, commentary, last_contact_at) search within scope only.
+    // Shared fields (firm_name, contact_name, email) search everywhere.
+    const isPerCampaign = key === "status" || key === "commentary" || key === "last_contact_at";
+    const searchLo = isPerCampaign ? lo : 0;
+    const searchHi = isPerCampaign ? hi : headers.length;
+
+    // First pass: exact match against normalised header within scope.
+    let idx = -1;
+    for (let i = searchLo; i < searchHi; i++) {
+      if (aliases.includes(normed[i])) { idx = i; break; }
+    }
     if (idx < 0) {
-      // Second pass: any alias appears as a substring.
-      idx = normed.findIndex((h) =>
-        aliases.some((a) => a !== "name" && h.includes(a)),
-      );
+      // Second pass: any alias appears as a substring within scope.
+      for (let i = searchLo; i < searchHi; i++) {
+        if (aliases.some((a) => a !== "name" && normed[i].includes(a))) {
+          idx = i;
+          break;
+        }
+      }
     }
     out[key] = idx >= 0 ? idx : null;
   }
@@ -311,13 +398,48 @@ export async function parseTrackerXlsx(
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: null });
     if (aoa.length < 2) continue; // empty sheet
 
-    const headers = (aoa[0] as unknown[]).map((h) => cellToString(h) ?? "");
-    const cols = detectColumns(headers);
+    // Multi-campaign detection: check if row 1 has campaign group headers.
+    const row1 = aoa[0] as unknown[];
+    const multiGroups = detectMultiCampaignGroups(row1);
+
+    let headers: string[];
+    let dataStartRow: number;
+    let cols: Record<string, number | null>;
+
+    if (multiGroups) {
+      // Row 1 = group headers, row 2 = column headers. Data starts at row 3 (index 2).
+      if (aoa.length < 3) continue;
+      headers = (aoa[1] as unknown[]).map((h) => cellToString(h) ?? "");
+      dataStartRow = 2;
+
+      // Find the column group matching the active campaign.
+      const matchedGroup = matchCampaignToGroup(campaignName, multiGroups);
+      if (matchedGroup) {
+        cols = detectColumns(headers, matchedGroup.startCol, matchedGroup.endCol);
+      } else {
+        // Campaign not found in group headers — fall back to first non-info group
+        // and add a warning. Still detect shared columns (firm, contact, email) globally.
+        const investorInfoAliases = ["investor info", "investor", "info", "shared"];
+        const firstCampaignGroup = multiGroups.find(
+          (g) => !investorInfoAliases.includes(normHeader(g.groupName)),
+        );
+        if (firstCampaignGroup) {
+          cols = detectColumns(headers, firstCampaignGroup.startCol, firstCampaignGroup.endCol);
+        } else {
+          cols = detectColumns(headers);
+        }
+      }
+    } else {
+      // Single-campaign sheet — original behaviour.
+      headers = (aoa[0] as unknown[]).map((h) => cellToString(h) ?? "");
+      dataStartRow = 1;
+      cols = detectColumns(headers);
+    }
 
     // No firm column = unusable sheet.
     if (cols.firm_name === null) continue;
 
-    for (let i = 1; i < aoa.length; i++) {
+    for (let i = dataStartRow; i < aoa.length; i++) {
       const r = aoa[i] as unknown[];
       if (!r) continue;
       const firm = cols.firm_name !== null ? cellToString(r[cols.firm_name]) : null;
@@ -455,24 +577,51 @@ export async function applyTrackerIngest(
         }
         if (row.commentary) patch.approver_note = mergeCommentary(null, row.commentary);
         if (row.last_contact_at) patch.last_contact_at = row.last_contact_at;
-        if (Object.keys(patch).length === 0) {
+        if (Object.keys(patch).length === 0 && !row.email) {
           skipped++;
           continue;
         }
-        const { error } = await supabase
-          .from("campaign_partners")
-          .update(patch)
-          .eq("id", row.existing_campaign_partner_id);
-        if (error) throw error;
+        if (Object.keys(patch).length > 0) {
+          const { error } = await supabase
+            .from("campaign_partners")
+            .update(patch)
+            .eq("id", row.existing_campaign_partner_id);
+          if (error) throw error;
+        }
+        // Write email override if the sheet has one.
+        if (row.email) {
+          const { data: cpRow } = await supabase
+            .from("campaign_partners")
+            .select("partner_id, partners_mirror:partner_id(email)")
+            .eq("id", row.existing_campaign_partner_id)
+            .maybeSingle();
+          const cp = cpRow as unknown as { partner_id: number; partners_mirror: { email: string | null } | null } | null;
+          if (cp) {
+            const existingEmail = cp.partners_mirror?.email;
+            if (!existingEmail || existingEmail.toLowerCase() !== row.email.toLowerCase()) {
+              const { data: { user: authUser } } = await supabase.auth.getUser();
+              if (authUser) {
+                await supabase.from("partner_email_overrides").upsert({
+                  partner_id: cp.partner_id,
+                  email: row.email,
+                  email_tier: "unverified",
+                  source_note: `Imported from ${parsed.filename}`,
+                  created_by: authUser.id,
+                }, { onConflict: "partner_id" });
+              }
+            }
+          }
+        }
         updated++;
       } else if (row.planned_action === "insert") {
-        // Find a partner to hang the row off. Prefer primary contact.
+        // Find a partner. Use contact_name from the sheet when available.
         const { data: partners } = await supabase
           .from("partners_mirror")
-          .select("id, is_primary_contact, email")
+          .select("id, name, is_primary_contact, email")
           .eq("investor_id", row.matched_investor_id);
         const pList = (partners ?? []) as Array<{
           id: number;
+          name: string | null;
           is_primary_contact: boolean | null;
           email: string | null;
         }>;
@@ -484,8 +633,21 @@ export async function applyTrackerIngest(
           skipped++;
           continue;
         }
-        const partnerId =
-          pList.find((p) => p.is_primary_contact)?.id ?? pList[0].id;
+        let partnerId: number;
+        if (row.contact_name && pList.length > 1) {
+          // Fuzzy-match the sheet's contact name against partner names.
+          const normContact = normFirm(row.contact_name);
+          const nameMatch = pList.find((p) =>
+            p.name && (normFirm(p.name) === normContact ||
+              normFirm(p.name).includes(normContact) ||
+              normContact.includes(normFirm(p.name))),
+          );
+          partnerId = nameMatch?.id
+            ?? pList.find((p) => p.is_primary_contact)?.id
+            ?? pList[0].id;
+        } else {
+          partnerId = pList.find((p) => p.is_primary_contact)?.id ?? pList[0].id;
+        }
         const insertPayload: Record<string, unknown> = {
           campaign_id: parsed.campaign_id,
           partner_id: partnerId,
@@ -497,6 +659,24 @@ export async function applyTrackerIngest(
         const { error } = await supabase.from("campaign_partners").insert(insertPayload);
         if (error) throw error;
         inserted++;
+
+        // Write email override if the sheet has an email that differs from the partner's.
+        if (row.email) {
+          const matchedPartner = pList.find((p) => p.id === partnerId);
+          const existingEmail = matchedPartner?.email;
+          if (!existingEmail || existingEmail.toLowerCase() !== row.email.toLowerCase()) {
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) {
+              await supabase.from("partner_email_overrides").upsert({
+                partner_id: partnerId,
+                email: row.email,
+                email_tier: "unverified",
+                source_note: `Imported from ${parsed.filename}`,
+                created_by: authUser.id,
+              }, { onConflict: "partner_id" });
+            }
+          }
+        }
       } else {
         skipped++;
       }
