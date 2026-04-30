@@ -21,6 +21,7 @@ import WeeklyPage from "../weekly/page";
 import InboxPage from "../inbox/page";
 import ImportTrackerPage from "../import/page";
 import { GoogleConnectionStatus } from "../GoogleConnectionStatus";
+import { StageBanner } from "../StageBanner";
 
 /**
  * V4 single-page home — the whole app on one scroll, as V4 specifies
@@ -156,8 +157,7 @@ export default async function HomePage({
   return (
     <>
       {/* ──────────────── 1. Find a Match ──────────────── */}
-      <div>
-        <StageBanner number={1} label="Find a Match" />
+      <div id="find-a-match">
         <FindAMatch
           campaignId={campaignId}
           campaignName={activeCampaign?.name ?? "this campaign"}
@@ -168,8 +168,7 @@ export default async function HomePage({
       </div>
 
       {/* ──────────────── 2. Approval ──────────────── */}
-      <div>
-        <StageBanner number={2} label="Approval" />
+      <div id="approval">
         <Suspense fallback={<SectionSkeleton label="Approval" height={480} />}>
           <ApprovalPage
             searchParams={searchParams}
@@ -180,8 +179,7 @@ export default async function HomePage({
       </div>
 
       {/* ──────────────── 3. Automation pipeline ──────────────── */}
-      <div>
-        <StageBanner number={3} label="Automation" />
+      <div id="automation">
         <Suspense fallback={<SectionSkeleton label="Automation pipeline" height={320} />}>
           <PipelinePage
             searchParams={searchParams}
@@ -192,8 +190,7 @@ export default async function HomePage({
       </div>
 
       {/* ──────────────── 4. Templates ──────────────── */}
-      <div>
-        <StageBanner number={4} label="Templates" />
+      <div id="templates">
         <Suspense fallback={<SectionSkeleton label="Templates" height={260} />}>
           <TemplatesPage
             searchParams={searchParams}
@@ -204,8 +201,7 @@ export default async function HomePage({
       </div>
 
       {/* ──────────────── 5. Eyeball review ──────────────── */}
-      <div>
-        <StageBanner number={5} label="Review" />
+      <div id="review">
         <Suspense fallback={<SectionSkeleton label="Review" height={380} />}>
           <ReviewPage
             searchParams={searchParams}
@@ -216,16 +212,14 @@ export default async function HomePage({
       </div>
 
       {/* ──────────────── 6. Drafts ──────────────── */}
-      <div>
-        <StageBanner number={6} label="Drafts" />
+      <div id="drafts">
         <Suspense fallback={<SectionSkeleton label="Drafts" height={260} />}>
           <DraftsPage />
         </Suspense>
       </div>
 
       {/* ──────────────── 7. Tracker ──────────────── */}
-      <div>
-        <StageBanner number={7} label="Tracker" />
+      <div id="tracker">
         <Suspense fallback={<SectionSkeleton label="Tracker" height={520} />}>
           <TrackerPage
             searchParams={searchParams}
@@ -236,8 +230,7 @@ export default async function HomePage({
       </div>
 
       {/* ──────────────── 8. Weekly ──────────────── */}
-      <div>
-        <StageBanner number={8} label="Weekly" />
+      <div id="weekly">
         <Suspense fallback={<SectionSkeleton label="Weekly" height={460} />}>
           <WeeklyPage
             searchParams={searchParams}
@@ -249,7 +242,7 @@ export default async function HomePage({
 
       {/* ──────────────── 9. Gmail + Calendar ──────────────── */}
       <div id="gmail-calendar">
-        <StageBanner number={9} label="Gmail + Calendar" />
+        <StageBanner number={9} title="Gmail + Calendar" />
         <section className="section" style={{ padding: "24px 0" }}>
           <GoogleConnectionStatus />
         </section>
@@ -257,29 +250,18 @@ export default async function HomePage({
 
       {/* ──────────────── 10. Import tracker ──────────────── */}
       <div id="import-tracker">
-        <StageBanner number={10} label="Import Tracker" />
         <Suspense fallback={<SectionSkeleton label="Import tracker" height={320} />}>
           <ImportTrackerPage />
         </Suspense>
       </div>
 
       {/* ──────────────── 11. Inbox ──────────────── */}
-      <div>
-        <StageBanner number={11} label="Inbox" />
+      <div id="inbox">
         <Suspense fallback={<SectionSkeleton label="Inbox" height={380} />}>
           <InboxPage />
         </Suspense>
       </div>
     </>
-  );
-}
-
-function StageBanner({ number, label, anchor }: { number: number; label: string; anchor?: string }) {
-  return (
-    <div className="stage-banner" id={anchor}>
-      <span className="stage-num">{number}.</span>
-      {label}
-    </div>
   );
 }
 

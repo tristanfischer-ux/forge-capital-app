@@ -42,7 +42,8 @@ button { font-family: inherit; }
 .brand { font-weight: 700; font-size: 17px; color: var(--accent); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
 .brand .dot { width: 10px; height: 10px; background: var(--accent); border-radius: 3px; transform: rotate(45deg); }
 .brand .sub { font-weight: 500; color: var(--text); margin-left: 4px; }
-.topnav { display: flex; gap: 2px; margin-left: 10px; }
+.topnav { display: flex; gap: 2px; margin-left: 10px; overflow-x: auto; flex-shrink: 1; min-width: 0; scrollbar-width: none; -ms-overflow-style: none; }
+.topnav::-webkit-scrollbar { display: none; }
 .topnav .pill { padding: 7px 14px; border-radius: 8px; color: var(--text-dim); font-weight: 500; font-size: 13px; cursor: pointer; border: 1px solid var(--border-soft, #e5e7eb); background: var(--surface, #f9fafb); text-decoration: none; display: inline-flex; align-items: center; white-space: nowrap; }
 .topnav .pill:hover { background: var(--accent-light); color: var(--text); text-decoration: none; border-color: var(--accent-light); }
 .topnav .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -52,7 +53,7 @@ button { font-family: inherit; }
 .stage-banner .stage-num { font-size: 26px; font-weight: 800; opacity: 0.85; }
 .topbar .spacer { flex: 1; }
 
-.campaign-switcher { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px; background: var(--accent-softer); border: 1px solid #e4e1ff; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--accent); position: relative; }
+.campaign-switcher { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px; background: var(--accent-softer); border: 1px solid #e4e1ff; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--accent); position: relative; flex-shrink: 0; }
 .campaign-switcher .label { color: var(--text-dim); font-weight: 500; }
 .campaign-switcher .name { color: var(--accent); font-weight: 600; }
 .campaign-switcher .type-badge { font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 4px; }
