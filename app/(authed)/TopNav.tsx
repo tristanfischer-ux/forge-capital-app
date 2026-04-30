@@ -34,20 +34,22 @@ interface PillConfig {
   label: string;
   /** Route that deep-links to this section on its own. */
   deepLinkPath: string;
-  /** V4 `.pill.auto` pink-ribbon modifier — automation pill only. */
-  auto?: boolean;
+  /** Stage number shown before the label. */
+  number: number;
 }
 
 const PILLS: PillConfig[] = [
-  { anchor: "find-a-match", label: "Find a match", deepLinkPath: "/match" },
-  { anchor: "approval", label: "Approval", deepLinkPath: "/approval" },
-  { anchor: "automation", label: "Automation", deepLinkPath: "/pipeline", auto: true },
-  { anchor: "templates", label: "Templates", deepLinkPath: "/templates" },
-  { anchor: "review", label: "Review", deepLinkPath: "/review" },
-  { anchor: "drafts", label: "Drafts", deepLinkPath: "/drafts" },
-  { anchor: "tracker", label: "Tracker", deepLinkPath: "/tracker" },
-  { anchor: "weekly", label: "Weekly", deepLinkPath: "/weekly" },
-  { anchor: "inbox", label: "Inbox", deepLinkPath: "/inbox" },
+  { anchor: "find-a-match", label: "Find a match", deepLinkPath: "/match", number: 1 },
+  { anchor: "approval", label: "Approval", deepLinkPath: "/approval", number: 2 },
+  { anchor: "automation", label: "Automation", deepLinkPath: "/pipeline", number: 3 },
+  { anchor: "templates", label: "Templates", deepLinkPath: "/templates", number: 4 },
+  { anchor: "review", label: "Review", deepLinkPath: "/review", number: 5 },
+  { anchor: "drafts", label: "Drafts", deepLinkPath: "/drafts", number: 6 },
+  { anchor: "tracker", label: "Tracker", deepLinkPath: "/tracker", number: 7 },
+  { anchor: "weekly", label: "Weekly", deepLinkPath: "/weekly", number: 8 },
+  { anchor: "gmail-calendar", label: "Gmail + Calendar", deepLinkPath: "/gmail-calendar", number: 9 },
+  { anchor: "import-tracker", label: "Import tracker", deepLinkPath: "/import", number: 10 },
+  { anchor: "inbox", label: "Inbox", deepLinkPath: "/inbox", number: 11 },
 ];
 
 export function TopNav() {
@@ -110,11 +112,17 @@ export function TopNav() {
 
         const classes = ["pill"];
         if (active) classes.push("active");
-        if (pill.auto) classes.push("auto");
 
         // On /home: plain anchor — browser's smooth-scroll (via the V4
         // CSS `scroll-behavior: smooth` on <html>) handles the scroll.
         // Elsewhere: Next <Link> back to /home with the anchor.
+        const pillContent = (
+          <>
+            <span className="pill-num">{pill.number}.</span>
+            {pill.label}
+          </>
+        );
+
         if (onHome) {
           return (
             <a
@@ -123,7 +131,7 @@ export function TopNav() {
               className={classes.join(" ")}
               aria-current={active ? "location" : undefined}
             >
-              {pill.label}
+              {pillContent}
             </a>
           );
         }
@@ -134,7 +142,7 @@ export function TopNav() {
             aria-current={active ? "page" : undefined}
             className={classes.join(" ")}
           >
-            {pill.label}
+            {pillContent}
           </Link>
         );
       })}

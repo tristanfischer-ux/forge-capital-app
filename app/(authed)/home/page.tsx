@@ -14,10 +14,13 @@ import ApprovalPage from "../approval/page";
 import PipelinePage from "../pipeline/page";
 import TemplatesPage from "../templates/page";
 import ReviewPage from "../review/page";
-import VerificationPage from "../verification/page";
+// Verification gate folded into the review step — no separate section
 import DraftsPage from "../drafts/page";
 import TrackerPage from "../tracker/page";
 import WeeklyPage from "../weekly/page";
+import InboxPage from "../inbox/page";
+import ImportTrackerPage from "../import/page";
+import { GoogleConnectionStatus } from "../GoogleConnectionStatus";
 
 /**
  * V4 single-page home — the whole app on one scroll, as V4 specifies
@@ -153,104 +156,133 @@ export default async function HomePage({
   return (
     <>
       {/* ──────────────── 1. Find a Match ──────────────── */}
-      <FindAMatch
-        campaignId={campaignId}
-        campaignName={activeCampaign?.name ?? "this campaign"}
-        initialData={findMatchInitial}
-        initialArchetype={archetype}
-        customerPartners={customerPartners}
-      />
-
-      {/* Each section below is wrapped in its own <Suspense> boundary
-          so the RSC stream flushes them independently. Pre-2026-04-24
-          behaviour: the whole /home tree awaited every section's data
-          fetch before flushing a byte, so a campaign switch blocked
-          for ~2-5s on the slowest section. Now Find-a-Match renders
-          first (it's synchronous), then every other section paints as
-          its fetch resolves. Total wall-clock is similar but the
-          page is visibly alive in <1s instead of feeling frozen.
-          Fallback is a simple section-height placeholder — same
-          rough height as the loaded section so the scroll position
-          doesn't jump as sections fill in. */}
+      <div>
+        <StageBanner number={1} label="Find a Match" />
+        <FindAMatch
+          campaignId={campaignId}
+          campaignName={activeCampaign?.name ?? "this campaign"}
+          initialData={findMatchInitial}
+          initialArchetype={archetype}
+          customerPartners={customerPartners}
+        />
+      </div>
 
       {/* ──────────────── 2. Approval ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Approval" height={480} />}>
-        <ApprovalPage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      <div>
+        <StageBanner number={2} label="Approval" />
+        <Suspense fallback={<SectionSkeleton label="Approval" height={480} />}>
+          <ApprovalPage
+            searchParams={searchParams}
+            initialCampaigns={campaigns}
+            initialCampaignId={campaignId}
+          />
+        </Suspense>
+      </div>
 
       {/* ──────────────── 3. Automation pipeline ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Automation pipeline" height={320} />}>
-        <PipelinePage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      <div>
+        <StageBanner number={3} label="Automation" />
+        <Suspense fallback={<SectionSkeleton label="Automation pipeline" height={320} />}>
+          <PipelinePage
+            searchParams={searchParams}
+            initialCampaigns={campaigns}
+            initialCampaignId={campaignId}
+          />
+        </Suspense>
+      </div>
 
       {/* ──────────────── 4. Templates ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Templates" height={260} />}>
-        <TemplatesPage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      <div>
+        <StageBanner number={4} label="Templates" />
+        <Suspense fallback={<SectionSkeleton label="Templates" height={260} />}>
+          <TemplatesPage
+            searchParams={searchParams}
+            initialCampaigns={campaigns}
+            initialCampaignId={campaignId}
+          />
+        </Suspense>
+      </div>
 
       {/* ──────────────── 5. Eyeball review ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Review" height={380} />}>
-        <ReviewPage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      <div>
+        <StageBanner number={5} label="Review" />
+        <Suspense fallback={<SectionSkeleton label="Review" height={380} />}>
+          <ReviewPage
+            searchParams={searchParams}
+            initialCampaigns={campaigns}
+            initialCampaignId={campaignId}
+          />
+        </Suspense>
+      </div>
 
-      {/* ──────────────── 6. Email verification gate ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Verification" height={320} />}>
-        <VerificationPage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      {/* ──────────────── 6. Drafts ──────────────── */}
+      <div>
+        <StageBanner number={6} label="Drafts" />
+        <Suspense fallback={<SectionSkeleton label="Drafts" height={260} />}>
+          <DraftsPage />
+        </Suspense>
+      </div>
 
-      {/* ──────────────── 7. Gmail drafts ──────────────── */}
-      {/* DraftsPage default export takes no props — it queries across
-          every campaign by design (drafts surface per-campaign chips). */}
-      <Suspense fallback={<SectionSkeleton label="Drafts" height={260} />}>
-        <DraftsPage />
-      </Suspense>
+      {/* ──────────────── 7. Tracker ──────────────── */}
+      <div>
+        <StageBanner number={7} label="Tracker" />
+        <Suspense fallback={<SectionSkeleton label="Tracker" height={520} />}>
+          <TrackerPage
+            searchParams={searchParams}
+            initialCampaigns={campaigns}
+            initialCampaignId={campaignId}
+          />
+        </Suspense>
+      </div>
 
-      {/* ──────────────── 8. Tracker ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Tracker" height={520} />}>
-        <TrackerPage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      {/* ──────────────── 8. Weekly ──────────────── */}
+      <div>
+        <StageBanner number={8} label="Weekly" />
+        <Suspense fallback={<SectionSkeleton label="Weekly" height={460} />}>
+          <WeeklyPage
+            searchParams={searchParams}
+            initialCampaigns={campaigns}
+            initialCampaignId={campaignId}
+          />
+        </Suspense>
+      </div>
 
-      {/* ──────────────── 9. Weekly counterpart update ──────────────── */}
-      <Suspense fallback={<SectionSkeleton label="Weekly" height={460} />}>
-        <WeeklyPage
-          searchParams={searchParams}
-          initialCampaigns={campaigns}
-          initialCampaignId={campaignId}
-        />
-      </Suspense>
+      {/* ──────────────── 9. Gmail + Calendar ──────────────── */}
+      <div id="gmail-calendar">
+        <StageBanner number={9} label="Gmail + Calendar" />
+        <section className="section" style={{ padding: "24px 0" }}>
+          <GoogleConnectionStatus />
+        </section>
+      </div>
+
+      {/* ──────────────── 10. Import tracker ──────────────── */}
+      <div id="import-tracker">
+        <StageBanner number={10} label="Import Tracker" />
+        <Suspense fallback={<SectionSkeleton label="Import tracker" height={320} />}>
+          <ImportTrackerPage />
+        </Suspense>
+      </div>
+
+      {/* ──────────────── 11. Inbox ──────────────── */}
+      <div>
+        <StageBanner number={11} label="Inbox" />
+        <Suspense fallback={<SectionSkeleton label="Inbox" height={380} />}>
+          <InboxPage />
+        </Suspense>
+      </div>
     </>
   );
 }
 
-/**
- * Shown when no campaigns are visible to the session — usually means the
- * user is unauthenticated and RLS denied the `campaigns` read. Mirrors
- * the equivalent card used by /tracker, /review, /approval, etc.
- */
+function StageBanner({ number, label, anchor }: { number: number; label: string; anchor?: string }) {
+  return (
+    <div className="stage-banner" id={anchor}>
+      <span className="stage-num">{number}.</span>
+      {label}
+    </div>
+  );
+}
+
 function NoCampaignsState() {
   return (
     <div

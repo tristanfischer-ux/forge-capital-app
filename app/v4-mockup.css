@@ -43,11 +43,13 @@ button { font-family: inherit; }
 .brand .dot { width: 10px; height: 10px; background: var(--accent); border-radius: 3px; transform: rotate(45deg); }
 .brand .sub { font-weight: 500; color: var(--text); margin-left: 4px; }
 .topnav { display: flex; gap: 2px; margin-left: 10px; }
-.topnav .pill { padding: 7px 14px; border-radius: 8px; color: var(--text-dim); font-weight: 500; font-size: 13px; cursor: pointer; border: none; background: none; text-decoration: none; display: inline-flex; align-items: center; }
-.topnav .pill:hover { background: var(--accent-light); color: var(--text); text-decoration: none; }
-.topnav .pill.active { background: var(--accent); color: #fff; }
-.topnav .pill.auto { position: relative; }
-.topnav .pill.auto::after { content: 'NEW'; position: absolute; top: -6px; right: -2px; font-size: 8px; background: var(--accent-3); color: #fff; padding: 1px 5px; border-radius: 6px; letter-spacing: 0.5px; font-weight: 700; }
+.topnav .pill { padding: 7px 14px; border-radius: 8px; color: var(--text-dim); font-weight: 500; font-size: 13px; cursor: pointer; border: 1px solid var(--border-soft, #e5e7eb); background: var(--surface, #f9fafb); text-decoration: none; display: inline-flex; align-items: center; white-space: nowrap; }
+.topnav .pill:hover { background: var(--accent-light); color: var(--text); text-decoration: none; border-color: var(--accent-light); }
+.topnav .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.topnav .pill .pill-num { font-weight: 700; margin-right: 4px; font-size: 12px; opacity: 0.7; }
+.topnav .pill.active .pill-num { opacity: 1; }
+.stage-banner { background: #2563eb; color: #fff; padding: 18px 32px; margin: 32px -32px 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 12px; }
+.stage-banner .stage-num { font-size: 26px; font-weight: 800; opacity: 0.85; }
 .topbar .spacer { flex: 1; }
 
 .campaign-switcher { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px; background: var(--accent-softer); border: 1px solid #e4e1ff; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--accent); position: relative; }
