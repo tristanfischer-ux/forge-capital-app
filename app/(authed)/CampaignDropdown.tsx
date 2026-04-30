@@ -260,15 +260,8 @@ function CampaignOption({
       : campaign.campaign_intent === "supplier" ? "supplier"
       : "investor";
     const target = `${pathname}?c=${campaign.id}&a=${arch}`;
-    // router.push with a new searchParams triggers a server re-render
-    // of the affected segments automatically. Previously we also
-    // called router.refresh() which does a hard refetch of every
-    // server component in the tree — redundant when the URL ALREADY
-    // changed, and the reason campaign switches felt frozen for
-    // 2-5 seconds (Tristan 2026-04-24). The /home page wraps each
-    // section in Suspense now, so the re-render streams progressively
-    // rather than blocking on the slowest fetch.
     router.push(target);
+    router.refresh();
   }
 
   const dotClass = pickDotClass(campaign.id);
