@@ -739,16 +739,19 @@ export async function getMatchScore(
   if (embedResult.ok) {
     embedInfo = { dims: embedResult.dims, latencyMs: embedResult.latencyMs };
     // Fire both RPCs in parallel — ANN candidate selection and chunk evidence.
-    // PostgREST caps responses at max-rows (default 1000). Paginate with
-    // .range() in parallel batches of 1000 to retrieve the full candidate pool.
+    // PostgREST caps responses at max-rows (default 1000). Use the _paged
+    // variant with server-side OFFSET/LIMIT so each call returns ≤1000 rows,
+    // staying under the PostgREST cap.
     const PAGE = 1000;
     const total = Math.min(candidatePool, 5000);
     const pages = Math.ceil(total / PAGE);
     const annPages = Array.from({ length: pages }, (_, i) =>
-      supabase.rpc("match_investors_by_embedding", {
+      supabase.rpc("match_investors_by_embedding_paged", {
         query_embedding: embedResult.vector,
         match_count: total,
-      }).range(i * PAGE, Math.min((i + 1) * PAGE - 1, total - 1)),
+        p_offset: i * PAGE,
+        p_limit: PAGE,
+      }),
     );
     const [chunkResult, ...annPageResults] = await Promise.all([
       supabase.rpc("match_investors_by_chunks", {
