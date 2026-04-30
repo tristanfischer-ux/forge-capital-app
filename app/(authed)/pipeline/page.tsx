@@ -449,43 +449,34 @@ function QueueCard({
 }
 
 function GmailCard({ stage }: { stage: PipelineStage | null }) {
-  const notDeployed = stage?.count === 0;
+  // count === 0 means no events ingested yet — the cron IS deployed (vercel.json,
+  // every 15 min). The old label "not yet deployed" was a false positive.
+  const noEventsYet = (stage?.count ?? 0) === 0;
   return (
     <div className="ms-card">
       <h4>Gmail sync</h4>
-      {notDeployed ? (
+      {noEventsYet ? (
         <>
           <div
             style={{
               fontSize: 11,
-              color: "var(--amber)",
+              color: "var(--text-dim)",
               marginBottom: 8,
               fontWeight: 500,
             }}
           >
-            Not yet deployed
+            No events ingested yet
           </div>
           <div
             style={{
               fontSize: 11,
-              color: "var(--text-dim)",
+              color: "var(--text-faint)",
               lineHeight: 1.5,
             }}
           >
-            Gmail sync not yet deployed — stats will populate once{" "}
-            <code
-              style={{
-                fontFamily:
-                  "'SF Mono', ui-monospace, Menlo, monospace",
-                fontSize: 10,
-                background: "var(--surface-alt)",
-                padding: "1px 4px",
-                borderRadius: 3,
-              }}
-            >
-              com.forgecapital.gmail-sync
-            </code>{" "}
-            lands.
+            The cron runs every 15 minutes. Events will appear here once
+            the Gmail sync ingests messages to or from your campaign
+            partners. Use &ldquo;Sync now&rdquo; to trigger a manual run.
           </div>
         </>
       ) : (
