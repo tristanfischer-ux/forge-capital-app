@@ -1,40 +1,63 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
+import { addMatchesToCampaign } from "./actions";
 
 /**
  * "Add to campaign" bar — bridges Discovery (truth DB) → Pipeline
  * (personal DB). After the user searches and finds matches, they pick
  * a target campaign, choose how many top results to inject, and click
  * "Add to campaign". The server action bulk-inserts campaign_partners
- * rows, then redirects to /pipeline#approval.
+ * rows with status_code = '+0' (pending approval).
  *
  * V4 CSS: uses `.section` for the container + inline styles matching
  * the V4 surface / border / accent palette.
  */
 export function AddToCampaignBar({
   campaigns,
+  scoredInvestorIds,
 }: {
   campaigns: CampaignSummary[];
+  scoredInvestorIds: number[];
 }) {
-  const router = useRouter();
   const [selectedCampaign, setSelectedCampaign] = useState(
     campaigns[0]?.id ?? "",
   );
   const [count, setCount] = useState(100);
   const [adding, setAdding] = useState(false);
+  const [result, setResult] = useState<{
+    added: number;
+    skipped: number;
+    campaignName: string;
+  } | null>(null);
+
+  const selectedName =
+    campaigns.find((c) => c.id === selectedCampaign)?.name ?? "campaign";
 
   async function handleAdd() {
-    if (!selectedCampaign) return;
+    if (!selectedCampaign || scoredInvestorIds.length === 0) return;
     setAdding(true);
-    // TODO: wire server action to bulk-insert top N scored investors
-    // into campaign_partners for the selected campaign with
-    // status_code = '+0' (pending approval).
-    //
-    // For now, navigate to the pipeline page for the selected campaign.
-    router.push(`/pipeline?c=${selectedCampaign}`);
+    setResult(null);
+
+    const idsToAdd = scoredInvestorIds.slice(0, count);
+
+    try {
+      const res = await addMatchesToCampaign({
+        campaignId: selectedCampaign,
+        investorIds: idsToAdd,
+      });
+      setResult({
+        added: res.added,
+        skipped: res.skipped,
+        campaignName: selectedName,
+      });
+    } catch (err) {
+      console.error("Failed to add matches:", err);
+    } finally {
+      setAdding(false);
+    }
   }
 
   if (campaigns.length === 0) return null;
@@ -70,12 +93,19 @@ export function AddToCampaignBar({
           lineHeight: 1.55,
         }}
       >
-        Select a campaign and choose how many of the highest-scoring
-        matches to add. They will appear in your pipeline as pending
-        approval.
+        {scoredInvestorIds.length > 0
+          ? `${scoredInvestorIds.length.toLocaleString("en-GB")} investors scored. Select a campaign and choose how many of the highest-scoring matches to add. They will appear in your pipeline as pending approval.`
+          : "Run a search above to score investors, then add the top matches to a campaign."}
       </p>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "end",
+          flexWrap: "wrap",
+        }}
+      >
         {/* Campaign picker */}
         <div style={{ flex: "1 1 240px" }}>
           <label
@@ -95,7 +125,10 @@ export function AddToCampaignBar({
           <select
             id="add-campaign-select"
             value={selectedCampaign}
-            onChange={(e) => setSelectedCampaign(e.target.value)}
+            onChange={(e) => {
+              setSelectedCampaign(e.target.value);
+              setResult(null);
+            }}
             style={{
               width: "100%",
               padding: "8px 12px",
@@ -134,9 +167,12 @@ export function AddToCampaignBar({
             id="add-count-input"
             type="number"
             min={1}
-            max={1000}
+            max={Math.max(scoredInvestorIds.length, 1)}
             value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
+            onChange={(e) => {
+              setCount(Number(e.target.value));
+              setResult(null);
+            }}
             style={{
               width: "100%",
               padding: "8px 12px",
@@ -153,23 +189,74 @@ export function AddToCampaignBar({
         <button
           type="button"
           onClick={handleAdd}
-          disabled={adding || !selectedCampaign}
+          disabled={adding || !selectedCampaign || scoredInvestorIds.length === 0}
           style={{
             flex: "0 0 auto",
             padding: "8px 20px",
             fontSize: 13,
             fontWeight: 600,
-            background: "var(--accent)",
+            background:
+              scoredInvestorIds.length === 0 ? "var(--border)" : "var(--accent)",
             color: "#fff",
             border: "none",
             borderRadius: 6,
-            cursor: adding ? "wait" : "pointer",
+            cursor:
+              adding || scoredInvestorIds.length === 0 ? "not-allowed" : "pointer",
             opacity: adding ? 0.7 : 1,
           }}
         >
           {adding ? "Adding…" : "Add to campaign"}
         </button>
       </div>
+
+      {/* Result feedback */}
+      {result && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "12px 16px",
+            background: "var(--surface-alt, #f0f7ff)",
+            border: "1px solid var(--accent)",
+            borderRadius: 8,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "var(--text)",
+          }}
+        >
+          {result.added > 0 ? (
+            <>
+              <strong>
+                Added {result.added.toLocaleString("en-GB")} investor
+                {result.added !== 1 ? "s" : ""} to {result.campaignName}.
+              </strong>
+              {result.skipped > 0 && (
+                <span style={{ color: "var(--text-dim)" }}>
+                  {" "}
+                  {result.skipped.toLocaleString("en-GB")} already in campaign.
+                </span>
+              )}
+              <br />
+              <Link
+                href={`/pipeline?c=${selectedCampaign}#approval`}
+                style={{
+                  color: "var(--accent)",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  marginTop: 4,
+                  display: "inline-block",
+                }}
+              >
+                View in pipeline →
+              </Link>
+            </>
+          ) : (
+            <span style={{ color: "var(--text-dim)" }}>
+              All {result.skipped.toLocaleString("en-GB")} investors are already
+              in {result.campaignName}. No new additions.
+            </span>
+          )}
+        </div>
+      )}
     </section>
   );
 }

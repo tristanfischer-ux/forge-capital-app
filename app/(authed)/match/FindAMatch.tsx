@@ -77,6 +77,10 @@ export interface FindAMatchProps {
    *  pool-empty placeholder when archetype === "customer". Null on
    *  investor / supplier campaigns. */
   customerPartners?: CustomerCampaignPartnerCard[] | null;
+  /** Callback fired whenever the scored result set changes (initial
+   *  load + each re-score). Passes all scored investor IDs in rank
+   *  order so the AddToCampaignBar can offer "add top N to campaign". */
+  onScoredIds?: (ids: number[]) => void;
 }
 
 type Tab = "best" | "thesis" | "near_miss" | "lookalike";
@@ -274,6 +278,7 @@ export function FindAMatch({
   initialData,
   initialArchetype,
   customerPartners,
+  onScoredIds,
 }: FindAMatchProps) {
   const router = useRouter();
 
@@ -282,6 +287,11 @@ export function FindAMatch({
   );
   const [archetype, setArchetype] = useState<Archetype>(initialArchetype);
   const [data, setData] = useState<GetMatchScoreResult>(initialData);
+
+  useEffect(() => {
+    onScoredIds?.(data.rows.map((r) => r.investor_id));
+  }, [data, onScoredIds]);
+
   const [tab, setTab] = useState<Tab>("best");
   // Secondary order applied client-side over the tab-filtered rows. The
   // tab chooses WHICH rows (best / thesis-only / near-miss / lookalike);

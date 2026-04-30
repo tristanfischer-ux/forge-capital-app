@@ -1,11 +1,10 @@
 import { Suspense } from "react";
 import { getMatchScore, type Archetype } from "@/lib/queries/match-score";
-import { FindAMatch } from "../match/FindAMatch";
 import { heroTextForArchetype } from "../match/match-constants";
 import { listCustomerCampaignPartners } from "@/lib/queries/customer-partners";
 import { listActiveCampaigns } from "@/lib/queries/campaigns";
 import { StageBanner } from "../StageBanner";
-import { AddToCampaignBar } from "./AddToCampaignBar";
+import { DiscoverClient } from "./DiscoverClient";
 
 /**
  * Discovery page — the "truth database" surface.
@@ -37,24 +36,16 @@ export default async function DiscoverPage({
   const params = await searchParams;
   const archetype: Archetype = parseArchetype(params.a) ?? "investor";
 
-  // Fetch campaigns for the "Add to campaign" picker — the user selects
-  // which campaign to inject results into, then gets redirected to
-  // /pipeline#approval.
-  const campaigns = await listActiveCampaigns();
-
   return (
     <>
       <StageBanner number={1} title="Discovery" />
 
-      {/* ──────────────── Find a Match ──────────────── */}
+      {/* ──────────────── Find a Match + Add to Campaign ──────────────── */}
       <div id="find-a-match">
         <Suspense fallback={<DiscoverSkeleton />}>
           <FindAMatchSection archetype={archetype} />
         </Suspense>
       </div>
-
-      {/* ──────────────── Add to Campaign ──────────────── */}
-      <AddToCampaignBar campaigns={campaigns} />
     </>
   );
 }
@@ -64,11 +55,7 @@ async function FindAMatchSection({
 }: {
   archetype: Archetype;
 }) {
-  // Discovery is campaign-agnostic, but getMatchScore needs a campaignId
-  // to resolve conflict checks. We pass a sentinel empty string — the
-  // scoring function treats it as "no campaign context" and skips
-  // conflict resolution.
-  const [initialData, customerPartners] = await Promise.all([
+  const [initialData, customerPartners, campaigns] = await Promise.all([
     getMatchScore({
       heroText: heroTextForArchetype(archetype),
       archetype,
@@ -79,14 +66,14 @@ async function FindAMatchSection({
     archetype === "customer"
       ? listCustomerCampaignPartners("")
       : Promise.resolve(null),
+    listActiveCampaigns(),
   ]);
 
   return (
-    <FindAMatch
-      campaignId=""
-      campaignName="Discovery"
+    <DiscoverClient
       initialData={initialData}
-      initialArchetype={archetype}
+      archetype={archetype}
+      campaigns={campaigns}
       customerPartners={customerPartners}
     />
   );
