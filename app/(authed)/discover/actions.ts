@@ -90,6 +90,15 @@ export async function addMatchesToCampaign({
     }
   }
 
+  // Sync cross-campaign outreach state so warnings are fresh
+  if (added > 0) {
+    try {
+      await supabase.rpc("sync_investor_outreach_state");
+    } catch {
+      // Non-critical — state will sync on next call
+    }
+  }
+
   return {
     added,
     skipped: existingSet.size,

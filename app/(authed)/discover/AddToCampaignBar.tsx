@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
 import { addMatchesToCampaign } from "./actions";
+import {
+  getPartnerOutreachState,
+  type OutreachState,
+} from "../pipeline/outreach-state-actions";
 
 /**
  * "Add to campaign" bar — bridges Discovery (truth DB) → Pipeline
@@ -32,6 +36,47 @@ export function AddToCampaignBar({
     skipped: number;
     campaignName: string;
   } | null>(null);
+  const [crossCampaignWarning, setCrossCampaignWarning] = useState<{
+    total: number;
+    byCampaign: { name: string; count: number }[];
+  } | null>(null);
+
+  // Check cross-campaign state when scored IDs or selected campaign change
+  useEffect(() => {
+    if (scoredInvestorIds.length === 0) {
+      setCrossCampaignWarning(null);
+      return;
+    }
+    let cancelled = false;
+    const checkIds = scoredInvestorIds.slice(0, 500);
+    getPartnerOutreachState(checkIds)
+      .then((states: OutreachState[]) => {
+        if (cancelled) return;
+        const otherCampaign = states.filter(
+          (s) =>
+            s.total_campaigns_active > 0 &&
+            s.relationship_status !== "new" &&
+            s.last_campaign_id !== selectedCampaign,
+        );
+        if (otherCampaign.length === 0) {
+          setCrossCampaignWarning(null);
+          return;
+        }
+        const buckets = new Map<string, number>();
+        for (const s of otherCampaign) {
+          const name = s.last_campaign_name ?? "another campaign";
+          buckets.set(name, (buckets.get(name) ?? 0) + 1);
+        }
+        const byCampaign = Array.from(buckets.entries())
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count);
+        setCrossCampaignWarning({ total: otherCampaign.length, byCampaign });
+      })
+      .catch(() => setCrossCampaignWarning(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [scoredInvestorIds, selectedCampaign]);
 
   const selectedName =
     campaigns.find((c) => c.id === selectedCampaign)?.name ?? "campaign";
@@ -208,6 +253,37 @@ export function AddToCampaignBar({
           {adding ? "Adding…" : "Add to campaign"}
         </button>
       </div>
+
+      {/* Cross-campaign warning */}
+      {crossCampaignWarning && crossCampaignWarning.total > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 14px",
+            background: "#fffbeb",
+            border: "1px solid #f59e0b",
+            borderRadius: 8,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "var(--text)",
+          }}
+        >
+          <strong style={{ color: "#b45309" }}>⚠ Cross-campaign overlap:</strong>{" "}
+          {crossCampaignWarning.total.toLocaleString("en-GB")} of these investors
+          were already contacted for other campaigns
+          {crossCampaignWarning.byCampaign.length > 0 && (
+            <span style={{ color: "var(--text-dim)" }}>
+              {" "}
+              ({crossCampaignWarning.byCampaign
+                .slice(0, 3)
+                .map((b) => `${b.count} for ${b.name}`)
+                .join(", ")}
+              {crossCampaignWarning.byCampaign.length > 3 ? ", …" : ""})
+            </span>
+          )}
+          . You can still proceed — this is informational only.
+        </div>
+      )}
 
       {/* Result feedback */}
       {result && (

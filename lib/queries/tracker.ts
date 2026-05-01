@@ -71,6 +71,8 @@ export interface TrackerRow {
   email_opened: boolean;
   /** True if at least one link_clicked tracking event exists for this partner. */
   link_clicked: boolean;
+  /** Names of OTHER campaigns this partner appears in (cross-campaign awareness). Empty when single-campaign only. */
+  other_campaigns: string[];
 }
 
 /**
@@ -441,6 +443,46 @@ export async function getTrackerRows(
     rows.map((r) => r.id),
   );
 
+  // Third round-trip: cross-campaign awareness from investor_outreach_state.
+  const partnerIds = rows
+    .map((r) => r.partners_mirror?.id)
+    .filter((id): id is number => id != null);
+  const otherCampaignMap = new Map<number, string[]>();
+  if (partnerIds.length > 0) {
+    const { data: outreachData } = await supabase
+      .from("investor_outreach_state")
+      .select("partner_id, total_campaigns_active, last_campaign_name")
+      .in("partner_id", partnerIds)
+      .gt("total_campaigns_active", 1);
+    if (outreachData) {
+      // For partners in multiple campaigns, fetch ALL their campaign names
+      const multiPartnerIds = outreachData.map(
+        (r: { partner_id: number }) => r.partner_id,
+      );
+      if (multiPartnerIds.length > 0) {
+        const { data: cpRows } = await supabase
+          .from("campaign_partners")
+          .select("partner_id, campaign_id, campaigns:campaign_id(name)")
+          .in("partner_id", multiPartnerIds)
+          .neq("campaign_id", campaignId);
+        if (cpRows) {
+          for (const cp of cpRows as unknown as Array<{
+            partner_id: number;
+            campaign_id: string;
+            campaigns: { name: string } | { name: string }[] | null;
+          }>) {
+            const c = cp.campaigns;
+            const name = Array.isArray(c) ? c[0]?.name : c?.name;
+            if (!name) continue;
+            const existing = otherCampaignMap.get(cp.partner_id) ?? [];
+            if (!existing.includes(name)) existing.push(name);
+            otherCampaignMap.set(cp.partner_id, existing);
+          }
+        }
+      }
+    }
+  }
+
   return rows.map((row) => {
     const partner = row.partners_mirror;
     const investor = partner?.investors_mirror ?? null;
@@ -478,6 +520,7 @@ export async function getTrackerRows(
       ),
       email_opened: agg?.email_opened ?? false,
       link_clicked: agg?.link_clicked ?? false,
+      other_campaigns: otherCampaignMap.get(partner?.id ?? -1) ?? [],
     };
   });
 }

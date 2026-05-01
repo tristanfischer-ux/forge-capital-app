@@ -436,6 +436,22 @@ export function TrackerTable({
                         </>
                       ) : null}
                     </div>
+                    {row.other_campaigns.length > 0 && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#b45309",
+                          marginTop: 2,
+                          lineHeight: 1.3,
+                        }}
+                        title={`Also in: ${row.other_campaigns.join(", ")}`}
+                      >
+                        Also in: {row.other_campaigns.slice(0, 2).join(", ")}
+                        {row.other_campaigns.length > 2
+                          ? ` +${row.other_campaigns.length - 2} more`
+                          : ""}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <StatusBadge
