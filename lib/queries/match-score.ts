@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { deriveWhyThem } from "@/lib/queries/tracker";
 import type { EmailTier } from "@/lib/queries/tracker";
 import type {
@@ -562,7 +562,7 @@ interface CandidateRow {
 export async function getArchetypePoolSizes(): Promise<{ investor: number; customer: number; supplier: number }> {
   // V1 only has the investor mirror wired up. Customer + supplier mirrors
   // ship later — return null counts so the UI can say "— coming soon".
-  const supabase = await createServerClient();
+  const supabase = await createAdminClient();
   const { count } = await supabase
     .from("investors_mirror")
     .select("*", { count: "exact", head: true })
@@ -584,7 +584,7 @@ export async function getMatchScore(
     hideContacted = true,
   } = opts;
 
-  const supabase = await createServerClient();
+  const supabase = await createAdminClient();
 
   // Auto-suggest runs on every call so the banner can update live server-side.
   const { suggested, signals } = detectArchetypeSignals(heroText);
@@ -1132,7 +1132,7 @@ export async function getMatchScore(
  * once the compose-side embedding pipeline is wired through.
  */
 async function attachPortfolioFit(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  supabase: Awaited<ReturnType<typeof createAdminClient>>,
   rows: MatchResultRow[],
 ): Promise<void> {
   if (rows.length === 0) return;
