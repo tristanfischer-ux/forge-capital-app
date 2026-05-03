@@ -181,7 +181,7 @@ export function CampaignDropdown({
           </div>
 
           {investors.map((c) => (
-            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} />
+            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} onSelect={() => setOpen(false)} />
           ))}
 
           {investors.length > 0 && (customers.length > 0 || suppliers.length > 0) ? (
@@ -189,7 +189,7 @@ export function CampaignDropdown({
           ) : null}
 
           {customers.map((c) => (
-            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} />
+            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} onSelect={() => setOpen(false)} />
           ))}
 
           {customers.length > 0 && suppliers.length > 0 ? (
@@ -197,7 +197,7 @@ export function CampaignDropdown({
           ) : null}
 
           {suppliers.map((c) => (
-            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} />
+            <CampaignOption key={c.id} campaign={c} active={c.id === active.id} onSelect={() => setOpen(false)} />
           ))}
 
           <div className="divider" />
@@ -228,54 +228,38 @@ export function CampaignDropdown({
 function CampaignOption({
   campaign,
   active,
+  onSelect,
 }: {
   campaign: CampaignSummary;
   active: boolean;
+  onSelect: () => void;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/pipeline";
 
-  // Stay on the user's current page when switching campaigns. Clicking
-  // a campaign used to force-navigate to /tracker — jarring when the
-  // user was on /home or any other section. Now we:
-  //   1. Write the `fc_active_campaign` cookie client-side so next
-  //      SSR read picks it up.
-  //   2. Push the current pathname with `?c=<uuid>` so page-level
-  //      reads that honour the query param refresh immediately.
-  //   3. router.refresh() to invalidate the cached RSC tree so the
-  //      top-bar campaign label and sidebar re-render with the new
-  //      cookie value (without this, the label stays stale until the
-  //      next full navigation).
-  function onClick(e: React.MouseEvent) {
+  function handleClick(e: React.MouseEvent) {
     e.preventDefault();
+    onSelect();
     const maxAge = 60 * 60 * 24 * 365;
     document.cookie = `fc_active_campaign=${campaign.id}; path=/; max-age=${maxAge}; samesite=lax`;
-    // Include the destination campaign's archetype in the URL so the
-    // Find-a-Match surface re-renders on the correct pool + hero text.
-    // Previously only `?c=` was set, which meant the server component
-    // fell back to "investor" archetype on every switch, regardless of
-    // whether the new campaign was investor / customer / supplier.
     const arch =
       campaign.campaign_intent === "customer" ? "customer"
       : campaign.campaign_intent === "supplier" ? "supplier"
       : "investor";
     const target = `${pathname}?c=${campaign.id}&a=${arch}`;
     router.push(target);
-    router.refresh();
+    requestAnimationFrame(() => router.refresh());
   }
 
   const dotClass = pickDotClass(campaign.id);
   const miniType = intentBadgeClass(campaign.campaign_intent);
 
-  // Fallback href for the no-JavaScript case — matches the onClick
-  // destination so a direct click without JS still lands correctly.
   const fallbackHref = `${pathname}?c=${campaign.id}`;
 
   return (
     <Link
       href={fallbackHref}
-      onMouseDown={onClick}
-      onClick={(e) => e.preventDefault()}
+      onClick={handleClick}
       className={active ? "camp-opt active" : "camp-opt"}
       role="option"
       aria-selected={active}
@@ -288,11 +272,6 @@ function CampaignOption({
             {intentLabel(campaign.campaign_intent)}
           </span>
         </div>
-        {/* V4 `.s` subtitle: "Archetype · counterpart · week N of M".
-            Counterpart name + week come from the campaign row (migration
-            012 added counterpart_name; week_started_at + week_count_target
-            were present earlier). Both are optional — when either is null
-            we drop the segment honestly rather than render placeholders. */}
         <div className="s">{campaignSubtitle(campaign)}</div>
       </div>
       <div className="ct">{campaign.partner_count.toLocaleString("en-GB")}</div>
