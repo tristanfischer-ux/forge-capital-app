@@ -317,6 +317,7 @@ export function FindAMatch({
   // time — click a second card and the first collapses.
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
+  const cancelRef = useRef(false);
   const [isShortlisting, startShortlistTransition] = useTransition();
   // Lookalike result is held separately from the hero-text match data
   // so switching tabs back to Best/Thesis/Near-miss restores the
@@ -421,6 +422,7 @@ export function FindAMatch({
       const nextArch = opts?.archetype ?? archetype;
       const nextHideContacted = opts?.hideContacted ?? !showAll;
       const nextLimit = opts?.limit ?? PAGE_SIZE;
+      cancelRef.current = false;
       setToast(null);
       // Reset pagination whenever a fresh query kicks off.
       setRequestedLimit(nextLimit);
@@ -442,6 +444,7 @@ export function FindAMatch({
           minMatch: opts?.minMatch ?? 0,
           hideContacted: nextHideContacted,
         });
+        if (cancelRef.current) return; // Search was cancelled
         if (out.ok) {
           setData(out.data);
           setSelected((prev) => {
@@ -457,6 +460,10 @@ export function FindAMatch({
     },
     [heroText, archetype, campaignId, tab, showAll],
   );
+
+  const handleCancelSearch = useCallback(() => {
+    cancelRef.current = true;
+  }, []);
 
   /**
    * Load-more handler — expose one more PAGE_SIZE page. If the server
@@ -735,6 +742,7 @@ export function FindAMatch({
           setHeroText={setHeroText}
           onKeyDown={onKeyDown}
           onFindMatches={() => runFindMatches()}
+          onCancelSearch={handleCancelSearch}
           isPending={isPending}
           textareaRef={textareaRef}
           onSynthesised={applyExtractedProfile}
@@ -2701,6 +2709,7 @@ function PitchInput({
   setHeroText,
   onKeyDown,
   onFindMatches,
+  onCancelSearch,
   isPending,
   textareaRef,
   onSynthesised,
@@ -2709,6 +2718,7 @@ function PitchInput({
   setHeroText: (s: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onFindMatches: () => void;
+  onCancelSearch?: () => void;
   isPending: boolean;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   /** Called when the upload endpoint returns a Haiku-synthesised
@@ -2929,27 +2939,27 @@ function PitchInput({
 
         <button
           type="button"
-          onClick={onFindMatches}
-          disabled={isPending || extracting}
+          onClick={isPending ? onCancelSearch : onFindMatches}
+          disabled={extracting}
           // Inline styles deliberately — .hero-btn has `position: absolute`
           // baked into v4-mockup.css for its in-textarea placement. Re-use
           // the V4 accent colour + typography here without the positioning.
           style={{
             padding: "10px 18px",
             borderRadius: 8,
-            background: "var(--accent)",
+            background: isPending ? "#dc2626" : "var(--accent)",
             color: "#fff",
             border: "none",
             fontSize: 13,
             fontWeight: 600,
-            cursor: isPending || extracting ? "not-allowed" : "pointer",
+            cursor: extracting ? "not-allowed" : "pointer",
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
-            opacity: isPending || extracting ? 0.7 : 1,
+            opacity: extracting ? 0.7 : 1,
           }}
         >
-          {isPending ? "Matching…" : "Find matches"}{" "}
+          {isPending ? "Cancel search" : "Find matches"}{" "}
           <span
             style={{
               fontSize: 10,
