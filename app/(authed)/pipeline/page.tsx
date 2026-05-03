@@ -17,6 +17,7 @@ import InboxPage from "../inbox/page";
 import ImportTrackerPage from "../import/page";
 import { GoogleConnectionStatus } from "../GoogleConnectionStatus";
 import { StageBanner } from "../StageBanner";
+import { ApprovalExcelButtons } from "./ApprovalExcelButtons";
 
 /**
  * Pipeline page — the "personal database" surface.
@@ -85,6 +86,14 @@ export default async function PipelinePage({
             initialCampaignId={campaignId}
           />
         </Suspense>
+        <section className="section" style={{ marginTop: 0, paddingTop: 0 }}>
+          <ApprovalExcelButtons
+            campaignId={campaignId}
+            campaignName={
+              campaigns.find((c) => c.id === campaignId)?.name ?? ""
+            }
+          />
+        </section>
       </div>
 
       {/* ──────────────── Automation pipeline ──────────────── */}
