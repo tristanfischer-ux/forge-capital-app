@@ -6,6 +6,51 @@ import {
   type ChunkEvidence,
 } from "@/app/(authed)/match/match-v4-actions";
 
+/**
+ * Clean raw scraped text by stripping common website noise:
+ * navigation menus, footers, cookie banners, social links, etc.
+ */
+function cleanChunkText(text: string): string {
+  let cleaned = text;
+  // Strip common navigation/menu patterns
+  cleaned = cleaned.replace(/menu\s*/gi, "");
+  cleaned = cleaned.replace(/kickass\s*companies\s*meet\s*the\s*team\s*get\s*off\s*the\s*couch/gi, "");
+  cleaned = cleaned.replace(/overview\s*slashing\s*co\s*2/gi, "");
+  // Strip footer boilerplate
+  cleaned = cleaned.replace(/©\s*\d{4}[^.]*?\./g, "");
+  cleaned = cleaned.replace(/linkedin\s*privacy/gi, "");
+  cleaned = cleaned.replace(/put me in,?\s*coach[\s\S]*$/gi, "");
+  cleaned = cleaned.replace(/my people will call your people[\s\S]*$/gi, "");
+  // Strip "I want to work for" / "I want to connect with" patterns
+  cleaned = cleaned.replace(/i want to work for\s+\w+/gi, "");
+  cleaned = cleaned.replace(/i want to connect with\s+\w+/gi, "");
+  // Collapse whitespace
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+  return cleaned;
+}
+
+/**
+ * Split cleaned text into meaningful paragraphs at sentence boundaries
+ * when the text is long enough to warrant it.
+ */
+function formatChunkText(text: string): string[] {
+  const cleaned = cleanChunkText(text);
+  if (cleaned.length < 200) return [cleaned];
+  // Split on sentence boundaries, grouping into ~150-char paragraphs
+  const sentences = cleaned.split(/(?<=[.!?])\s+/);
+  const paragraphs: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    if (current.length + s.length > 180 && current.length > 0) {
+      paragraphs.push(current.trim());
+      current = "";
+    }
+    current += (current ? " " : "") + s;
+  }
+  if (current.trim()) paragraphs.push(current.trim());
+  return paragraphs.length > 0 ? paragraphs : [cleaned];
+}
+
 export function SourceEvidence({ investorId }: { investorId: number }) {
   const [chunks, setChunks] = useState<ChunkEvidence[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,6 +100,9 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
           </span>
         ) : null}
       </h3>
+      <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: -4, marginBottom: 8, lineHeight: 1.5 }}>
+        Excerpts from this investor&rsquo;s website pages that best match your search. Used to assess thesis fit.
+      </p>
 
       {loading ? (
         <div style={{ padding: 16, color: "var(--text-dim)", fontSize: 13 }}>
@@ -89,6 +137,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
             const path = chunk.page_url
               .replace(/^https?:\/\/[^/]+/, "")
               .slice(0, 50);
+            const paragraphs = formatChunkText(chunk.chunk_text);
             return (
               <div
                 key={`${chunk.page_url}-${chunk.chunk_index}`}
@@ -102,9 +151,11 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
                   lineHeight: 1.6,
                 }}
               >
-                <p style={{ margin: 0, fontStyle: "italic", color: "var(--text)" }}>
-                  &ldquo;{chunk.chunk_text}&rdquo;
-                </p>
+                {paragraphs.map((p, pi) => (
+                  <p key={pi} style={{ margin: pi < paragraphs.length - 1 ? "0 0 6px 0" : 0, fontStyle: "italic", color: "var(--text)" }}>
+                    &ldquo;{p}&rdquo;
+                  </p>
+                ))}
                 <div
                   style={{
                     display: "flex",
