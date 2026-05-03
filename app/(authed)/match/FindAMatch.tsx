@@ -1784,8 +1784,12 @@ function ResultCardDrillDown({
     if (insightRequested.current) return;
     insightRequested.current = true;
 
-    // Check sessionStorage cache first (survives Back navigation)
-    const cacheKey = `insight:${row.investor_id}`;
+    // Check sessionStorage cache first (survives Back navigation).
+    // Key includes a hash of the hero text so switching pitches busts
+    // the cache — previously "insight:78" served SkySails for every
+    // search, even after the founder typed a new pitch.
+    const heroHash = hashText(heroText);
+    const cacheKey = `insight:${row.investor_id}:${heroHash}`;
     try {
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
@@ -2209,8 +2213,35 @@ function ScoreCard({ dims }: { dims: ScoreDims }) {
   );
 }
 
+/**
+ * Simple hash for hero text — used to key insight caches so that
+ * switching pitches (e.g. SkySails → fish farm) busts the cache.
+ */
+function hashText(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h).toString(36);
+}
+
+/**
+ * Persists the hero text in both localStorage (per-campaign, for
+ * persistence across sessions) and sessionStorage (global, for
+ * cross-page access by the investor profile SourceEvidence panel).
+ */
+function persistHeroText(
+  campaignId: string,
+  archetype: string,
+  text: string,
+) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(`fc_hero_text_${campaignId}_${archetype}`, text);
+  sessionStorage.setItem("heroText", text);
+}
+
 /* ========================================================================= */
-/* EMPTY STATES                                                               */
+/* FIND-A-MATCH — §3 V4 port                                                  */
 /* ========================================================================= */
 
 function EmptyResults() {
