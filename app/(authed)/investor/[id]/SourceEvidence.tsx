@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useEffect, useState } from "react";
 import {
   getChunkEvidence,
@@ -51,19 +52,86 @@ function formatChunkText(text: string): string[] {
   return paragraphs.length > 0 ? paragraphs : [cleaned];
 }
 
+/**
+ * Extract meaningful search terms from hero text — skip common stopwords
+ * and short tokens. Returns lowercase terms for case-insensitive matching.
+ */
+function extractSearchTerms(heroText: string): string[] {
+  const stopwords = new Set([
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "need", "dare", "ought",
+    "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "as", "into", "through", "during", "before", "after", "above", "below",
+    "between", "out", "off", "over", "under", "again", "further", "then",
+    "once", "and", "but", "or", "nor", "not", "so", "very", "just",
+    "than", "too", "also", "about", "up", "that", "this", "these", "those",
+    "what", "which", "who", "whom", "when", "where", "why", "how", "all",
+    "each", "every", "both", "few", "more", "most", "other", "some", "such",
+    "no", "only", "own", "same", "its", "it", "they", "them", "their",
+    "we", "our", "you", "your", "he", "she", "him", "her", "his",
+    "looking", "seeking", "find", "investors", "funds", "venture",
+    "capital", "investment", "fund", "backing", "portfolio",
+  ]);
+  return heroText
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !stopwords.has(t))
+    .filter((t, i, arr) => arr.indexOf(t) === i); // deduplicate
+}
+
+/**
+ * Highlight matching search terms in text. Wraps each match in a <mark> tag.
+ * Returns React nodes, not a string — so it can be rendered directly.
+ */
+function highlightMatches(
+  text: string,
+  terms: string[],
+): React.ReactNode[] {
+  if (terms.length === 0) return [text];
+  // Build a single regex that matches any term (word boundary aware)
+  const pattern = new RegExp(
+    `(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
+    "gi",
+  );
+  const parts = text.split(pattern);
+  return parts.map((part, i) => {
+    const isMatch = terms.some((t) => part.toLowerCase() === t);
+    if (isMatch) {
+      return (
+        <mark
+          key={i}
+          style={{
+            background: "var(--accent-soft, #fff3cd)",
+            color: "var(--text, #333)",
+            borderRadius: 2,
+            padding: "0 2px",
+          }}
+        >
+          {part}
+        </mark>
+      );
+    }
+    return part;
+  });
+}
+
 export function SourceEvidence({ investorId }: { investorId: number }) {
   const [chunks, setChunks] = useState<ChunkEvidence[] | null>(null);
+  const [heroText, setHeroText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [indexing, setIndexing] = useState(false);
 
   useEffect(() => {
     try {
-      const heroText = sessionStorage.getItem("heroText");
-      if (!heroText) return;
+      const ht = sessionStorage.getItem("heroText");
+      if (!ht) return;
+      setHeroText(ht);
 
       setLoading(true);
-      getChunkEvidence({ investorId, heroText, limit: 8 })
+      getChunkEvidence({ investorId, heroText: ht, limit: 8 })
         .then((res) => {
           if (res.ok && res.chunks.length > 0) {
             setChunks(res.chunks);
@@ -138,6 +206,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
               .replace(/^https?:\/\/[^/]+/, "")
               .slice(0, 50);
             const paragraphs = formatChunkText(chunk.chunk_text);
+            const terms = heroText ? extractSearchTerms(heroText) : [];
             return (
               <div
                 key={`${chunk.page_url}-${chunk.chunk_index}`}
@@ -152,8 +221,8 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
                 }}
               >
                 {paragraphs.map((p, pi) => (
-                  <p key={pi} style={{ margin: pi < paragraphs.length - 1 ? "0 0 6px 0" : 0, fontStyle: "italic", color: "var(--text)" }}>
-                    &ldquo;{p}&rdquo;
+                  <p key={pi} style={{ margin: pi < paragraphs.length - 1 ? "0 0 6px 0" : 0, color: "var(--text)" }}>
+                    &ldquo;{highlightMatches(p, terms)}&rdquo;
                   </p>
                 ))}
                 <div
