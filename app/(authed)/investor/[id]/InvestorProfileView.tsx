@@ -29,9 +29,6 @@ export function InvestorProfileView({
 
       <FactStrip profile={profile} />
 
-      {/* §1 — Recent news */}
-      <RecentNewsBlock dossier={profile.deep_profile} />
-
       <PersonalisedInsight investorId={profile.id} />
 
       {/* §2 — Thesis */}
@@ -162,85 +159,6 @@ function FactStrip({ profile }: { profile: InvestorProfileData }) {
       <FactsCard profile={profile} />
       <FocusCard profile={profile} />
       <ProvenanceCard profile={profile} />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  §1 — Recent news                                                  */
-/* ------------------------------------------------------------------ */
-
-function RecentNewsBlock({ dossier }: { dossier: InvestorDeepProfile | null }) {
-  if (!dossier?.recent_news || dossier.recent_news.length === 0) return null;
-
-  return (
-    <div className="m-section">
-      <h3>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", marginRight: 8 }}>§1</span>
-        Recent news · {dossier.recent_news.length}
-      </h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {dossier.recent_news.map((item, i) => {
-          // Handle both string entries and {headline, date, source, summary} objects
-          let headline: string;
-          let meta: string | null = null;
-          if (typeof item === "string") {
-            headline = item;
-          } else if (item && typeof item === "object") {
-            const obj = item as Record<string, unknown>;
-            headline = String(obj.headline ?? obj.summary ?? JSON.stringify(item));
-            const parts: string[] = [];
-            if (obj.date) parts.push(String(obj.date));
-            if (obj.source) parts.push(String(obj.source));
-            meta = parts.length > 0 ? parts.join(" · ") : null;
-          } else {
-            headline = String(item);
-          }
-          const urlMatch = headline.match(/https?:\/\/[^\s)]+/);
-          const url = urlMatch ? urlMatch[0] : null;
-          const displayText = url ? headline.replace(url, "").replace(/\s{2,}/g, " ").trim() : headline;
-          return (
-            <div
-              key={i}
-              style={{
-                padding: "10px 14px",
-                border: "1px solid var(--border-soft)",
-                borderRadius: 8,
-                background: "var(--surface-alt)",
-                fontSize: 13,
-                lineHeight: 1.55,
-                color: "var(--text-dim)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <div>
-                <span style={{ color: "var(--text)" }}>{displayText}</span>
-                {meta ? (
-                  <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{meta}</div>
-                ) : null}
-              </div>
-              {url ? (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    color: "var(--accent)",
-                    fontSize: 11,
-                    whiteSpace: "nowrap",
-                    flexShrink: 0,
-                  }}
-                >
-                  Source ↗
-                </a>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
