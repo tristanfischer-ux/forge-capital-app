@@ -181,9 +181,10 @@ function RecentNewsBlock({ dossier }: { dossier: InvestorDeepProfile | null }) {
       </h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {dossier.recent_news.map((line, i) => {
-          const urlMatch = line.match(/https?:\/\/[^\s)]+/);
+          const lineStr = typeof line === "string" ? line : JSON.stringify(line);
+          const urlMatch = lineStr.match(/https?:\/\/[^\s)]+/);
           const url = urlMatch ? urlMatch[0] : null;
-          const text = url ? line.replace(url, "").replace(/\s{2,}/g, " ").trim() : line;
+          const text = url ? lineStr.replace(url, "").replace(/\s{2,}/g, " ").trim() : lineStr;
           return (
             <div
               key={i}
