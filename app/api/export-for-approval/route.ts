@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { createServerClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 
 /**
  * GET /api/export-for-approval?c=<campaignId>
@@ -8,32 +8,13 @@ import { createServerClient } from "@/lib/supabase/server";
  * Exports an Excel file of pending partners (status_code = '+0') for a
  * campaign. The file is sent to the browser for download.
  *
- * Columns:
- *   A: Partner name (from partners_mirror)
- *   B: Firm name (from investors_mirror via partner's investor_id)
- *   C: Why-them summary (from investment_pattern or connection_brief)
- *   D: Email status (email_tier from partners_mirror)
- *   E: Decision — blank, for the reviewer to fill: "yes", "no", or "skip"
- *   F: Reviewer notes — blank, for optional comments
- *
- * Security: requires authenticated session (RLS-scoped).
+ * Single-user app — uses service role key directly, no auth check needed.
  */
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { ok: false, error: "Not signed in" },
-        { status: 401 },
-      );
-    }
-
     const campaignId = req.nextUrl.searchParams.get("c");
     if (!campaignId) {
       return NextResponse.json(
@@ -41,6 +22,12 @@ export async function GET(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Service role key bypasses RLS — single-user app, no auth gate needed
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
 
     // Fetch campaign name for the title row
     const { data: campaign } = await supabase

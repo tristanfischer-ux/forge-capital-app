@@ -1,26 +1,13 @@
 "use server";
 
 import * as XLSX from "xlsx";
-import { createServerClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { refreshOutreachState } from "./outreach-state-actions";
 
 /**
  * Server action: import decisions from an uploaded Excel file.
  *
- * The Excel should have been exported via /api/export-for-approval,
- * filled in by the reviewer, then uploaded back. This action:
- *
- *   1. Parses the Excel file
- *   2. Matches rows by partner name + firm name (case-insensitive)
- *   3. Updates campaign_partners.status_code based on the Decision column:
- *      - "yes" → +1 (Approved)
- *      - "no" → -1 (Declined)
- *      - "skip" or blank → no change
- *   4. Fires sync_investor_outreach_state() afterwards
- *   5. Returns a summary of what changed
- *
- * SECURITY: requires authenticated session. Only processes status_code
- * updates — never touches scheduled_sends or outbound email paths.
+ * Single-user app — uses service role key directly, no auth check needed.
  */
 
 export interface ImportResult {
@@ -61,15 +48,11 @@ export async function importApprovalDecisions({
   }
 
   try {
-    // Auth check
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      result.errors.push("Not signed in");
-      return result;
-    }
+    // Service role key bypasses RLS — single-user app
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
 
     // Parse the Excel file
     const buf = Buffer.from(fileBase64, "base64");
@@ -88,25 +71,26 @@ export async function importApprovalDecisions({
       return result;
     }
 
-    // Find the header row (contains "Decision" or "Partner name")
+    // Find the header row (contains "Decision" in a SEPARATE cell,
+    // not just as a substring of "awaiting decision" in the title).
+    // Require at least 4 columns to avoid matching the subtitle row.
     let headerIdx = -1;
     for (let i = 0; i < Math.min(raw.length, 10); i++) {
       const row = raw[i];
-      if (Array.isArray(row)) {
-        const hasDecision = row.some(
-          (cell) =>
-            typeof cell === "string" &&
-            cell.toLowerCase().includes("decision"),
-        );
-        const hasPartner = row.some(
-          (cell) =>
-            typeof cell === "string" &&
-            cell.toLowerCase().includes("partner"),
-        );
-        if (hasDecision && hasPartner) {
-          headerIdx = i;
-          break;
-        }
+      if (!Array.isArray(row) || row.length < 4) continue;
+      const hasDecision = row.some(
+        (cell) =>
+          typeof cell === "string" &&
+          cell.trim().toLowerCase() === "decision",
+      );
+      const hasPartner = row.some(
+        (cell) =>
+          typeof cell === "string" &&
+          cell.trim().toLowerCase().includes("partner"),
+      );
+      if (hasDecision && hasPartner) {
+        headerIdx = i;
+        break;
       }
     }
 
@@ -262,7 +246,6 @@ export async function importApprovalDecisions({
           .update({
             status_code: update.statusCode,
             status_label: update.statusLabel,
-            updated_at: new Date().toISOString(),
           })
           .eq("id", update.id);
 
