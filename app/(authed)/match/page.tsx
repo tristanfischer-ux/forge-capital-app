@@ -79,7 +79,7 @@ export default async function MatchPage({
   // component persists whatever the user types in localStorage per
   // campaign and hydrates from there on subsequent mounts.
   const seedText = heroTextForArchetype(archetype);
-  const [initialData, customerPartners] = await Promise.all([
+  const [rawData, customerPartners] = await Promise.all([
     getMatchScore({
       heroText: seedText,
       archetype,
@@ -91,6 +91,16 @@ export default async function MatchPage({
       ? listCustomerCampaignPartners(campaignId)
       : Promise.resolve(null),
   ]);
+
+  // Strip near-miss from the initial server render. The seed text is the
+  // archetype default (SkySails for investor), not the user's typed text.
+  // Showing "your pitch emphasises skysails" when the textarea shows the
+  // user's real pitch is confusing. Near-miss reappears once the user
+  // clicks Find matches with their own text.
+  const initialData = {
+    ...rawData,
+    rows: rawData.rows.map((r) => ({ ...r, near_miss: null })),
+  };
 
   return (
     <>

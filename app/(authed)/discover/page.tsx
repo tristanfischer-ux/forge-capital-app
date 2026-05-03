@@ -55,7 +55,7 @@ async function FindAMatchSection({
 }: {
   archetype: Archetype;
 }) {
-  const [initialData, customerPartners, campaigns] = await Promise.all([
+  const [rawData, customerPartners, campaigns] = await Promise.all([
     getMatchScore({
       heroText: heroTextForArchetype(archetype),
       archetype,
@@ -68,6 +68,16 @@ async function FindAMatchSection({
       : Promise.resolve(null),
     listActiveCampaigns(),
   ]);
+
+  // Strip near-miss text from the initial server render. These results
+  // are computed against the archetype default (SkySails), not what the
+  // user actually typed. Showing "your pitch emphasises skysails" when
+  // the textarea says "family offices / agtech" is confusing. Near-miss
+  // reappears once the user types their own text and clicks Find matches.
+  const initialData = {
+    ...rawData,
+    rows: rawData.rows.map((r) => ({ ...r, near_miss: null })),
+  };
 
   return (
     <DiscoverClient
