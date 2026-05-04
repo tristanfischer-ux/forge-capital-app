@@ -25,17 +25,17 @@ export function DiscoverClient({
 
   return (
     <>
+      <AddToCampaignBar
+        campaigns={campaigns}
+        selectedInvestorIds={selectedIds}
+      />
+
       <FindAMatch
         campaignId=""
         campaignName="Discovery"
         initialData={initialData}
         initialArchetype="investor"
         onSelectedIds={handleSelectedIds}
-      />
-
-      <AddToCampaignBar
-        campaigns={campaigns}
-        selectedInvestorIds={selectedIds}
       />
     </>
   );

@@ -105,7 +105,29 @@ export function AddToCampaignBar({
     }
   }
 
-  if (campaigns.length === 0) return null;
+  if (campaigns.length === 0) {
+    return (
+      <section
+        className="section"
+        style={{
+          marginTop: 24,
+          padding: "20px 24px",
+          background: "var(--surface)",
+          border: "1px dashed var(--border)",
+          borderRadius: 10,
+          textAlign: "center",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
+          No active campaigns yet.{" "}
+          <Link href="/pipeline" style={{ color: "var(--accent)", fontWeight: 600 }}>
+            Create a campaign →
+          </Link>{" "}
+          then come back to search and add investors.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section

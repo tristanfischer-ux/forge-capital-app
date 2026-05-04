@@ -30,7 +30,6 @@ export async function addMatchesToCampaign({
     .from("partners_mirror")
     .select("id, investor_id, is_primary_contact")
     .in("investor_id", investorIds)
-    .eq("kind", "investor")
     .order("is_primary_contact", { ascending: false })
     .order("id", { ascending: true });
 
