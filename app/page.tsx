@@ -100,7 +100,7 @@ export default function HomePage() {
           password,
         });
         if (error) {
-          setStatus({ kind: "error", message: error.message });
+          setStatus({ kind: "error", message: error.message || "Invalid email or password." });
           return;
         }
         window.location.replace(next);
@@ -115,16 +115,19 @@ export default function HomePage() {
           },
         });
         if (error) {
-          setStatus({ kind: "error", message: error.message });
+          setStatus({ kind: "error", message: error.message || "Could not send magic link. Please try again." });
           return;
         }
         setStatus({ kind: "sent" });
       }
     } catch (err) {
-      setStatus({
-        kind: "error",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : JSON.stringify(err) || "Unknown error";
+      setStatus({ kind: "error", message });
     }
   }
 
@@ -219,7 +222,9 @@ export default function HomePage() {
           </form>
 
           {status.kind === "error" ? (
-            <p className="mt-4 text-xs text-red">{status.message}</p>
+            <p className="mt-4 text-xs text-red">
+              {status.message || "Sign-in failed. Please try again."}
+            </p>
           ) : null}
           {status.kind === "sent" ? (
             <p className="mt-4 text-xs text-text-dim">
