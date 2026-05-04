@@ -456,11 +456,9 @@ export async function getChunkEvidence(input: {
     end: number;
   };
   const allSentences: SentenceInfo[] = [];
-  const chunkSentences: { start: number; end: number }[][] = [];
 
   for (let ci = 0; ci < rawChunks.length; ci++) {
     const sents = splitSentences(rawChunks[ci].chunk_text);
-    chunkSentences.push(sents.map((s) => ({ start: s.start, end: s.end })));
     for (const s of sents) {
       allSentences.push({ chunkIdx: ci, text: s.text, start: s.start, end: s.end });
     }
@@ -489,17 +487,18 @@ export async function getChunkEvidence(input: {
     }
   }
 
-  // Build highlight ranges per chunk: highlight sentences with similarity > 0.25
-  const HIGHLIGHT_THRESHOLD = 0.25;
-  const chunkHighlights: [number, number][][] = rawChunks.map(() => []);
-  for (let i = 0; i < allSentences.length; i++) {
-    if (similarities[i] > HIGHLIGHT_THRESHOLD) {
-      chunkHighlights[allSentences[i].chunkIdx].push([
-        allSentences[i].start,
-        allSentences[i].end,
-      ]);
-    }
-  }
+  // Build highlight ranges per chunk: only the top 2 most relevant sentences
+  // This avoids highlighting the entire passage — just the most on-topic parts
+  const TOP_N = 2;
+  const chunkHighlights: [number, number][][] = rawChunks.map(() => {
+    // Collect sentences for this chunk with their similarity scores
+    const scored = allSentences
+      .map((s, i) => ({ start: s.start, end: s.end, sim: similarities[i] }))
+      .filter((s) => s.sim > 0.35)
+      .sort((a, b) => b.sim - a.sim)
+      .slice(0, TOP_N);
+    return scored.map((s) => [s.start, s.end]);
+  });
 
   const chunks: ChunkEvidence[] = rawChunks.map((c, i) => ({
     ...c,
