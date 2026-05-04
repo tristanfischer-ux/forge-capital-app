@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { CampaignSummary } from "@/lib/queries/campaigns";
-import { addMatchesToCampaign } from "./actions";
+import { addMatchesToCampaign, createCampaign } from "./actions";
 import {
   getPartnerOutreachState,
   type OutreachState,
@@ -40,6 +40,9 @@ export function AddToCampaignBar({
     total: number;
     byCampaign: { name: string; count: number }[];
   } | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState("");
+  const [creating, setCreating] = useState(false);
 
   // Check cross-campaign state when scored IDs or selected campaign change
   useEffect(() => {
@@ -105,6 +108,26 @@ export function AddToCampaignBar({
     }
   }
 
+  async function handleCreate() {
+    if (!newCampaignName.trim()) return;
+    setCreating(true);
+    try {
+      const res = await createCampaign({
+        name: newCampaignName,
+        intent: "investor",
+      });
+      if (res.ok && res.id) {
+        setSelectedCampaign(res.id);
+        setShowCreateForm(false);
+        setNewCampaignName("");
+        // Refresh to pick up the new campaign
+        window.location.reload();
+      }
+    } finally {
+      setCreating(false);
+    }
+  }
+
   if (campaigns.length === 0) {
     return (
       <section
@@ -115,16 +138,69 @@ export function AddToCampaignBar({
           background: "var(--surface)",
           border: "1px dashed var(--border)",
           borderRadius: 10,
-          textAlign: "center",
         }}
       >
-        <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
-          No active campaigns yet.{" "}
-          <Link href="/pipeline" style={{ color: "var(--accent)", fontWeight: 600 }}>
-            Create a campaign →
-          </Link>{" "}
-          then come back to search and add investors.
-        </p>
+        {showCreateForm ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 200px" }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--text-dim)", marginBottom: 4, textTransform: "uppercase" }}>
+                Campaign name
+              </label>
+              <input
+                type="text"
+                value={newCampaignName}
+                onChange={(e) => setNewCampaignName(e.target.value)}
+                placeholder="e.g. Q2 2026 Fundraise"
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+                style={{
+                  width: "100%", padding: "8px 12px", fontSize: 13,
+                  border: "1px solid var(--border)", borderRadius: 6,
+                  background: "var(--surface)", color: "var(--text)",
+                }}
+                autoFocus
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={creating || !newCampaignName.trim()}
+              style={{
+                padding: "8px 16px", fontSize: 13, fontWeight: 600,
+                background: "var(--accent)", color: "#fff", border: "none",
+                borderRadius: 6, cursor: creating ? "wait" : "pointer",
+              }}
+            >
+              {creating ? "Creating…" : "Create"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(false)}
+              style={{
+                padding: "8px 12px", fontSize: 13,
+                background: "none", border: "1px solid var(--border)",
+                borderRadius: 6, color: "var(--text-dim)",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)", textAlign: "center" }}>
+            No active campaigns yet.{" "}
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(true)}
+              style={{
+                color: "var(--accent)", fontWeight: 600, background: "none",
+                border: "none", padding: 0, cursor: "pointer", fontSize: 13,
+                textDecoration: "underline",
+              }}
+            >
+              Create one now
+            </button>
+            {" "}to start adding investors.
+          </p>
+        )}
       </section>
     );
   }

@@ -104,3 +104,49 @@ export async function addMatchesToCampaign({
     total: investorIds.length,
   };
 }
+
+/**
+ * Create a new campaign with the given name and intent.
+ * Returns the new campaign ID on success.
+ */
+export async function createCampaign({
+  name,
+  intent,
+}: {
+  name: string;
+  intent: "investor" | "customer" | "supplier";
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!name.trim()) return { ok: false, error: "Campaign name is required" };
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert({
+      name: slug,
+      display_name: name.trim(),
+      campaign_intent: intent,
+      status: "active",
+      week_started_at: new Date().toISOString(),
+      week_count_target: 16,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("createCampaign failed:", error.message);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, id: data.id };
+}
