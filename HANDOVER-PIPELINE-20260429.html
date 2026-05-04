@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HANDOVER-PIPELINE-20260429</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --code-bg: #f6f8fa;
+    --link: #0969da;
+    --accent: #1f6feb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 860px; margin: 0 auto; padding: 56px 28px 160px;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { margin-top: 2em; margin-bottom: 0.5em; font-weight: 600; line-height: 1.25; }
+  h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+  h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.25em; }
+  h4 { font-size: 1em; }
+  p { margin: 0 0 1em 0; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em;
+         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  pre { background: var(--code-bg); padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 0.9em; }
+  blockquote { border-left: 4px solid var(--border); margin: 0 0 1em; padding: 0 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+  ul, ol { padding-left: 2em; margin: 0 0 1em; }
+  li { margin: 0.2em 0; }
+  li > p { margin: 0; }
+  img { max-width: 100%; }
+  strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="content">Loading…</div>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script>
+  const md = "# Handover: Pipeline \u2192 App Connection (2026-04-29)\n\nFor the database/pipeline terminal. This explains how the forge-capital-app reads investor data, what's working, what's broken, and what needs to happen on the pipeline side to unlock the next level of matching quality.\n\n## Architecture overview\n\n```\nScrape (research scripts)\n  \u2192 SQLite (forge-capital.db + corpus.db)\n    \u2192 Synthesise (deep profiles, structured fields)\n      \u2192 Embed (text-embedding-3-small, 1536 dims)\n        \u2192 Push to Supabase (14b, 14c, 14-push-capital-app.py)\n          \u2192 App reads via queries (match-score.ts, investor-profile.ts)\n```\n\n**Supabase project:** `kgkajatjyqfetdtbzmwg` (apex-outreach)\n\n## What the app reads and how\n\n### Matching engine (`lib/queries/match-score.ts`)\n\nTwo-stage pipeline:\n\n1. **Candidate retrieval** \u2014 calls `match_investors_by_embedding` RPC with the founder's hero text embedded via OpenAI `text-embedding-3-small` at 1536 dimensions. Returns top ~200 investors by cosine distance from `investors_mirror.embedding vector(1536)`. Falls back to freshness-sorted top 2,000 if `OPENAI_API_KEY` is absent (it IS set in Vercel prod).\n\n2. **Re-ranking** \u2014 `scoreDims()` scores each candidate across 7 dimensions:\n   - Thesis (Jaccard of hero text tokens against `thesis_summary` + `sector_focus` + `ideal_company_profile`)\n   - Stage match (`stage_focus`)\n   - Geo match (`geo_focus` + `hq_location`)\n   - Cheque fit (`cheque_min_usd`, `cheque_max_usd`)\n   - Activity (freshness of `synthesized_at` / `last_enriched`)\n   - Data quality (`data_quality_score`)\n   - Hardware fit (`hardware_fit_score`, weighted 15%, non-penalising when null)\n\n### Investor profile page (`lib/queries/investor-profile.ts`)\n\nReads from two tables:\n- `investors_mirror` \u2014 structured fields (thesis, sector, stage, geo, cheque, fund size, etc.)\n- `investor_deep_profiles` \u2014 `profile_json` JSONB with: `investment_thesis`, `recent_investments`, `recent_news`, `fund_details`, `team`, `sector_focus`, `stage_focus`, `geo_focus`, `tickets`, `quality_assessment`, `fact_checks`, `social_presence`, `sources`\n\nBoth are working end-to-end. 14,396 rows in `investors_mirror`, 8,227 in `investor_deep_profiles`.\n\n## What's working\n\n| Component | Status | Detail |\n|---|---|---|\n| Structured fields on `investors_mirror` | Live | 37 columns, 14,396 rows |\n| Deep profiles | Live | 8,227 rows, rendered on profile page |\n| Embedding column | Live | 14,393/14,396 rows have vectors |\n| Embedding search RPC | Live | `match_investors_by_embedding(query_embedding, match_count)` |\n| OpenAI API key | Set | Both prod and dev in Vercel env |\n| `hardware_fit_score` in scoring | Live (just shipped) | 14,103 rows, weighted 15% |\n| `ideal_company_profile` in scoring | Live (just shipped) | 5,744 rows, fed into thesis Jaccard bag |\n\n## What's broken or missing\n\n### 1. Raw scraped pages are not embedded (critical gap)\n\n**The data exists:**\n- `forge-capital.db \u2192 investor_raw_pages`: 49,418 pages from 7,555 investors\n- `corpus.db \u2192 investor_raw_pages`: 260,465 pages from 8,362 investors\n- `corpus.db \u2192 page_chunks`: 864,975 chunks (text is there, no embeddings)\n\n**The embedding script (`18-build-embeddings.py`) only embeds synthesised summaries** \u2014 `firm_name` + `thesis_deep` (or fallback chain). The full page text is never embedded.\n\n**What this means for matching quality:** The current embedding search matches the founder's pitch against a ~200-word synthesis per investor. If the full scraped content were embedded, we'd be matching against thousands of words of actual website content \u2014 portfolio pages, blog posts, team bios, thesis pages. An investor who wrote a blog post about backing a hardware company in exactly the founder's space would surface, even if their synthesis doesn't mention it.\n\n### 2. Embedding dimension question\n\nThe `investors_mirror.embedding` column in Supabase is `vector(1536)` (OpenAI text-embedding-3-small). Confirmed working. But the push script `14b-push-embeddings-to-capital-app.py` was previously pushing 768-dim nomic embeddings. **Verify what's currently in the column** \u2014 if it's the older nomic vectors, re-push with the OpenAI 1536-dim vectors from SQLite `investor_embeddings`.\n\nQuick check:\n```sql\nSELECT embedding <-> '[0,0,...,0]'::vector(1536) AS dist\nFROM investors_mirror\nWHERE embedding IS NOT NULL\nLIMIT 1;\n```\nIf this errors, the vectors aren't 1536-dim.\n\n### 3. `synthesis_data` on `investors_mirror` is stored as scalar string\n\nThe column is `jsonb` but contains scalar strings, not JSON objects. `parsePortfolioCompanies()` in the app always returns `[]` because `jsonb_typeof(synthesis_data)` never returns `'object'`. Either fix the push script to store proper JSONB or the app will never extract portfolio companies from this field.\n\n### 4. No raw pages table in forge-capital-app Supabase\n\n`14e-push-investor-pages.py` pushes raw pages to the ForgeOS Supabase (`jyarhvinengfyrwgtskq`), NOT to the forge-capital-app project (`kgkajatjyqfetdtbzmwg`). If the app needs to search or display raw page content, a table needs to be created and the push script needs to target the right project.\n\n## What the pipeline needs to deliver\n\nFor the app to use the full scraped content, the pipeline needs to:\n\n### Option A: Chunk-level embeddings in a new Supabase table\n\n1. **Embed the page chunks** \u2014 run `text-embedding-3-small` (1536 dims) over the 864,975 chunks in `corpus.db \u2192 page_chunks`\n2. **Create a new Supabase table:**\n   ```sql\n   CREATE TABLE investor_page_chunks (\n     id bigserial PRIMARY KEY,\n     investor_id bigint REFERENCES investors_mirror(id),\n     page_url text,\n     chunk_index int,\n     chunk_text text,\n     embedding vector(1536),\n     created_at timestamptz DEFAULT now()\n   );\n   CREATE INDEX ON investor_page_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 300);\n   ```\n3. **Push chunks + embeddings** to this table\n4. **Create an RPC** for chunk-level search:\n   ```sql\n   CREATE FUNCTION match_investor_chunks(query_embedding vector(1536), match_count int)\n   RETURNS TABLE (investor_id bigint, chunk_text text, page_url text, cosine_distance float)\n   AS $$ ... $$;\n   ```\n\n### Option B: Per-investor concatenated embedding (simpler)\n\n1. Concatenate all scraped page text per investor into one document\n2. Re-embed the concatenated text (may need truncation to fit model context)\n3. Push to the existing `investors_mirror.embedding` column, replacing the summary-only embedding\n4. No schema changes needed \u2014 the app's existing `match_investors_by_embedding` RPC works as-is\n\n**Option A is more powerful** (you can show which specific page/paragraph matched) but requires more infrastructure. **Option B is a quick win** that immediately improves match quality with zero app changes.\n\n### Either way, also fix:\n\n- Re-push 1536-dim OpenAI embeddings if the column currently has 768-dim nomic vectors\n- Fix `synthesis_data` to store proper JSONB objects, not scalar strings\n- Consider pushing `investor_raw_pages` to the forge-capital-app Supabase for full-text display\n\n## App-side contact points\n\nThe app code that would need changes if new tables/RPCs are added:\n\n- `lib/queries/match-score.ts` \u2014 candidate retrieval, would call a new chunk-search RPC\n- `lib/queries/investor-profile.ts` \u2014 would query chunk table for profile page display\n- `app/(authed)/investor/[id]/InvestorProfileView.tsx` \u2014 would render matched excerpts\n- `app/(authed)/match/FindAMatch.tsx` \u2014 could show \"matched because of [excerpt from blog post]\"\n- `lib/embeddings/openai.ts` \u2014 the embedding helper, already wired for `text-embedding-3-small` at 1536 dims\n\n## Files in this repo that matter\n\n```\nlib/queries/match-score.ts          \u2014 scoring engine + embedding search\nlib/queries/match-score-types.ts    \u2014 MatchResultRow interface\nlib/queries/investor-profile.ts     \u2014 profile page data loader\nlib/embeddings/openai.ts            \u2014 OpenAI embedding helper\napp/(authed)/match/FindAMatch.tsx   \u2014 match UI (cards, drill-down)\napp/(authed)/investor/[id]/InvestorProfileView.tsx \u2014 full profile page\napp/(authed)/match/match-v4-actions.ts \u2014 server actions (insight generation)\n```\n";
+  marked.setOptions({ breaks: false, gfm: true });
+  const rawHtml = marked.parse(md);
+  const safeHtml = DOMPurify.sanitize(rawHtml);
+  document.getElementById('content').innerHTML = safeHtml;
+  const h1 = md.match(/^#\s+(.+)$/m);
+  if (h1) document.title = h1[1];
+</script>
+</body>
+</html>

@@ -112,6 +112,9 @@ export interface MatchResultRow {
     url: string;
     similarity: number;
   } | null;
+  /** Normalised investor type label (e.g. "VC", "Angel Network", "Government").
+   *  Derived from entity_type in the DB via normalizeInvestorType(). */
+  entity_type: string | null;
 }
 
 export interface GetMatchScoreResult {

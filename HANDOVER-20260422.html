@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HANDOVER-20260422</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --code-bg: #f6f8fa;
+    --link: #0969da;
+    --accent: #1f6feb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 860px; margin: 0 auto; padding: 56px 28px 160px;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { margin-top: 2em; margin-bottom: 0.5em; font-weight: 600; line-height: 1.25; }
+  h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+  h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.25em; }
+  h4 { font-size: 1em; }
+  p { margin: 0 0 1em 0; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em;
+         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  pre { background: var(--code-bg); padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 0.9em; }
+  blockquote { border-left: 4px solid var(--border); margin: 0 0 1em; padding: 0 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+  ul, ol { padding-left: 2em; margin: 0 0 1em; }
+  li { margin: 0.2em 0; }
+  li > p { margin: 0; }
+  img { max-width: 100%; }
+  strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="content">Loading…</div>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script>
+  const md = "# forge-capital-app \u2014 handover 2026-04-22\n\nNew terminal window pickup doc. Everything below is live repo state \u2014 not aspirational.\n\n## Repo + deploy\n\n- **Path:** `/Users/tristanfischer/Developer/forge-capital-app`\n- **Remote:** `https://github.com/tristanfischer-ux/forge-capital-app`\n- **Branch model:** trunk-only on `main`. Push = Vercel auto-deploy.\n- **Supabase project:** `kgkajatjyqfetdtbzmwg` (apex-outreach).\n- **Dev server:** `env -i PATH=$PATH HOME=$HOME npm run dev` (a polluted shell otherwise overrides `.env.local` and points at the wrong Supabase project).\n- **Auth test bypass:** `.env.local` can carry `DEV_SKIP_AUTH=1` for agent-browser parity screenshots. Inert in production.\n- **Project rules:** `CLAUDE.md` in repo root is load-bearing; read it first. Notable: phase switch on 2026-04-22 \u2014 stop producing standalone HTML mockups, enhance directly in the React app.\n\n## What shipped today (2026-04-22)\n\nFive commits on top of the last handover. Most recent first:\n\n1. `f1fa961 fix(match): move Find matches out of textarea \u2014 clean drop zone`\n   - Both buttons (Upload deck, Find matches) now sit below the textarea in one action row. The entire textarea is an unobstructed drop target. Killed `.hero-btn` usage on this surface because its CSS is `position: absolute`.\n2. `a5f6f27 fix(approval+match): real synthesis prose + sort control + deck parse on Vercel`\n   - `deriveWhyThem` now reads `investment_pattern` / `connection_brief` / `team_expertise` from `investors_mirror`. The old code probed `synthesis_data` jsonb for keys the pipeline never writes (`structured_signals` goes there instead \u2014 sectors, stage hints, not prose).\n   - Secondary \"Order by\" dropdown in Find-a-Match: Match / Alphabetical / Approval status / Most recent contact.\n   - `next.config.ts` now sets `serverExternalPackages: [\"officeparser\"]` to fix the Vercel \"Cannot find package 'file-type'\" failure.\n3. `ce6697c feat(ingest): drag-drop tracker xlsx import with preview + apply` \u2014 `/import` page.\n4. `a9b6363 feat(match): drag-drop pitch file extraction + drop week-count fields`.\n5. `1276a7c feat(trust): campaigns.counterpart_* + sidebar-off + Stephan-strip` \u2014 migration 012 + EditCampaignPanel.\n\n## Still OPEN (in priority order)\n\n### #78 \u2014 Verify PDF/PPTX extract actually works on Vercel (P0)\n\n- Tristan's words: *\"PDF and PowerPoint don't work in that box either. In the Forge Capital app, it does work, so clearly you know how to do it.\"*\n- The fix pushed in `a5f6f27` (serverExternalPackages) should resolve the \"Cannot find package 'file-type'\" bundling failure, but **it has not been verified end-to-end on the deployed Vercel build**.\n- The \"Forge Capital app\" Tristan refers to is almost certainly NOT a web app \u2014 it's the `~/Developer/Forge-Capital/` pipeline which has `pptxgenjs` (generation, not parsing). A quick grep showed no PDF parser in that repo. Confirm what he's comparing against before assuming there's a reference implementation to copy.\n- **Next steps:**\n  1. After Vercel finishes deploying `f1fa961`, drop a real `.pdf` and a real `.pptx` onto the textarea on the live site.\n  2. If it still fails, check Vercel function logs for the exact error \u2014 it may be a different bundler issue than `file-type`.\n  3. If it works, close #78.\n  4. If the Vercel fix isn't enough, two escape hatches: (a) switch to a different parser (`pdf-parse` for PDF, `node-pptx-parser` for PPTX) or (b) use the AI Gateway for document \u2192 text (Anthropic Files API).\n- Current implementation: `app/api/extract-pitch/route.ts` + `lib/ingest/\u2026` (via `officeparser` from npm). Uploads \u226420 MB, auth-gated.\n\n### #67 \u2014 Investor drill-down from Find-a-Match results\n\n- Current: results cards are clickable \u2192 toggle selected.\n- Ask: single click = medium card (expanded inline), double-click = navigate to full profile.\n- Full-profile route doesn't exist yet \u2014 likely `/investor/[id]` reading from `investors_mirror` + `partners_mirror`. No data changes needed; everything is in the mirror tables.\n\n### #69 \u2014 Email-hunt workflow for approved investors with unverified emails\n\n- Many rows show \"0 verified emails \u00b7 cannot advance \u26a0 Resolve email \u2192\" on the match cards.\n- Need: a surface where you take an approved row and kick off a Hunter / email-lookup flow. Underlying pipeline exists (`research/03g-hunter-finder.py`) but there's no UI hook.\n- Probably a modal or drawer on the tracker / match row. Exact shape not decided yet.\n\n## Known bug catalogue (not fixed, catch if you see them)\n\n- `.hero-btn` CSS is still in `app/v4-mockup.css` as V4 defines it \u2014 if another surface adopts it they'll get the absolute positioning. Either rename the V4 variant or override in situ.\n- Campaign switcher cookie `fc_active_campaign` is set on click but layout-level caching can stale the topbar label on search-param-only nav. We already call `router.refresh()` in the dropdown handler; if it regresses, this is where to look.\n- Outgoing approval rows for investors without any of `investment_pattern` / `connection_brief` / `team_expertise` still render \"\u2014 synthesis pending \u2014\". This is correct empty-state behaviour, not a bug \u2014 it means the Forge Capital pipeline hasn't reached that investor yet.\n- Middleware is named `middleware.ts` and Next 16 logs a deprecation: *\"Please use 'proxy' instead.\"* Not urgent but on the next major Next upgrade this will need renaming.\n\n## Parallel safety rules (project-specific)\n\n`CLAUDE.md` \u00a7Parallel Sub-Agent Safety Rules governs sub-agent fan-outs. If you dispatch parallel agents:\n\n- **V4 section ports are sequential.** Any commit that touches rendered UI waits for the previous one to land.\n- **Data-plumbing / cron / docs sub-agents** can run in parallel.\n- `git add <specific files>` \u2014 never `-A`. Concurrent agents race on the staging area.\n- Confirm post-landing with `git show HEAD --stat` \u2014 concurrent-agent races have produced miscommitted file sets in this repo before.\n\n## Key files to read on pickup\n\n- `CLAUDE.md` (repo) \u2014 load-bearing rules, phase switch, parallel-agent rules.\n- `app/(authed)/layout.tsx` \u2014 V4 topbar, campaign dropdown, the in-place campaign switch logic.\n- `app/(authed)/match/FindAMatch.tsx` \u2014 the biggest React surface in the repo. PitchInput + ResultsHead + sort helpers all live here (1800+ lines, single file by design to keep V4 parity obvious).\n- `lib/queries/approval.ts` + `lib/queries/tracker.ts` + `lib/queries/match-score.ts` \u2014 all three select investor prose columns now (`investment_pattern`, `connection_brief`, `team_expertise`); `deriveWhyThem` is the shared helper in `tracker.ts`.\n- `app/v4-mockup.css` \u2014 V4's full `<style>` block, verbatim. Referenced by class name everywhere. Do not re-derive with Tailwind.\n- `next.config.ts` \u2014 `serverExternalPackages: [\"officeparser\"]` is load-bearing for the /api/extract-pitch route on Vercel.\n- `app/api/extract-pitch/route.ts` \u2014 PDF/PPTX ingest. Uses `officeparser` (`parseOffice(buf) \u2192 Promise<OfficeParserAST>` with `.toText()`). 20 MB cap, auth-gated.\n- `app/api/ingest-tracker/{parse,apply}/route.ts` + `lib/ingest/tracker.ts` \u2014 two-leg xlsx import with preview-then-apply.\n- `BLOCKERS.md` \u2014 anything currently blocked on Tristan's input.\n\n## Migrations cheat sheet\n\n`011_multi_user_rls.sql` + `012_campaign_counterpart_metadata.sql` are the two most recent. The counterpart fields (`counterpart_name`, `counterpart_email`, `counterpart_role`) live on `campaigns` and thread through every UI surface that used to hardcode \"Stephan\". Editable via the pencil button next to the campaign switcher (`app/(authed)/campaigns/EditCampaignPanel.tsx`).\n\n## Watch-outs specific to this codebase\n\n- Supabase's generated types model one-to-one relations as arrays. Always cast via `as unknown as <Shape>[]` after selects that use nested joins.\n- Next.js layouts don't receive `searchParams` in Next 16. The topbar reads `fc_active_campaign` from cookies as the fallback; page-level `?c=<uuid>` still wins for page content.\n- `\"use server\"` files can ONLY export async functions. Type exports \u2192 sibling `-types.ts` file.\n- Agent-browser screenshots MUST use `--full` or you capture only the viewport; viewport-only crops on 8000px-tall pages have caused multiple false \"parity \u2713\" claims in this repo.\n";
+  marked.setOptions({ breaks: false, gfm: true });
+  const rawHtml = marked.parse(md);
+  const safeHtml = DOMPurify.sanitize(rawHtml);
+  document.getElementById('content').innerHTML = safeHtml;
+  const h1 = md.match(/^#\s+(.+)$/m);
+  if (h1) document.title = h1[1];
+</script>
+</body>
+</html>

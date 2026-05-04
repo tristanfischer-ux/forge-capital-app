@@ -101,7 +101,7 @@ const PAGE_SIZE = 25;
  */
 type StageValue = "pre-seed" | "seed" | "series-a" | "series-b" | "growth";
 type GeoValue = "uk" | "eu" | "us" | "global";
-type TypeValue = "vc" | "accelerator" | "grant" | "corporate" | "angel";
+type TypeValue = "VC" | "PE" | "Family Office" | "Angel Network" | "Accelerator" | "Corporate VC" | "Government" | "Development Bank" | "Venture Debt" | "Impact";
 type ChequeValue = "lt500k" | "500k-2m" | "2m-10m" | "10m-plus";
 
 interface Filters {
@@ -113,7 +113,7 @@ interface Filters {
 
 const ALL_STAGES = new Set<StageValue>(["pre-seed", "seed", "series-a", "series-b", "growth"]);
 const ALL_GEOS = new Set<GeoValue>(["uk", "eu", "us", "global"]);
-const ALL_TYPES = new Set<TypeValue>(["vc", "accelerator", "grant", "corporate", "angel"]);
+const ALL_TYPES = new Set<TypeValue>(["VC", "PE", "Family Office", "Angel Network", "Accelerator", "Corporate VC", "Government", "Development Bank", "Venture Debt", "Impact"]);
 const ALL_CHEQUES = new Set<ChequeValue>(["lt500k", "500k-2m", "2m-10m", "10m-plus"]);
 
 const DEFAULT_FILTERS: Filters = {
@@ -235,16 +235,12 @@ function applyFilters(
       }
       if (!matched) return false;
     }
-    // Type filter
+    // Type filter — use entity_type from the database
     if (f.type.size < ALL_TYPES.size) {
-      const blob = `${r.firm_name ?? ""} ${r.sector_focus ?? ""}`.toLowerCase();
+      const et = (r.entity_type ?? "").toLowerCase();
       let matched = false;
       for (const t of f.type) {
-        if (t === "accelerator" && /accelerator|incubator|y ?combinator|techstars/.test(blob)) { matched = true; break; }
-        if (t === "grant" && /grant|innovate uk|horizon europe|arpa|doe|darpa|nsf/.test(blob)) { matched = true; break; }
-        if (t === "corporate" && /corporate|ventures|strategic/.test(blob)) { matched = true; break; }
-        if (t === "angel" && (r.partner_count === 1 || /angel/.test(blob))) { matched = true; break; }
-        if (t === "vc" && !/accelerator|incubator|grant|angel/.test(blob)) { matched = true; break; }
+        if (et === t.toLowerCase()) { matched = true; break; }
       }
       if (!matched) return false;
     }
@@ -1526,6 +1522,24 @@ function ResultCard({
           <div className="result-headline">
             <div className="result-name">
               <span className="firm">{row.firm_name ?? "—"}</span>
+              {row.entity_type ? (
+                <span style={{
+                  display: "inline-block",
+                  marginLeft: 8,
+                  padding: "1px 7px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  borderRadius: 4,
+                  background: "var(--orange-bg, #fff7ed)",
+                  color: "var(--accent)",
+                  border: "1px solid var(--accent)",
+                  lineHeight: "18px",
+                  whiteSpace: "nowrap",
+                  verticalAlign: "middle",
+                }}>
+                  {row.entity_type}
+                </span>
+              ) : null}
               <TagChips row={row} />
               <span
                 style={{
@@ -3069,11 +3083,16 @@ function FilterBar({
       <MultiSelectDropdown
         label="Type"
         options={[
-          { value: "vc", label: "Venture capital" },
-          { value: "accelerator", label: "Accelerator" },
-          { value: "grant", label: "Grant" },
-          { value: "corporate", label: "Corporate" },
-          { value: "angel", label: "Angel" },
+          { value: "VC", label: "Venture capital" },
+          { value: "PE", label: "Private equity" },
+          { value: "Family Office", label: "Family office" },
+          { value: "Angel Network", label: "Angel network" },
+          { value: "Accelerator", label: "Accelerator" },
+          { value: "Corporate VC", label: "Corporate VC" },
+          { value: "Government", label: "Government" },
+          { value: "Development Bank", label: "Development bank" },
+          { value: "Venture Debt", label: "Venture debt" },
+          { value: "Impact", label: "Impact" },
         ]}
         selected={filters.type}
         allValues={ALL_TYPES}

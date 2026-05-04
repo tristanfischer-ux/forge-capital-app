@@ -80,6 +80,49 @@ function cosineSim(a: number[], b: number[]): number {
 }
 
 /**
+ * Normalise a raw entity_type string from the DB to a clean display label.
+ * Mirrors the standalone Forge Capital normalise_type() logic.
+ */
+export function normalizeInvestorType(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const TYPE_MAP: Record<string, string> = {
+    "vc": "VC", "venture_capital_firm": "VC", "venture capital firm": "VC", "venture capital fund": "VC",
+    "pe": "PE", "private_equity": "PE", "private equity firm": "PE",
+    "pe_vc": "PE/VC", "pe|vc": "PE/VC",
+    "family_office": "Family Office", "private family office": "Family Office",
+    "multi_family_office": "Family Office", "multi-family office": "Family Office", "single-family office": "Family Office",
+    "angel": "Angel", "angel_network": "Angel Network", "angel_group": "Angel Network",
+    "accelerator": "Accelerator", "incubator": "Incubator", "incubator/accelerator": "Accelerator",
+    "corporate_vc": "Corporate VC", "corporate_venture_capital": "Corporate VC",
+    "corporate venture capital": "Corporate VC", "cvc": "Corporate VC",
+    "government_grant": "Government", "government_fund": "Government",
+    "government_vc": "Government", "government": "Government",
+    "development_bank": "Development Bank",
+    "crowdfunding_platform": "Crowdfunding", "equity_crowdfunding_platform": "Crowdfunding",
+    "venture_debt": "Venture Debt", "venture_debt_fund": "Venture Debt",
+    "fund_manager": "Fund Manager", "hedge_fund": "Hedge Fund",
+    "sovereign_wealth_fund": "Sovereign Wealth Fund",
+    "impact_investment_firm": "Impact",
+  };
+  const lower = raw.toLowerCase().trim();
+  if (TYPE_MAP[lower]) return TYPE_MAP[lower];
+  // Partial matching fallback
+  if (lower.includes("venture capital") || lower === "vc") return "VC";
+  if (lower.includes("private equity") || lower === "pe") return "PE";
+  if (lower.includes("family office")) return "Family Office";
+  if (lower.includes("angel")) return "Angel Network";
+  if (lower.includes("accelerat")) return "Accelerator";
+  if (lower.includes("incubat")) return "Incubator";
+  if (lower.includes("corporate") && (lower.includes("vc") || lower.includes("venture"))) return "Corporate VC";
+  if (lower.includes("government") || lower.includes("govt") || lower.includes("grant")) return "Government";
+  if (lower.includes("debt")) return "Venture Debt";
+  if (lower.includes("crowd")) return "Crowdfunding";
+  if (lower.includes("impact")) return "Impact";
+  if (lower.includes("sovereign")) return "Sovereign Wealth Fund";
+  return raw; // Return as-is if no pattern matches
+}
+
+/**
  * Tokenise free text into lowercased words, dropping short stopwords.
  * Used for the simple word-overlap thesis score in V1.
  */
@@ -565,6 +608,9 @@ interface CandidateRow {
    *  float with parseFloat on use. Null when the pipeline hasn't scored this
    *  investor yet. */
   hardware_fit_score: string | null;
+  /** Investor type (e.g. "vc", "angel_network", "government_grant").
+   *  Normalised to display labels by normalizeInvestorType(). */
+  entity_type: string | null;
   synthesis_data: unknown;
   investment_pattern: string | null;
   connection_brief: string | null;
@@ -841,7 +887,7 @@ export async function getMatchScore(
       id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
       cheque_min_usd, cheque_max_usd, fund_size_usd,
       thesis_summary, thesis_deep, ideal_company_profile,
-      hardware_fit_score,
+      hardware_fit_score, entity_type,
       synthesis_data, investment_pattern, connection_brief,
       team_expertise, value_add, recent_activity,
       synthesized_at, last_enriched,
@@ -871,7 +917,7 @@ export async function getMatchScore(
             id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
             cheque_min_usd, cheque_max_usd, fund_size_usd,
             thesis_summary, thesis_deep, ideal_company_profile,
-            hardware_fit_score,
+            hardware_fit_score, entity_type,
             synthesis_data, investment_pattern, connection_brief,
             team_expertise, value_add, recent_activity,
             synthesized_at, last_enriched,
@@ -1090,6 +1136,7 @@ export async function getMatchScore(
       // to a stable empty array so the row already conforms to the type.
       portfolio_fit: [],
       chunk_evidence: chunkEvidenceMap.get(inv.id) ?? null,
+      entity_type: normalizeInvestorType(inv.entity_type),
     });
   }
 

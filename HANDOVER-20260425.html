@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HANDOVER-20260425</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --code-bg: #f6f8fa;
+    --link: #0969da;
+    --accent: #1f6feb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 860px; margin: 0 auto; padding: 56px 28px 160px;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { margin-top: 2em; margin-bottom: 0.5em; font-weight: 600; line-height: 1.25; }
+  h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+  h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.25em; }
+  h4 { font-size: 1em; }
+  p { margin: 0 0 1em 0; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em;
+         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  pre { background: var(--code-bg); padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 0.9em; }
+  blockquote { border-left: 4px solid var(--border); margin: 0 0 1em; padding: 0 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+  ul, ol { padding-left: 2em; margin: 0 0 1em; }
+  li { margin: 0.2em 0; }
+  li > p { margin: 0; }
+  img { max-width: 100%; }
+  strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="content">Loading…</div>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script>
+  const md = "# Handover \u2014 forge-capital-app, 2026-04-25\n\nPickup state for a fresh Claude Code session continuing the /send flow work for Fischer Farms customer outreach.\n\n## TL;DR\n\nThe /send 9-step linear flow is functionally end-to-end on prod. The Hunter+ranker pipeline now uses DeepSeek v4 Flash via OpenRouter as primary (~\u00a30.0002/call) and Haiku 4.5 as fallback (~\u00a30.005/call), down from Opus 4.7 (~\u00a30.08/call). Tristan is in the middle of working through the 23 Fischer Farms customer rows that need emails. Pick up by reading this doc end-to-end, then restart local dev and confirm Step 5 works against a real campaign id.\n\n## Repo + environment\n\n- **Working directory:** `/Users/tristanfischer/Developer/forge-capital-app`\n- **Latest commit on `main`:** `12acca1 fix(send/hunter): bump DeepSeek max_tokens to 16K for reasoning headroom`\n- **Branch model:** trunk-based \u2014 work directly on `main`. No feature branches.\n- **Prod URL:** `https://forge-capital-app.vercel.app`\n- **Latest prod deploy:** `forge-capital-ll4hjzsud-tristan-fischers-projects.vercel.app` (Ready)\n- **Supabase project:** `kgkajatjyqfetdtbzmwg` (apex-outreach)\n- **Active campaign:** Fischer Farms \u2014 Nordics / Canada / USA Customer Outreach\n  - `campaigns.id = '46454f86-bd85-46d1-8e64-6d6c6461f7b9'`\n  - `campaign_intent = 'customer'`\n  - 23 customer rows, 0 emails on file at last check, all in status `+0` Pending approval\n\n## Local dev\n\n```bash\n# CRITICAL: env -i to avoid polluted-shell overrides of NEXT_PUBLIC_SUPABASE_URL\ncd /Users/tristanfischer/Developer/forge-capital-app\nenv -i PATH=$PATH HOME=$HOME npm run dev\n```\n\nThe dev server I'd kept running for ~3 hours died at end of session 2026-04-24. New session needs to restart it.\n\n`.env.local` has all four AI keys: `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `HUNTER_API_KEY`, plus the Supabase trio. Also `DEV_SKIP_AUTH=1` for agent-browser parity runs.\n\n## What shipped this session (chronological)\n\n| Commit | Why | Files |\n|---|---|---|\n| `8cc1762` | Switch ranker to DeepSeek v4 Flash primary, Haiku fallback. Renamed candidate fields `opus_rank/opus_reason` \u2192 `rank/reason`, added `ranker_model` stamp so UI shows \"(Haiku fallback)\" when we drop. | `hunterAction.ts`, `HunterRow.tsx` |\n| `97a8fef` | Step 5 clarity \u2014 once the ranker finishes, collapse to the #1 candidate + a \"Show N others \u2193\" disclosure. Top generic addresses (info@/sales@) keep the full list because rank-2+ named candidate is usually the real answer. Pinned candidates always visible. | `HunterRow.tsx` |\n| `35c6390` | Lift `emailByCpId` + `primaryPartnerIdByCpId` from `Step5EmailResolve` to `SendFlow` parent \u2014 kills the \"dead page look\" loading flicker on Step 5 \u2192 6 \u2192 5 navigation. Cache survives step switching now. | `SendFlow.tsx` |\n| `3f923cf` | Added `/send` to `GATED_PREFIXES` in `proxy.ts`. Previously ungated, so unauth'd prod requests bypassed middleware, hit the page, failed RLS, and produced a confusing `notFound()` 404 instead of a login redirect. | `proxy.ts` |\n| `12acca1` | DeepSeek max_tokens 4K \u2192 16K + timeout 25s \u2192 45s. v4 Flash is a reasoning model \u2014 at 4K it ate the whole budget on `reasoning` and returned `content: null`, silently falling through to Haiku. 16K gives headroom for any realistic candidate count. Verified: 3-candidate IKEA call uses ~280 tokens total. | `hunterAction.ts` |\n\n## Vercel prod env var fixes (manual, not in git)\n\nBurnt ~30 min on this trap \u2014 second occurrence in our codebases (first was ForgeOS `DEEPSEEK_API_KEY`). Captured to `~/.claude/projects/-Users-tristanfischer/memory/vercel_env_literal_newline_trap.md`.\n\n| Var | State before | State after |\n|---|---|---|\n| `ANTHROPIC_API_KEY` | **missing entirely** from prod | added (production + development) |\n| `OPENROUTER_API_KEY` | empty string | re-added with `--value --force` |\n| `HUNTER_API_KEY` | literal `\\n` suffix | re-added clean |\n| `NEXT_PUBLIC_SUPABASE_URL` | literal `\\n` suffix \u2192 caused prod /send 404 because RLS reads silently failed | re-added clean |\n\n**Detection rule for next time:** when prod fails silently but local works, run `vercel env pull /tmp/check --environment=production --yes` and grep `\\\\n` on every value. Note that `vercel env pull` shows sensitive vars as `\"\"` by default \u2014 check `vercel env ls` for \"Encrypted\" presence instead. Use `vercel env add NAME env --value \"$VAR\" --force --yes` (the `printf | vercel env add` stdin pattern is unreliable).\n\n## Open issues \u2014 for the next session\n\n### 1. HunterRow panel state resets on step navigation (deferred refactor)\n\nStep 5 \u2192 Step 6 \u2192 Step 5 currently loses HunterRow's `expanded`/`candidates`/`pinned` state because the row component unmounts. Re-clicking \"Find via Hunter\" re-fires the Hunter API + the DeepSeek ranker call (~\u00a30.0002 + 1-2s latency).\n\nThe fix is to lift HunterRow state to SendFlow keyed by `campaignPartnerId`, similar to what we did for emails. I started this and rolled it back to keep the diff small. The type was going to be:\n\n```ts\ntype Step5HunterSnapshot = {\n  expanded: boolean;\n  candidates: HunterCandidate[] | null;\n  error: string | null;\n  rankingStatus: \"idle\" | \"ranking\" | \"done\" | \"failed\";\n  rankingError: string | null;\n  rankerModel: \"deepseek-v4-flash\" | \"haiku-4-5\" | null;\n  pinned: string[];\n  showAllCandidates: boolean;\n};\n```\n\nPlumb a `Map<cpId, Step5HunterSnapshot>` + setter from SendFlow \u2192 Step5EmailResolve \u2192 EmailRow \u2192 HunterRow. HunterRow reads its own snapshot or initialises a fresh one, writes back via setter on every state change.\n\nNot blocking \u2014 Hunter is cheap and quick \u2014 but Tristan will hit it eventually.\n\n### 2. Draft page \"broken\" \u2014 could not reproduce\n\nTristan reported on 2026-04-24: \"I clicked on one of the drafts, and it then went to a page saying it was broken, and then I pressed back, and then I'm back to this old version of what it looked like.\"\n\nTested on `/tracker/4c17f28d-38c8-489e-9819-139f0b99c6e5/draft` (LiveWall) and `/tracker/0b9e0103-5ccf-4613-8a8c-a8771b097dca/draft` (Logee's Greenhouses) via agent-browser \u2014 both rendered cleanly with the Fischer Farms customer template body, no errors in dev server logs. The polymorphic `getInvestorModalData` correctly maps `customers_mirror.pitch_hook \u2192 investor.thesis_summary`.\n\nHypothesis: it was a transient from my dev server restart mid-flight. If Tristan hits it again, capture the campaignPartnerId he was on and the exact error text.\n\n### 3. Local dev server is down\n\nRestart with `env -i PATH=$PATH HOME=$HOME npm run dev` from the repo root.\n\n## Hard rules \u2014 DO NOT BREAK\n\nFrom `CLAUDE.md` in the repo root, verbatim from Tristan:\n\n> \"There is no permission to automatically send things until they have been approved. That has to be a very fast rule that cannot be broken.\"\n\nThree layers of defence in depth:\n1. DB trigger `enforce_scheduled_send_approval_gate()` (migration 029) \u2014 blocks any `scheduled_sends` insert where the referenced `campaign_partners.status_code` is anything other than `+1` or `+2`.\n2. Server action `queueScheduledBatch` selects only `status_code IN ('+1','+2')`.\n3. Reviewer checklist for any send-adjacent code change \u2014 if it touches `scheduled_sends`, `sendGmailMessage`, the dispatcher daemon, or anything outbound, verify the approval gate is intact.\n\n## Behaviour rules updated this session\n\n`~/.claude/CLAUDE.md` was updated 2026-04-25 with a new section: **\"Sub-Agent Model Selection \u2014 Auto-Toggle Rule\"**.\n\n- Sub-agents default to `sonnet` (the cheapest tier that does the job).\n- Drop to `haiku` for trivial loops, single-line edits, deploy waits, log polling.\n- Escalate to `opus` only with a one-line reason in the dispatch (cross-cutting refactors, irreversible decisions, strategy).\n- Main thread stays on Opus 4.7 for orchestration.\n\nA separate `second-opinion` MCP server exists with `ask_alt_llm` exposing 13 non-Anthropic models via OpenRouter. **It was NOT registered in this session** \u2014 `ToolSearch query=\"ask_alt_llm\"` returned empty. If you need DeepSeek/Gemini/Mistral/Kimi sanity checks, ensure the MCP server is connected first.\n\n## Memory files relevant to this work\n\n- `~/.claude/projects/-Users-tristanfischer/memory/vercel_env_literal_newline_trap.md` \u2014 the env-corruption gotcha (read this BEFORE debugging any \"works in local, fails in prod\")\n- `~/.claude/projects/-Users-tristanfischer/memory/openrouter_setup_gotchas.md` \u2014 DeepSeek v4 model IDs + privacy toggle traps\n- `~/.claude/projects/-Users-tristanfischer/memory/v4_flash_production_gotchas.md` \u2014 the \"max_tokens >= 16K for reasoning\" rule (the rule was there; this session's bug was code that didn't respect it)\n- `forge-capital-app/CLAUDE.md` \u2014 phase rules, parity gate, hard rule on approval\n\n## Real-data references\n\n- Fischer Farms campaign id: `46454f86-bd85-46d1-8e64-6d6c6461f7b9`\n- Real customer campaignPartnerIds for testing draft page:\n  - `4c17f28d-38c8-489e-9819-139f0b99c6e5` (LiveWall)\n  - `0b9e0103-5ccf-4613-8a8c-a8771b097dca` (Logee's Greenhouses)\n  - `c1146fc8-dfc1-414c-9a0c-8e8b034ff506` (Merrifield Garden Center)\n  - `d3b9098c-720c-435d-8ca7-0e2fe6a968aa` (Pike Nurseries)\n  - `9b4e0d67-35f2-433f-ad7d-71c786b77a2c` (Plant Depot)\n\n## Suggested first actions for the next session\n\n1. Read this doc top to bottom.\n2. Read repo `CLAUDE.md` (especially the parity gate + V4 design rules).\n3. Restart dev server: `env -i PATH=$PATH HOME=$HOME npm run dev`.\n4. Confirm `/send/46454f86-bd85-46d1-8e64-6d6c6461f7b9` loads on prod and Step 5 ranker fires for at least one row (DeepSeek primary, ~3-5s).\n5. Ask Tristan what's next \u2014 likely either: (a) finish working through the 23 Fischer Farms rows + queue Step 9 the first batch, (b) tackle the deferred HunterRow state-lift refactor, (c) something brand new.\n";
+  marked.setOptions({ breaks: false, gfm: true });
+  const rawHtml = marked.parse(md);
+  const safeHtml = DOMPurify.sanitize(rawHtml);
+  document.getElementById('content').innerHTML = safeHtml;
+  const h1 = md.match(/^#\s+(.+)$/m);
+  if (h1) document.title = h1[1];
+</script>
+</body>
+</html>
