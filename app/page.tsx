@@ -33,6 +33,8 @@ function readQueryError(): string | null {
 
 export default function HomePage() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "sent" } | { kind: "error"; message: string }
   >({ kind: "idle" });
@@ -91,20 +93,33 @@ export default function HomePage() {
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next") ?? "/discover"
           : "/discover";
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-              : undefined,
-        },
-      });
-      if (error) {
-        setStatus({ kind: "error", message: error.message });
-        return;
+
+      if (usePassword) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          setStatus({ kind: "error", message: error.message });
+          return;
+        }
+        window.location.replace(next);
+      } else {
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo:
+              typeof window !== "undefined"
+                ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+                : undefined,
+          },
+        });
+        if (error) {
+          setStatus({ kind: "error", message: error.message });
+          return;
+        }
+        setStatus({ kind: "sent" });
       }
-      setStatus({ kind: "sent" });
     } catch (err) {
       setStatus({
         kind: "error",
@@ -157,17 +172,50 @@ export default function HomePage() {
                 disabled={status.kind === "sending" || status.kind === "sent"}
               />
             </label>
+            {usePassword ? (
+              <label className="block">
+                <span className="block text-xs font-medium text-text-dim mb-1.5">
+                  Password
+                </span>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full px-3 py-2 bg-surface-alt border border-border rounded-sm text-sm text-text placeholder:text-text-faint focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                  disabled={status.kind === "sending"}
+                />
+              </label>
+            ) : null}
             <button
               type="submit"
               disabled={status.kind === "sending" || status.kind === "sent"}
               className="w-full px-4 py-2 bg-accent hover:bg-accent-dark text-white rounded-sm text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {status.kind === "sending"
-                ? "Sending link…"
+                ? usePassword ? "Signing in…" : "Sending link…"
                 : status.kind === "sent"
                   ? "Link sent — check your inbox"
-                  : "Send magic link"}
+                  : usePassword ? "Sign in" : "Send magic link"}
             </button>
+            {!usePassword ? (
+              <button
+                type="button"
+                onClick={() => setUsePassword(true)}
+                className="w-full text-xs text-text-dim hover:text-accent transition-colors"
+              >
+                Use password instead
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setUsePassword(false)}
+                className="w-full text-xs text-text-dim hover:text-accent transition-colors"
+              >
+                Use magic link instead
+              </button>
+            )}
           </form>
 
           {status.kind === "error" ? (
@@ -181,7 +229,7 @@ export default function HomePage() {
           ) : null}
         </div>
         <p className="mt-4 text-center text-xs text-text-faint">
-          Magic links expire after ~60 minutes &middot; use the most recent one
+          Magic links expire after ~60 minutes &middot; or use your password
         </p>
       </div>
     </main>
