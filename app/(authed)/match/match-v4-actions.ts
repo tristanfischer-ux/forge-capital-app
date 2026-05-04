@@ -48,7 +48,9 @@ export async function findMatches(input: {
     hideContacted = true,
   } = input;
 
-  if (!campaignId) return { ok: false, error: "campaignId required" };
+  // campaignId may be empty on the Discovery page (campaign-agnostic search).
+  // getMatchScore handles empty campaignId gracefully — conflict checking
+  // and contacted-investor hiding are simply disabled.
 
   const supabase = await createServerClient();
   const {

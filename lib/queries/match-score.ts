@@ -685,31 +685,35 @@ export async function getMatchScore(
 
   const [cpCurrentRes, cpOtherRes, poolSize] = await Promise.all([
     // Current campaign: all campaign_partners rows with investor_id.
-    supabase
-      .from("campaign_partners")
-      .select(
-        `
-        id, status_code, status_label, last_contact_at,
-        partners_mirror:partner_id (
-          id, name, investor_id
-        )
-        `,
-      )
-      .eq("campaign_id", campaignId),
+    // When campaignId is empty (Discovery page), skip this query.
+    campaignId
+      ? supabase
+          .from("campaign_partners")
+          .select(
+            `
+            id, status_code, status_label, last_contact_at,
+            partners_mirror:partner_id (
+              id, name, investor_id
+            )
+            `,
+          )
+          .eq("campaign_id", campaignId)
+      : Promise.resolve({ data: [], error: null }),
     // Other campaigns, within 14 days of last_contact_at or created_at.
-    // For V1 we use last_contact_at — the 14-day rule is about a recent
-    // ask, not about ancient rows. Rows without a last_contact_at are ignored.
-    supabase
-      .from("campaign_partners")
-      .select(
-        `
-        id, status_code, status_label, last_contact_at, campaign_id,
-        campaigns:campaign_id ( id, name ),
-        partners_mirror:partner_id ( id, name, investor_id )
-        `,
-      )
-      .neq("campaign_id", campaignId)
-      .gte("last_contact_at", fourteenDaysAgo.toISOString()),
+    // When campaignId is empty (Discovery page), no conflicts to check.
+    campaignId
+      ? supabase
+          .from("campaign_partners")
+          .select(
+            `
+            id, status_code, status_label, last_contact_at, campaign_id,
+            campaigns:campaign_id ( id, name ),
+            partners_mirror:partner_id ( id, name, investor_id )
+            `,
+          )
+          .neq("campaign_id", campaignId)
+          .gte("last_contact_at", fourteenDaysAgo.toISOString())
+      : Promise.resolve({ data: [], error: null }),
     getArchetypePoolSizes(),
   ]);
 

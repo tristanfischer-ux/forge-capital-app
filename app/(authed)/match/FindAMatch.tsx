@@ -498,7 +498,7 @@ export function FindAMatch({
       setVisibleCount(nextVisible);
       return;
     }
-    const scoredTab: "best" | "thesis" | "near_miss" = tab;
+              const scoredTab = tab as "best" | "thesis" | "near_miss";
     // Otherwise ask the server for a wider slice. Cap at the total
     // scored pool so we don't push requestedLimit into the stratosphere
     // on small result sets.
@@ -796,8 +796,33 @@ export function FindAMatch({
         }}
         onClearAll={() => setSelected(new Set())}
         onSelectTopN={(n) => {
-          const ids = rows.slice(0, n).map((r) => r.investor_id);
-          setSelected(new Set(ids));
+          // Select from all scored+filtered rows, not just visible ones.
+          // If n exceeds what we have loaded, expand visibleCount first.
+          if (n > filteredRows.length) {
+            // Need to load more from server before selecting
+            setVisibleCount(n);
+            setRequestedLimit(Math.max(requestedLimit, n));
+            startLoadMoreTransition(async () => {
+    const scoredTab = tab as "best" | "thesis" | "near_miss";
+              const out = await findMatches({
+                heroText,
+                archetype,
+                campaignId,
+                limit: Math.max(requestedLimit, n),
+                tab: scoredTab,
+                minMatch: 0,
+                hideContacted: !showAll,
+              });
+              if (out.ok) {
+                setData(out.data);
+                const allIds = out.data.rows.slice(0, n).map((r) => r.investor_id);
+                setSelected(new Set(allIds));
+              }
+            });
+          } else {
+            const ids = filteredRows.slice(0, n).map((r) => r.investor_id);
+            setSelected(new Set(ids));
+          }
         }}
       />
 
