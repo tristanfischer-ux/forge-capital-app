@@ -21,10 +21,10 @@ import {
  */
 export function AddToCampaignBar({
   campaigns,
-  scoredInvestorIds,
+  selectedInvestorIds,
 }: {
   campaigns: CampaignSummary[];
-  scoredInvestorIds: number[];
+  selectedInvestorIds: number[];
 }) {
   const [selectedCampaign, setSelectedCampaign] = useState(
     campaigns[0]?.id ?? "",
@@ -43,12 +43,12 @@ export function AddToCampaignBar({
 
   // Check cross-campaign state when scored IDs or selected campaign change
   useEffect(() => {
-    if (scoredInvestorIds.length === 0) {
+    if (selectedInvestorIds.length === 0) {
       setCrossCampaignWarning(null);
       return;
     }
     let cancelled = false;
-    const checkIds = scoredInvestorIds.slice(0, 500);
+    const checkIds = selectedInvestorIds.slice(0, 500);
     getPartnerOutreachState(checkIds)
       .then((states: OutreachState[]) => {
         if (cancelled) return;
@@ -76,17 +76,17 @@ export function AddToCampaignBar({
     return () => {
       cancelled = true;
     };
-  }, [scoredInvestorIds, selectedCampaign]);
+  }, [selectedInvestorIds, selectedCampaign]);
 
   const selectedName =
     campaigns.find((c) => c.id === selectedCampaign)?.name ?? "campaign";
 
   async function handleAdd() {
-    if (!selectedCampaign || scoredInvestorIds.length === 0) return;
+    if (!selectedCampaign || selectedInvestorIds.length === 0) return;
     setAdding(true);
     setResult(null);
 
-    const idsToAdd = scoredInvestorIds.slice(0, count);
+    const idsToAdd = selectedInvestorIds.slice(0, count);
 
     try {
       const res = await addMatchesToCampaign({
@@ -138,9 +138,9 @@ export function AddToCampaignBar({
           lineHeight: 1.55,
         }}
       >
-        {scoredInvestorIds.length > 0
-          ? `${scoredInvestorIds.length.toLocaleString("en-GB")} investors scored. Select a campaign and choose how many of the highest-scoring matches to add. They will appear in your pipeline as pending approval.`
-          : "Run a search above to score investors, then add the top matches to a campaign."}
+        {selectedInvestorIds.length > 0
+          ? `${selectedInvestorIds.length.toLocaleString("en-GB")} investors selected. Pick a campaign and click Add to push them into your pipeline as pending approval.`
+          : "Search and tick investors above, then add them to a campaign."}
       </p>
 
       <div
@@ -212,7 +212,7 @@ export function AddToCampaignBar({
             id="add-count-input"
             type="number"
             min={1}
-            max={Math.max(scoredInvestorIds.length, 1)}
+            max={Math.max(selectedInvestorIds.length, 1)}
             value={count}
             onChange={(e) => {
               setCount(Number(e.target.value));
@@ -234,19 +234,19 @@ export function AddToCampaignBar({
         <button
           type="button"
           onClick={handleAdd}
-          disabled={adding || !selectedCampaign || scoredInvestorIds.length === 0}
+          disabled={adding || !selectedCampaign || selectedInvestorIds.length === 0}
           style={{
             flex: "0 0 auto",
             padding: "8px 20px",
             fontSize: 13,
             fontWeight: 600,
             background:
-              scoredInvestorIds.length === 0 ? "var(--border)" : "var(--accent)",
+              selectedInvestorIds.length === 0 ? "var(--border)" : "var(--accent)",
             color: "#fff",
             border: "none",
             borderRadius: 6,
             cursor:
-              adding || scoredInvestorIds.length === 0 ? "not-allowed" : "pointer",
+              adding || selectedInvestorIds.length === 0 ? "not-allowed" : "pointer",
             opacity: adding ? 0.7 : 1,
           }}
         >

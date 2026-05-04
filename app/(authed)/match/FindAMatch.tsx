@@ -73,14 +73,12 @@ export interface FindAMatchProps {
   campaignName: string;
   initialData: GetMatchScoreResult;
   initialArchetype: Archetype;
-  /** Customer-side partner cards — rendered in place of the
-   *  pool-empty placeholder when archetype === "customer". Null on
-   *  investor / supplier campaigns. */
+  /** Customer-side partner cards — unused on simplified Discovery page. */
   customerPartners?: CustomerCampaignPartnerCard[] | null;
-  /** Callback fired whenever the scored result set changes (initial
-   *  load + each re-score). Passes all scored investor IDs in rank
-   *  order so the AddToCampaignBar can offer "add top N to campaign". */
+  /** Callback fired whenever the scored result set changes. */
   onScoredIds?: (ids: number[]) => void;
+  /** Callback fired whenever the user's checkbox selection changes. */
+  onSelectedIds?: (ids: number[]) => void;
 }
 
 type Tab = "best" | "thesis" | "near_miss" | "lookalike";
@@ -101,24 +99,38 @@ const PAGE_SIZE = 25;
  * the server-side scorer so they prune the candidate pool instead of
  * trimming the displayed rows.
  */
-type StageFilter = "any" | "pre-seed" | "seed" | "series-a" | "series-b" | "growth";
-type GeoFilter = "any" | "uk" | "eu" | "us" | "global";
-type TypeFilter = "any" | "vc" | "accelerator" | "grant" | "corporate" | "angel";
-type ChequeFilter = "any" | "lt500k" | "500k-2m" | "2m-10m" | "10m-plus";
+type StageValue = "pre-seed" | "seed" | "series-a" | "series-b" | "growth";
+type GeoValue = "uk" | "eu" | "us" | "global";
+type TypeValue = "vc" | "accelerator" | "grant" | "corporate" | "angel";
+type ChequeValue = "lt500k" | "500k-2m" | "2m-10m" | "10m-plus";
 
 interface Filters {
-  stage: StageFilter;
-  geo: GeoFilter;
-  type: TypeFilter;
-  cheque: ChequeFilter;
+  stage: Set<StageValue>;
+  geo: Set<GeoValue>;
+  type: Set<TypeValue>;
+  cheque: Set<ChequeValue>;
 }
 
+const ALL_STAGES = new Set<StageValue>(["pre-seed", "seed", "series-a", "series-b", "growth"]);
+const ALL_GEOS = new Set<GeoValue>(["uk", "eu", "us", "global"]);
+const ALL_TYPES = new Set<TypeValue>(["vc", "accelerator", "grant", "corporate", "angel"]);
+const ALL_CHEQUES = new Set<ChequeValue>(["lt500k", "500k-2m", "2m-10m", "10m-plus"]);
+
 const DEFAULT_FILTERS: Filters = {
-  stage: "any",
-  geo: "any",
-  type: "any",
-  cheque: "any",
+  stage: new Set(ALL_STAGES),
+  geo: new Set(ALL_GEOS),
+  type: new Set(ALL_TYPES),
+  cheque: new Set(ALL_CHEQUES),
 };
+
+function isFilterAll(f: Filters): boolean {
+  return (
+    f.stage.size === ALL_STAGES.size &&
+    f.geo.size === ALL_GEOS.size &&
+    f.type.size === ALL_TYPES.size &&
+    f.cheque.size === ALL_CHEQUES.size
+  );
+}
 
 // Approval-status ranking: lower number sorts first. Any positive status
 // code (+1, +2, ...) means the counterpart greenlit the row — those come
@@ -189,66 +201,71 @@ function applyFilters(
   rows: GetMatchScoreResult["rows"],
   f: Filters,
 ): GetMatchScoreResult["rows"] {
-  if (
-    f.stage === "any" &&
-    f.geo === "any" &&
-    f.type === "any" &&
-    f.cheque === "any"
-  ) {
-    return rows;
-  }
+  if (isFilterAll(f)) return rows;
+
   return rows.filter((r) => {
-    if (f.stage !== "any") {
+    // Stage filter: match if row's stage is in the selected set
+    if (f.stage.size < ALL_STAGES.size) {
       const sf = (r.stage_focus ?? "").toLowerCase();
-      const wanted =
-        f.stage === "pre-seed" ? /pre-?seed/ :
-        f.stage === "seed" ? /\bseed\b/ :
-        f.stage === "series-a" ? /series\s*a/ :
-        f.stage === "series-b" ? /series\s*b/ :
-        f.stage === "growth" ? /growth|late|series\s*c|series\s*d/ :
-        null;
-      if (wanted && !wanted.test(sf)) return false;
-    }
-    if (f.geo !== "any") {
-      const gf = `${r.geo_focus ?? ""} ${r.hq_location ?? ""}`.toLowerCase();
-      const wanted =
-        f.geo === "uk" ? /uk|united kingdom|britain|london|england/ :
-        f.geo === "eu" ? /eu|europe|germany|france|spain|italy|netherlands/ :
-        f.geo === "us" ? /\bus\b|usa|united states|america|california|new york/ :
-        f.geo === "global" ? /global|worldwide/ :
-        null;
-      if (wanted && !wanted.test(gf)) return false;
-    }
-    if (f.type !== "any") {
-      // Heuristic — no dedicated investor_type column yet. Match against
-      // firm_name + sector_focus. "Angel" rarely in firm_name so it
-      // relies on single-partner fund structure.
-      const blob =
-        `${r.firm_name ?? ""} ${r.sector_focus ?? ""}`.toLowerCase();
-      if (f.type === "accelerator" && !/accelerator|incubator|y ?combinator|techstars/.test(blob)) return false;
-      if (f.type === "grant" && !/grant|innovate uk|horizon europe|arpa|doe|darpa|nsf/.test(blob)) return false;
-      if (f.type === "corporate" && !/corporate|ventures|strategic/.test(blob)) return false;
-      if (f.type === "angel" && !(r.partner_count === 1 || /angel/.test(blob))) return false;
-      if (f.type === "vc") {
-        if (/accelerator|incubator|grant|angel/.test(blob)) return false;
-        // VC is the default-shape assumption — anything not an accelerator /
-        // grant / angel passes through.
+      let matched = false;
+      for (const s of f.stage) {
+        const re =
+          s === "pre-seed" ? /pre-?seed/ :
+          s === "seed" ? /\bseed\b/ :
+          s === "series-a" ? /series\s*a/ :
+          s === "series-b" ? /series\s*b/ :
+          s === "growth" ? /growth|late|series\s*c|series\s*d/ :
+          null;
+        if (re && re.test(sf)) { matched = true; break; }
       }
+      if (!matched) return false;
     }
-    if (f.cheque !== "any") {
+    // Geography filter
+    if (f.geo.size < ALL_GEOS.size) {
+      const gf = `${r.geo_focus ?? ""} ${r.hq_location ?? ""}`.toLowerCase();
+      let matched = false;
+      for (const g of f.geo) {
+        const re =
+          g === "uk" ? /uk|united kingdom|britain|london|england/ :
+          g === "eu" ? /eu|europe|germany|france|spain|italy|netherlands/ :
+          g === "us" ? /\bus\b|usa|united states|america|california|new york/ :
+          g === "global" ? /global|worldwide/ :
+          null;
+        if (re && re.test(gf)) { matched = true; break; }
+      }
+      if (!matched) return false;
+    }
+    // Type filter
+    if (f.type.size < ALL_TYPES.size) {
+      const blob = `${r.firm_name ?? ""} ${r.sector_focus ?? ""}`.toLowerCase();
+      let matched = false;
+      for (const t of f.type) {
+        if (t === "accelerator" && /accelerator|incubator|y ?combinator|techstars/.test(blob)) { matched = true; break; }
+        if (t === "grant" && /grant|innovate uk|horizon europe|arpa|doe|darpa|nsf/.test(blob)) { matched = true; break; }
+        if (t === "corporate" && /corporate|ventures|strategic/.test(blob)) { matched = true; break; }
+        if (t === "angel" && (r.partner_count === 1 || /angel/.test(blob))) { matched = true; break; }
+        if (t === "vc" && !/accelerator|incubator|grant|angel/.test(blob)) { matched = true; break; }
+      }
+      if (!matched) return false;
+    }
+    // Cheque filter
+    if (f.cheque.size < ALL_CHEQUES.size) {
       const min = parseApproxAmount(r.cheque_min_raw);
       const max = parseApproxAmount(r.cheque_max_raw);
       if (min === null && max === null) return false;
       const lo = min ?? 0;
       const hi = max ?? Number.POSITIVE_INFINITY;
-      const [fLo, fHi] =
-        f.cheque === "lt500k" ? [0, 500_000] :
-        f.cheque === "500k-2m" ? [500_000, 2_000_000] :
-        f.cheque === "2m-10m" ? [2_000_000, 10_000_000] :
-        f.cheque === "10m-plus" ? [10_000_000, Number.POSITIVE_INFINITY] :
-        [0, Number.POSITIVE_INFINITY];
-      // Overlap test.
-      if (!(lo <= fHi && hi >= fLo)) return false;
+      let matched = false;
+      for (const c of f.cheque) {
+        const [fLo, fHi] =
+          c === "lt500k" ? [0, 500_000] :
+          c === "500k-2m" ? [500_000, 2_000_000] :
+          c === "2m-10m" ? [2_000_000, 10_000_000] :
+          c === "10m-plus" ? [10_000_000, Number.POSITIVE_INFINITY] :
+          [0, Number.POSITIVE_INFINITY];
+        if (lo <= fHi && hi >= fLo) { matched = true; break; }
+      }
+      if (!matched) return false;
     }
     return true;
   });
@@ -279,6 +296,7 @@ export function FindAMatch({
   initialArchetype,
   customerPartners,
   onScoredIds,
+  onSelectedIds,
 }: FindAMatchProps) {
   const router = useRouter();
 
@@ -312,6 +330,11 @@ export function FindAMatch({
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
   const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    onSelectedIds?.(Array.from(selected));
+  }, [selected, onSelectedIds]);
+
   // Single-click expands a result card inline; double-click navigates to
   // the full `/investor/[id]` profile. At most one card is expanded at a
   // time — click a second card and the first collapses.
@@ -367,7 +390,7 @@ export function FindAMatch({
   // Now we always set the text when campaignId OR archetype changes:
   // stored value if present, else the archetype-appropriate default.
   useEffect(() => {
-    const key = `fc_hero_text_${campaignId}_${archetype}`;
+    const key = "fc_hero_text";
     const stored =
       typeof window !== "undefined"
         ? window.localStorage.getItem(key)
@@ -377,10 +400,6 @@ export function FindAMatch({
         ? stored
         : heroTextForArchetype(archetype),
     );
-    // Reset the scored data set — previously-scored rows are from the
-    // old campaign's text, not the new one, and rendering stale rows
-    // under a new campaign name is the class of "seeing the same
-    // matches" bug Tristan flagged.
     setSelected(new Set());
     setLookalikeData(null);
   }, [campaignId, archetype]);
@@ -391,10 +410,7 @@ export function FindAMatch({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          `fc_hero_text_${campaignId}_${archetype}`,
-          heroText,
-        );
+        window.localStorage.setItem("fc_hero_text", heroText);
         sessionStorage.setItem("heroText", heroText);
       }
     }, 500);
@@ -676,20 +692,25 @@ export function FindAMatch({
       // don't want Haiku's "Pre-seed/Seed" hedge to clobber a user's
       // explicit Series A choice.
       setFilters((prev) => {
-        const next: Filters = { ...prev };
+        const next: Filters = {
+          stage: new Set(prev.stage),
+          geo: new Set(prev.geo),
+          type: new Set(prev.type),
+          cheque: new Set(prev.cheque),
+        };
         const stageKey = profile.stage?.toLowerCase() ?? "";
         if (stageKey.includes("pre-seed") || stageKey.includes("pre seed"))
-          next.stage = "pre-seed";
-        else if (stageKey === "seed") next.stage = "seed";
-        else if (stageKey.includes("series a")) next.stage = "series-a";
-        else if (stageKey.includes("series b")) next.stage = "series-b";
-        else if (stageKey.includes("growth")) next.stage = "growth";
+          next.stage = new Set(["pre-seed"]);
+        else if (stageKey === "seed") next.stage = new Set(["seed"]);
+        else if (stageKey.includes("series a")) next.stage = new Set(["series-a"]);
+        else if (stageKey.includes("series b")) next.stage = new Set(["series-b"]);
+        else if (stageKey.includes("growth")) next.stage = new Set(["growth"]);
 
         const geoKey = profile.geography?.toLowerCase() ?? "";
-        if (geoKey === "uk" || geoKey === "united kingdom") next.geo = "uk";
-        else if (geoKey === "eu" || geoKey === "europe") next.geo = "eu";
-        else if (geoKey === "us" || geoKey === "united states") next.geo = "us";
-        else if (geoKey === "global") next.geo = "global";
+        if (geoKey === "uk" || geoKey === "united kingdom") next.geo = new Set(["uk"]);
+        else if (geoKey === "eu" || geoKey === "europe") next.geo = new Set(["eu"]);
+        else if (geoKey === "us" || geoKey === "united states") next.geo = new Set(["us"]);
+        else if (geoKey === "global") next.geo = new Set(["global"]);
 
         const raise = profile.raise_amount ?? "";
         const raiseNum = parseApproxAmount(
@@ -698,10 +719,10 @@ export function FindAMatch({
             .split(/[–\-to]+/)[0] ?? "",
         );
         if (raiseNum !== null) {
-          if (raiseNum < 500_000) next.cheque = "lt500k";
-          else if (raiseNum < 2_000_000) next.cheque = "500k-2m";
-          else if (raiseNum < 10_000_000) next.cheque = "2m-10m";
-          else next.cheque = "10m-plus";
+          if (raiseNum < 500_000) next.cheque = new Set(["lt500k"]);
+          else if (raiseNum < 2_000_000) next.cheque = new Set(["500k-2m"]);
+          else if (raiseNum < 10_000_000) next.cheque = new Set(["2m-10m"]);
+          else next.cheque = new Set(["10m-plus"]);
         }
 
         return next;
@@ -727,15 +748,8 @@ export function FindAMatch({
         <div className="hero-sub">
           Choose whether you&rsquo;re raising, selling, or sourcing — that
           determines the pool we match against. Then drop a business plan,
-          deck, product sheet, or RFQ (or just type) below. Auto-suggest
-          reads your text live.
+          deck, product sheet, or RFQ (or just type) below.
         </div>
-
-        <ArchetypeRow
-          archetype={archetype}
-          onPick={onPickArchetype}
-          pools={{ investor: data.archetypePoolSize }}
-        />
 
         <PitchInput
           heroText={heroText}
@@ -747,15 +761,6 @@ export function FindAMatch({
           textareaRef={textareaRef}
           onSynthesised={applyExtractedProfile}
         />
-
-        {showAutoSuggest ? (
-          <AutoSuggestBanner
-            detected={liveSuggest.suggested}
-            signals={liveSuggest.signals}
-            differs={autoSuggestDiffers}
-            onOverride={() => onPickArchetype(liveSuggest.suggested)}
-          />
-        ) : null}
 
         {archetype === "investor" ? (
           <div className="substrate-hint">
@@ -787,22 +792,19 @@ export function FindAMatch({
           active so we don't try to select rows from the other mode. */}
       <BatchBar
         selected={selected.size}
-        total={
-          tab === "lookalike"
-            ? (lookalikeData?.rows.length ?? 0)
-            : topN
-        }
+        total={topN}
         armed={selected.size > 0}
         disabled={selected.size === 0 || isShortlisting}
         onShortlist={onShortlist}
         onSelectAll={() => {
-          const ids =
-            tab === "lookalike"
-              ? (lookalikeData?.rows ?? []).map((r) => r.investor_id)
-              : rows.map((r) => r.investor_id);
+          const ids = rows.map((r) => r.investor_id);
           setSelected(new Set(ids));
         }}
         onClearAll={() => setSelected(new Set())}
+        onSelectTopN={(n) => {
+          const ids = rows.slice(0, n).map((r) => r.investor_id);
+          setSelected(new Set(ids));
+        }}
       />
 
       {toast ? <ToastRow toast={toast} onDismiss={() => setToast(null)} /> : null}
@@ -938,10 +940,7 @@ export function FindAMatch({
               margin: 0,
             }}
           >
-            {filters.stage === "any" &&
-            filters.geo === "any" &&
-            filters.type === "any" &&
-            filters.cheque === "any"
+            {isFilterAll(filters)
               ? `Showing top ${topN} of ${data.totalScored.toLocaleString("en-GB")} semantic matches ranked from ${data.archetypePoolSize.toLocaleString("en-GB")} active investors (already-contacted firms hidden).`
               : `Showing ${topN} of ${filteredRows.length.toLocaleString("en-GB")} after filters · ${data.totalScored.toLocaleString("en-GB")} semantic matches from ${data.archetypePoolSize.toLocaleString("en-GB")} active investors.`}
           </p>
@@ -1203,6 +1202,7 @@ function BatchBar({
   onShortlist,
   onSelectAll,
   onClearAll,
+  onSelectTopN,
 }: {
   selected: number;
   total: number;
@@ -1211,6 +1211,7 @@ function BatchBar({
   onShortlist: () => void;
   onSelectAll: () => void;
   onClearAll: () => void;
+  onSelectTopN: (n: number) => void;
 }) {
   const allSelected = selected > 0 && selected === total;
   return (
@@ -1255,8 +1256,24 @@ function BatchBar({
       </button>
       <span style={{ color: "var(--text-faint)" }}>&middot;</span>
       <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-        Match score &ge; <b style={{ color: "var(--text)" }}>70%</b>{" "}
-        &middot; already-contacted hidden
+        Select top{" "}
+        <select
+          onChange={(e) => onSelectTopN(Number(e.target.value))}
+          defaultValue=""
+          style={{
+            fontSize: 12,
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            padding: "1px 4px",
+            background: "var(--surface)",
+            color: "var(--text)",
+          }}
+        >
+          <option value="" disabled>—</option>
+          {[100, 200, 300, 500].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
       </span>
       <span className="bb-spacer" />
       <button
@@ -1470,19 +1487,9 @@ function ResultsHead({
         <button className={tab === "near_miss" ? "active" : ""} onClick={() => onTab("near_miss")}>
           Near-miss
         </button>
-        <button
-          className={tab === "lookalike" ? "active" : ""}
-          onClick={() => onTab("lookalike")}
-          title="Investors similar to those who already replied on this campaign"
-        >
-          Lookalikes
-        </button>
 
-        {/* Secondary sort — applied client-side over the tab-filtered rows.
-            Hidden on the Lookalike tab (that mode has its own anchor-based
-            ordering that a column sort would defeat). */}
-        {tab !== "lookalike" ? (
-          <label
+        {/* Secondary sort — applied client-side over the tab-filtered rows. */}
+        <label
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1513,7 +1520,6 @@ function ResultsHead({
               <option value="recent_contact">Most recently contacted</option>
             </select>
           </label>
-        ) : null}
       </div>
     </div>
   );
@@ -3094,72 +3100,64 @@ function FilterBar({
   onChange: (next: Filters) => void;
 }) {
   const reset = () => onChange(DEFAULT_FILTERS);
-  const active =
-    filters.stage !== "any" ||
-    filters.geo !== "any" ||
-    filters.type !== "any" ||
-    filters.cheque !== "any";
+  const active = !isFilterAll(filters);
   return (
     <div className="fm-filter-bar" role="region" aria-label="Filter matches">
       <span className="fm-filter-label">Filter</span>
 
-      <label className="fm-filter-field">
-        <span>Stage</span>
-        <select
-          value={filters.stage}
-          onChange={(e) => onChange({ ...filters, stage: e.target.value as StageFilter })}
-        >
-          <option value="any">Any</option>
-          <option value="pre-seed">Pre-seed</option>
-          <option value="seed">Seed</option>
-          <option value="series-a">Series A</option>
-          <option value="series-b">Series B</option>
-          <option value="growth">Growth</option>
-        </select>
-      </label>
+      <MultiSelectDropdown
+        label="Stage"
+        options={[
+          { value: "pre-seed", label: "Pre-seed" },
+          { value: "seed", label: "Seed" },
+          { value: "series-a", label: "Series A" },
+          { value: "series-b", label: "Series B" },
+          { value: "growth", label: "Growth" },
+        ]}
+        selected={filters.stage}
+        allValues={ALL_STAGES}
+        onChange={(next) => onChange({ ...filters, stage: next })}
+      />
 
-      <label className="fm-filter-field">
-        <span>Geography</span>
-        <select
-          value={filters.geo}
-          onChange={(e) => onChange({ ...filters, geo: e.target.value as GeoFilter })}
-        >
-          <option value="any">Any</option>
-          <option value="uk">United Kingdom</option>
-          <option value="eu">European Union</option>
-          <option value="us">United States</option>
-          <option value="global">Global</option>
-        </select>
-      </label>
+      <MultiSelectDropdown
+        label="Geography"
+        options={[
+          { value: "uk", label: "United Kingdom" },
+          { value: "eu", label: "European Union" },
+          { value: "us", label: "United States" },
+          { value: "global", label: "Global" },
+        ]}
+        selected={filters.geo}
+        allValues={ALL_GEOS}
+        onChange={(next) => onChange({ ...filters, geo: next })}
+      />
 
-      <label className="fm-filter-field">
-        <span>Type</span>
-        <select
-          value={filters.type}
-          onChange={(e) => onChange({ ...filters, type: e.target.value as TypeFilter })}
-        >
-          <option value="any">Any</option>
-          <option value="vc">Venture capital</option>
-          <option value="accelerator">Accelerator</option>
-          <option value="grant">Grant</option>
-          <option value="corporate">Corporate</option>
-          <option value="angel">Angel</option>
-        </select>
-      </label>
+      <MultiSelectDropdown
+        label="Type"
+        options={[
+          { value: "vc", label: "Venture capital" },
+          { value: "accelerator", label: "Accelerator" },
+          { value: "grant", label: "Grant" },
+          { value: "corporate", label: "Corporate" },
+          { value: "angel", label: "Angel" },
+        ]}
+        selected={filters.type}
+        allValues={ALL_TYPES}
+        onChange={(next) => onChange({ ...filters, type: next })}
+      />
 
-      <label className="fm-filter-field">
-        <span>Cheque size</span>
-        <select
-          value={filters.cheque}
-          onChange={(e) => onChange({ ...filters, cheque: e.target.value as ChequeFilter })}
-        >
-          <option value="any">Any</option>
-          <option value="lt500k">Under $500K</option>
-          <option value="500k-2m">$500K – $2M</option>
-          <option value="2m-10m">$2M – $10M</option>
-          <option value="10m-plus">$10M+</option>
-        </select>
-      </label>
+      <MultiSelectDropdown
+        label="Cheque size"
+        options={[
+          { value: "lt500k", label: "Under $500K" },
+          { value: "500k-2m", label: "$500K – $2M" },
+          { value: "2m-10m", label: "$2M – $10M" },
+          { value: "10m-plus", label: "$10M+" },
+        ]}
+        selected={filters.cheque}
+        allValues={ALL_CHEQUES}
+        onChange={(next) => onChange({ ...filters, cheque: next })}
+      />
 
       {active ? (
         <button
@@ -3170,6 +3168,111 @@ function FilterBar({
         >
           Clear filters
         </button>
+      ) : null}
+    </div>
+  );
+}
+
+function MultiSelectDropdown<T extends string>({
+  label,
+  options,
+  selected,
+  allValues,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  selected: Set<T>;
+  allValues: Set<T>;
+  onChange: (next: Set<T>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const allSelected = selected.size === allValues.size;
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const toggle = (val: T) => {
+    const next = new Set(selected);
+    if (next.has(val)) next.delete(val);
+    else next.add(val);
+    // If nothing selected, treat as "all" (no filtering)
+    if (next.size === 0) onChange(new Set(allValues));
+    else onChange(next);
+  };
+
+  const display = allSelected
+    ? label
+    : `${label} (${selected.size}/${allValues.size})`;
+
+  return (
+    <div className="fm-filter-field" ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          width: "100%",
+          padding: "4px 8px",
+          fontSize: 12,
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+          background: "var(--surface)",
+          color: allSelected ? "var(--text-dim)" : "var(--text)",
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        {display} ▾
+      </button>
+      {open ? (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            zIndex: 200,
+            minWidth: 180,
+            padding: 6,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            boxShadow: "var(--shadow)",
+          }}
+        >
+          {options.map((opt) => (
+            <label
+              key={opt.value}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 6px",
+                fontSize: 12,
+                cursor: "pointer",
+                borderRadius: 3,
+                color: "var(--text)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-alt)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(opt.value as T)}
+                onChange={() => toggle(opt.value as T)}
+                style={{ margin: 0 }}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
       ) : null}
     </div>
   );
