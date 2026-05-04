@@ -45,6 +45,9 @@ function extractHighlightTerms(text: string): string[] {
     "click","visit","contact","home","page","site","back",
     "next","previous","menu","skip","content","main","toggle",
     "navigate","go","let","make","sure","way","things",
+    "systems","technology","including","developing","infrastructure",
+    "building","operation","using","transforming","industries",
+    "companies","company","startup","starts","startups",
   ]);
   return text
     .toLowerCase()
