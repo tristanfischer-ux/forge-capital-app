@@ -347,11 +347,52 @@ export interface ChunkEvidence {
   page_url: string;
   chunk_index: number;
   cosine_similarity: number;
+  /** Character-offset ranges [start, end) of semantically relevant sentences */
+  highlights: [number, number][];
 }
 
 export type GetChunkEvidenceResult =
   | { ok: true; chunks: ChunkEvidence[]; indexing?: boolean }
   | { ok: false; error: string };
+
+/**
+ * Split text into sentences with character offsets.
+ */
+function splitSentences(text: string): { text: string; start: number; end: number }[] {
+  const results: { text: string; start: number; end: number }[] = [];
+  const re = /[^.!?\n]+[.!?]+(?:\s|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const s = m[0].trim();
+    if (s.length >= 10) {
+      results.push({ text: s, start: m.index, end: m.index + m[0].length });
+    }
+  }
+  // Catch trailing text without punctuation
+  if (results.length > 0) {
+    const lastEnd = results[results.length - 1].end;
+    const tail = text.slice(lastEnd).trim();
+    if (tail.length >= 10) {
+      results.push({ text: tail, start: lastEnd, end: text.length });
+    }
+  } else if (text.trim().length >= 10) {
+    results.push({ text: text.trim(), start: 0, end: text.length });
+  }
+  return results;
+}
+
+/**
+ * Cosine similarity between two equal-length vectors.
+ */
+function cosine(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
 
 export async function getChunkEvidence(input: {
   investorId: number;
@@ -366,15 +407,15 @@ export async function getChunkEvidence(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
-  const { embedQueryText } = await import("@/lib/embeddings/openai");
-  const embedResult = await embedQueryText(heroText);
-  if (!embedResult.ok) {
+  const { embedQueryText, embedBatchQueryText } = await import("@/lib/embeddings/openai");
+  const heroEmbedResult = await embedQueryText(heroText);
+  if (!heroEmbedResult.ok) {
     return { ok: false, error: "Could not embed hero text" };
   }
 
   const { data, error } = await supabase.rpc("match_chunks_for_investor", {
     p_investor_id: investorId,
-    query_embedding: embedResult.vector,
+    query_embedding: heroEmbedResult.vector,
     match_count: limit,
     min_similarity: 0.0,
   });
@@ -384,7 +425,7 @@ export async function getChunkEvidence(input: {
     return { ok: false, error: error.message };
   }
 
-  const chunks = ((data ?? []) as Array<{
+  const rawChunks = ((data ?? []) as Array<{
     chunk_text: string;
     page_url: string;
     chunk_index: number;
@@ -396,7 +437,7 @@ export async function getChunkEvidence(input: {
     cosine_similarity: r.cosine_similarity,
   }));
 
-  if (chunks.length === 0) {
+  if (rawChunks.length === 0) {
     const { count } = await supabase
       .from("investor_page_chunks")
       .select("id", { count: "exact", head: true })
@@ -405,6 +446,65 @@ export async function getChunkEvidence(input: {
       return { ok: true, chunks: [], indexing: true };
     }
   }
+
+  // --- Semantic highlighting: embed each sentence, highlight those relevant ---
+
+  type SentenceInfo = {
+    chunkIdx: number;
+    text: string;
+    start: number;
+    end: number;
+  };
+  const allSentences: SentenceInfo[] = [];
+  const chunkSentences: { start: number; end: number }[][] = [];
+
+  for (let ci = 0; ci < rawChunks.length; ci++) {
+    const sents = splitSentences(rawChunks[ci].chunk_text);
+    chunkSentences.push(sents.map((s) => ({ start: s.start, end: s.end })));
+    for (const s of sents) {
+      allSentences.push({ chunkIdx: ci, text: s.text, start: s.start, end: s.end });
+    }
+  }
+
+  // Deduplicate sentence texts for batch embedding
+  const uniqueTexts = [...new Set(allSentences.map((s) => s.text))];
+  const textToIdx = new Map<string, number[]>();
+  for (let i = 0; i < allSentences.length; i++) {
+    const arr = textToIdx.get(allSentences[i].text);
+    if (arr) arr.push(i);
+    else textToIdx.set(allSentences[i].text, [i]);
+  }
+
+  const embedResults = await embedBatchQueryText(uniqueTexts);
+
+  // Compute per-sentence similarity to hero text
+  const similarities = new Array<number>(allSentences.length).fill(0);
+  for (let ui = 0; ui < uniqueTexts.length; ui++) {
+    const result = embedResults[ui];
+    if (result && result.ok) {
+      const sim = cosine(heroEmbedResult.vector, result.vector);
+      for (const si of textToIdx.get(uniqueTexts[ui]) ?? []) {
+        similarities[si] = sim;
+      }
+    }
+  }
+
+  // Build highlight ranges per chunk: highlight sentences with similarity > 0.25
+  const HIGHLIGHT_THRESHOLD = 0.25;
+  const chunkHighlights: [number, number][][] = rawChunks.map(() => []);
+  for (let i = 0; i < allSentences.length; i++) {
+    if (similarities[i] > HIGHLIGHT_THRESHOLD) {
+      chunkHighlights[allSentences[i].chunkIdx].push([
+        allSentences[i].start,
+        allSentences[i].end,
+      ]);
+    }
+  }
+
+  const chunks: ChunkEvidence[] = rawChunks.map((c, i) => ({
+    ...c,
+    highlights: chunkHighlights[i],
+  }));
 
   return { ok: true, chunks };
 }

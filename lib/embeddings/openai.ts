@@ -139,3 +139,115 @@ export async function embedQueryText(
     latencyMs: Date.now() - started,
   };
 }
+
+/**
+ * Batch embed multiple texts in a single API call.
+ * OpenAI's embeddings endpoint accepts an array of inputs.
+ * Returns one result per input, in order.
+ */
+export async function embedBatchQueryText(
+  texts: string[],
+): Promise<(OpenAIEmbedResult | OpenAIEmbedError)[]> {
+  const token = process.env.OPENAI_API_KEY;
+  const errResult: OpenAIEmbedError = {
+    ok: false,
+    error: "OPENAI_API_KEY not set",
+    kind: "no_token",
+  };
+  if (!token) return texts.map(() => errResult);
+
+  const trimmed = texts.map((t) => t.trim().slice(0, 24000)).filter(Boolean);
+  if (trimmed.length === 0) {
+    return texts.map(() => ({
+      ok: false as const,
+      error: "Empty text",
+      kind: "shape" as const,
+    }));
+  }
+
+  const started = Date.now();
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        dimensions: DIMENSIONS,
+        input: trimmed,
+      }),
+    });
+  } catch {
+    return texts.map(() => ({
+      ok: false as const,
+      error: "fetch failed",
+      kind: "http" as const,
+    }));
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    return texts.map(() => ({
+      ok: false as const,
+      error: `OpenAI ${response.status}: ${body.slice(0, 300)}`,
+      kind: "http" as const,
+    }));
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = await response.json();
+  } catch {
+    return texts.map(() => ({
+      ok: false as const,
+      error: "json parse failed",
+      kind: "shape" as const,
+    }));
+  }
+
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !("data" in parsed) ||
+    !Array.isArray((parsed as { data: unknown }).data)
+  ) {
+    return texts.map(() => ({
+      ok: false as const,
+      error: "Unexpected response shape",
+      kind: "shape" as const,
+    }));
+  }
+
+  const b = parsed as {
+    data: Array<{ embedding?: unknown }>;
+    usage?: { total_tokens?: number };
+    model?: string;
+  };
+
+  const latencyMs = Date.now() - started;
+  const tokensPerItem = b.usage?.total_tokens
+    ? Math.ceil(b.usage.total_tokens / b.data.length)
+    : 0;
+
+  return b.data.map((item) => {
+    const emb = item.embedding;
+    if (!Array.isArray(emb) || !emb.every((n) => typeof n === "number")) {
+      return {
+        ok: false as const,
+        error: "No embedding vector in response item",
+        kind: "shape" as const,
+      };
+    }
+    return {
+      ok: true as const,
+      vector: emb as number[],
+      dims: emb.length,
+      model: b.model ?? MODEL,
+      tokens: tokensPerItem,
+      latencyMs,
+    };
+  });
+}
