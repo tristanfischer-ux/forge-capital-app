@@ -100,7 +100,11 @@ export default function HomePage() {
           password,
         });
         if (error) {
-          setStatus({ kind: "error", message: error.message || "Invalid email or password." });
+          const msg =
+            typeof error.message === "string" && error.message
+              ? error.message
+              : "Invalid email or password. Please try again.";
+          setStatus({ kind: "error", message: msg });
           return;
         }
         window.location.replace(next);
@@ -115,18 +119,23 @@ export default function HomePage() {
           },
         });
         if (error) {
-          setStatus({ kind: "error", message: error.message || "Could not send magic link. Please try again." });
+          const msg =
+            typeof error.message === "string" && error.message
+              ? error.message
+              : "Could not send magic link. Please try again.";
+          setStatus({ kind: "error", message: msg });
           return;
         }
         setStatus({ kind: "sent" });
       }
     } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : typeof err === "string"
-            ? err
-            : JSON.stringify(err) || "Unknown error";
+      let message = "Sign-in failed. Please try again.";
+      if (err instanceof Error && err.message) message = err.message;
+      else if (typeof err === "string" && err) message = err;
+      else if (err && typeof err === "object") {
+        const m = (err as Record<string, unknown>).message;
+        if (typeof m === "string" && m) message = m;
+      }
       setStatus({ kind: "error", message });
     }
   }
@@ -223,7 +232,9 @@ export default function HomePage() {
 
           {status.kind === "error" ? (
             <p className="mt-4 text-xs text-red">
-              {status.message || "Sign-in failed. Please try again."}
+              {status.message && status.message !== "{}"
+                ? status.message
+                : "Sign-in failed. Please try again or use a magic link."}
             </p>
           ) : null}
           {status.kind === "sent" ? (
