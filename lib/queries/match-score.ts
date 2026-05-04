@@ -20,13 +20,10 @@ import { embedQueryText } from "@/lib/embeddings/openai";
  *   (THESIS / STAGE / GEO / CHEQUE / ACTIVITY / DATA) + the rollup `match`
  *   percentage + the primary-partner chip + any near-miss callout text.
  *
- * V1 scoring algorithm is deliberately simple — word-overlap + keyword
- * detection. No embeddings wired yet (the Forge Capital pipeline uses
- * nomic-embed-text 768-dim locally but those vectors are NOT in
- * apex-outreach Supabase; the push script doesn't carry them). The visual
- * output is what matters for V4 parity; algorithm tuning lands separately
- * once the embedding substrate is in place. Flagged throughout this file
- * as TODO(embeddings).
+ * Thesis scoring: when chunk evidence cosine similarity is available (from
+ * the embedding-based `match_investors_by_chunks` RPC), it is blended 70/30
+ * with word-overlap. This captures semantic meaning that pure lexical matching
+ * misses. Falls back to pure word-overlap when no chunk evidence exists.
  *
  * Pure types + `detectArchetypeSignals` live in `match-score-types.ts`
  * so the client `FindAMatch.tsx` can import them without dragging
@@ -65,6 +62,22 @@ export interface GetMatchScoreOptions {
 /* ------------------------------------------------------------------------- */
 /* Main scoring query                                                        */
 /* ------------------------------------------------------------------------- */
+
+/**
+ * Cosine similarity between two equal-length vectors.
+ * Returns a value in [-1, 1]. Higher = more similar.
+ */
+function cosineSim(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : dot / denom;
+}
 
 /**
  * Tokenise free text into lowercased words, dropping short stopwords.
@@ -267,20 +280,33 @@ function scoreDims(
   wantedStages: string[],
   wantedGeos: string[],
   heroCheque: { min: number | null; max: number | null },
+  /** Semantic cosine similarity from chunk evidence (0–1). When present,
+   *  blended with word-overlap to produce the thesis score. When absent,
+   *  falls back to pure word-overlap. */
+  chunkCosineSimilarity?: number | null,
 ): ScoreDims {
-  // THESIS: coverage-based scoring with synonym expansion. Measures what
-  // fraction of the hero's query tokens are covered by the investor's
-  // thesis text (directly or via synonym clusters). Unlike Jaccard, short
-  // queries aren't penalised by the investor having many sector tags.
-  // Blends coverage (70% weight) with Jaccard (30%) so investors with a
-  // tighter focus still get a boost.
+  // THESIS: when a chunk evidence cosine similarity is available (from the
+  // embedding-based chunk search), blend it 70/30 with the word-overlap
+  // score. This captures semantic meaning ("energy storage" ↔ "batteries")
+  // that pure word-overlap misses. When no chunk evidence exists, fall back
+  // to the V1 word-overlap approach.
   const thesisBag = tokenise(
     `${investor.sector_focus ?? ""} ${investor.thesis_summary ?? ""} ${investor.ideal_company_profile ?? ""}`,
   );
   const coverage = thesisCoverage(heroTokens, thesisBag);
   const jaccardScore = jaccard(heroTokens, thesisBag);
-  const blended = coverage * 0.7 + jaccardScore * 0.3;
-  const thesisScore = Math.round(Math.min(100, blended * 100 * 1.2 + 20));
+  const lexicalBlended = coverage * 0.7 + jaccardScore * 0.3;
+  const lexicalScore = Math.min(100, lexicalBlended * 100 * 1.2 + 20);
+
+  let thesisScore: number;
+  if (chunkCosineSimilarity != null && chunkCosineSimilarity > 0) {
+    // Convert cosine similarity (0–1 range for positive similarities) to
+    // a 0–100 score, then blend 70% semantic / 30% lexical.
+    const semanticScore = Math.min(100, Math.max(0, chunkCosineSimilarity * 100));
+    thesisScore = semanticScore * 0.7 + lexicalScore * 0.3;
+  } else {
+    thesisScore = lexicalScore;
+  }
 
   // STAGE: does investor.stage_focus mention the wanted stages?
   let stageScore = 50; // neutral
@@ -973,6 +999,7 @@ export async function getMatchScore(
       );
     }).length;
 
+    const chunkSim = chunkEvidenceMap.get(inv.id)?.similarity ?? null;
     const dims = scoreDims(
       {
         thesis_summary: inv.thesis_summary,
@@ -993,6 +1020,7 @@ export async function getMatchScore(
       wantedStages,
       wantedGeos,
       heroCheque,
+      chunkSim,
     );
     // hardware_fit_score is stored as text in the DB (0-10 scale).
     // Normalise to 0-100 for the weighted rollup.
