@@ -736,19 +736,16 @@ export function FindAMatch({
       {/* Dump-info drop zone — above the hero. Drag any deck/email/bio
           snippet and Haiku pre-fills the hero textarea AND the filter
           row. Degrades to "paste into textarea" if no Haiku key. */}
-      <DumpInfoBox onProfile={applyExtractedProfile} setHeroText={setHeroText} />
-
-      {/* V4 `.hero` — single panel wraps textarea + button + archetype
-          cards + auto-suggest banner + substrate hint (lines 915-964). */}
+      {/* V4 `.hero` — single panel wraps textarea + button + substrate
+          hint (lines 915-964). */}
       <section className="hero">
         <div className="hero-title">
           What are you working on?{" "}
-          <span className="accent">Pick an archetype, then tell us about it.</span>
+          <span className="accent">Tell us about it.</span>
         </div>
         <div className="hero-sub">
-          Choose whether you&rsquo;re raising, selling, or sourcing — that
-          determines the pool we match against. Then drop a business plan,
-          deck, product sheet, or RFQ (or just type) below.
+          Drop a business plan, deck, product sheet, or RFQ (or just type)
+          below. We&rsquo;ll match against the full investor pool.
         </div>
 
         <PitchInput
@@ -795,6 +792,7 @@ export function FindAMatch({
         total={topN}
         armed={selected.size > 0}
         disabled={selected.size === 0 || isShortlisting}
+        showShortlist={!!campaignId}
         onShortlist={onShortlist}
         onSelectAll={() => {
           const ids = rows.map((r) => r.investor_id);
@@ -808,26 +806,6 @@ export function FindAMatch({
       />
 
       {toast ? <ToastRow toast={toast} onDismiss={() => setToast(null)} /> : null}
-
-      {/* Instructions BEFORE the results, not after. The guidance used
-          to sit below the cards, which meant you'd scroll through 10
-          rows before learning how to use them. Copy is campaign-generic
-          — the old V4 mockup named Stephan and hardcoded the sheet
-          filename; both dropped in favour of a verb-driven explanation. */}
-      {archetype === "investor" ? (
-        <div className="walk-callout" style={{ marginBottom: 10 }}>
-          <span className="wc-num">1</span>
-          <b>How to shortlist:</b> click a card once to expand and read
-          the thesis/synthesis, double-click to open the full profile,
-          or tick the checkbox to select. Hit <b>Select all visible</b>{" "}
-          on the batch bar to grab the whole page. When you&rsquo;re
-          happy with the list, click <b>Shortlist to approval sheet →</b>
-          {" "}— we write them to the tracker at{" "}
-          <b>+0 Pending approval</b>, ready for the{" "}
-          <a href="#approval">approval section</a>. Nothing leaves the
-          app until you review and send yourself.
-        </div>
-      ) : null}
 
       {/* V4 `.results-head` (lines 988-998). */}
       <ResultsHead
@@ -1199,6 +1177,7 @@ function BatchBar({
   total,
   armed,
   disabled,
+  showShortlist,
   onShortlist,
   onSelectAll,
   onClearAll,
@@ -1208,6 +1187,7 @@ function BatchBar({
   total: number;
   armed: boolean;
   disabled: boolean;
+  showShortlist: boolean;
   onShortlist: () => void;
   onSelectAll: () => void;
   onClearAll: () => void;
@@ -1276,13 +1256,15 @@ function BatchBar({
         </select>
       </span>
       <span className="bb-spacer" />
-      <button
-        className="bb-btn primary"
-        onClick={onShortlist}
-        disabled={disabled}
-      >
-        Shortlist to approval sheet →
-      </button>
+      {showShortlist ? (
+        <button
+          className="bb-btn primary"
+          onClick={onShortlist}
+          disabled={disabled}
+        >
+          Shortlist to approval sheet →
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1423,61 +1405,13 @@ function ResultsHead({
           )}
         </div>
         <div className="section-sub">
-          {isLookalike ? (
-            <>
-              Scored against the aggregate thesis signal of positive
-              respondents. {isLookalikePending ? "Scoring…" : "Already-contacted firms hidden."}
-            </>
-          ) : archetype === "customer" ? (
-            <>
-              Curated list of named customers on this campaign — not a
-              semantic-match pool. Use the approval sheet below to
-              review, approve and dispatch.
-            </>
-          ) : (
-            <>
-              {showAll
-                ? `Showing every firm in the ${poolLabel}-strong pool — contacted and uncontacted alike.`
-                : "Already-contacted firms hidden."}
-            </>
-          )}
+              Showing every firm in the pool — ranked by semantic match score.
         </div>
       </div>
       <div
         className="results-sort"
         style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
       >
-        {/* New-only / Show-all toggle — only meaningful on the hero-scored
-            tabs (not Lookalike, which runs its own pool filter). */}
-        {!isLookalike ? (
-          <div
-            className="fm-show-toggle"
-            role="tablist"
-            aria-label="Show new only or every firm"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showAll}
-              className={!showAll ? "active" : ""}
-              onClick={() => onToggleShowAll(false)}
-              title="Hide firms already on this campaign"
-            >
-              New only
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={showAll}
-              className={showAll ? "active" : ""}
-              onClick={() => onToggleShowAll(true)}
-              title={`Show every firm in the ${poolLabel}-strong pool`}
-            >
-              Show all {poolLabel}
-            </button>
-          </div>
-        ) : null}
-
         <button className={tab === "best" ? "active" : ""} onClick={() => onTab("best")}>
           Best match
         </button>
