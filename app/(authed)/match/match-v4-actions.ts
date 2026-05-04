@@ -347,52 +347,11 @@ export interface ChunkEvidence {
   page_url: string;
   chunk_index: number;
   cosine_similarity: number;
-  /** Character-offset ranges [start, end) of semantically relevant sentences */
-  highlights: [number, number][];
 }
 
 export type GetChunkEvidenceResult =
   | { ok: true; chunks: ChunkEvidence[]; indexing?: boolean }
   | { ok: false; error: string };
-
-/**
- * Split text into sentences with character offsets.
- */
-function splitSentences(text: string): { text: string; start: number; end: number }[] {
-  const results: { text: string; start: number; end: number }[] = [];
-  const re = /[^.!?\n]+[.!?]+(?:\s|$)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const s = m[0].trim();
-    if (s.length >= 10) {
-      results.push({ text: s, start: m.index, end: m.index + m[0].length });
-    }
-  }
-  // Catch trailing text without punctuation
-  if (results.length > 0) {
-    const lastEnd = results[results.length - 1].end;
-    const tail = text.slice(lastEnd).trim();
-    if (tail.length >= 10) {
-      results.push({ text: tail, start: lastEnd, end: text.length });
-    }
-  } else if (text.trim().length >= 10) {
-    results.push({ text: text.trim(), start: 0, end: text.length });
-  }
-  return results;
-}
-
-/**
- * Cosine similarity between two equal-length vectors.
- */
-function cosine(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
-}
 
 export async function getChunkEvidence(input: {
   investorId: number;
@@ -407,7 +366,7 @@ export async function getChunkEvidence(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
-  const { embedQueryText, embedBatchQueryText } = await import("@/lib/embeddings/openai");
+  const { embedQueryText } = await import("@/lib/embeddings/openai");
   const heroEmbedResult = await embedQueryText(heroText);
   if (!heroEmbedResult.ok) {
     return { ok: false, error: "Could not embed hero text" };
@@ -447,63 +406,5 @@ export async function getChunkEvidence(input: {
     }
   }
 
-  // --- Semantic highlighting: embed each sentence, highlight those relevant ---
-
-  type SentenceInfo = {
-    chunkIdx: number;
-    text: string;
-    start: number;
-    end: number;
-  };
-  const allSentences: SentenceInfo[] = [];
-
-  for (let ci = 0; ci < rawChunks.length; ci++) {
-    const sents = splitSentences(rawChunks[ci].chunk_text);
-    for (const s of sents) {
-      allSentences.push({ chunkIdx: ci, text: s.text, start: s.start, end: s.end });
-    }
-  }
-
-  // Deduplicate sentence texts for batch embedding
-  const uniqueTexts = [...new Set(allSentences.map((s) => s.text))];
-  const textToIdx = new Map<string, number[]>();
-  for (let i = 0; i < allSentences.length; i++) {
-    const arr = textToIdx.get(allSentences[i].text);
-    if (arr) arr.push(i);
-    else textToIdx.set(allSentences[i].text, [i]);
-  }
-
-  const embedResults = await embedBatchQueryText(uniqueTexts);
-
-  // Compute per-sentence similarity to hero text
-  const similarities = new Array<number>(allSentences.length).fill(0);
-  for (let ui = 0; ui < uniqueTexts.length; ui++) {
-    const result = embedResults[ui];
-    if (result && result.ok) {
-      const sim = cosine(heroEmbedResult.vector, result.vector);
-      for (const si of textToIdx.get(uniqueTexts[ui]) ?? []) {
-        similarities[si] = sim;
-      }
-    }
-  }
-
-  // Build highlight ranges per chunk: only the top 2 most relevant sentences
-  // This avoids highlighting the entire passage — just the most on-topic parts
-  const TOP_N = 2;
-  const chunkHighlights: [number, number][][] = rawChunks.map(() => {
-    // Collect sentences for this chunk with their similarity scores
-    const scored = allSentences
-      .map((s, i) => ({ start: s.start, end: s.end, sim: similarities[i] }))
-      .filter((s) => s.sim > 0.35)
-      .sort((a, b) => b.sim - a.sim)
-      .slice(0, TOP_N);
-    return scored.map((s) => [s.start, s.end]);
-  });
-
-  const chunks: ChunkEvidence[] = rawChunks.map((c, i) => ({
-    ...c,
-    highlights: chunkHighlights[i],
-  }));
-
-  return { ok: true, chunks };
+  return { ok: true, chunks: rawChunks };
 }

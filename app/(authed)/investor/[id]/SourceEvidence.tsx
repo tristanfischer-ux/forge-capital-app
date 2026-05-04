@@ -8,39 +8,73 @@ import {
 } from "@/app/(authed)/match/match-v4-actions";
 
 /**
- * Render text with server-provided semantic highlight ranges.
- * Ranges are character offsets into the original chunk_text.
+ * Extract meaningful terms from text for highlighting.
+ * Filters out generic investment/domain words that appear on every
+ * investor's website — only terms that actually distinguish relevance.
  */
-function renderWithHighlights(
+function extractHighlightTerms(text: string): string[] {
+  const GENERIC = new Set([
+    // Standard English stopwords
+    "the","a","an","is","are","was","were","be","been","being",
+    "have","has","had","do","does","did","will","would","could",
+    "should","may","might","shall","can","need","dare","ought",
+    "used","to","of","in","for","on","with","at","by","from",
+    "as","into","through","during","before","after","above","below",
+    "between","out","off","over","under","again","further","then",
+    "once","and","but","or","nor","not","so","very","just",
+    "than","too","also","about","up","that","this","these","those",
+    "what","which","who","whom","when","where","why","how","all",
+    "each","every","both","few","more","most","other","some","such",
+    "no","only","own","same","its","it","they","them","their",
+    "we","our","you","your","he","she","him","her","his",
+    // Generic investment-domain words (appear on EVERY investor site)
+    "looking","seeking","find","investors","funds","venture",
+    "capital","investment","fund","backing","portfolio","invest",
+    "investing","invested","companies","startups","firm","firms",
+    "team","management","partners","based","focused","focus",
+    "experience","across","including","provide","provides",
+    "support","working","work","great","good","new","best",
+    "world","leading","innovative","growth","early","stage",
+    "late","series","round","seed","pre","post","equity",
+    "debt","private","public","market","markets","sector",
+    "industries","global","local","region","regional","north",
+    "south","east","west","europe","america","asia","africa",
+    "uk","us","eu","usd","gbp","eur","m","mm","b","bn",
+    "per","cent","percent","year","years","since","current",
+    "date","today","tomorrow","yesterday","read","learn","see",
+    "click","visit","contact","home","page","site","back",
+    "next","previous","menu","skip","content","main","toggle",
+    "navigate","go","let","make","sure","way","things",
+  ]);
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 4 && !GENERIC.has(t))
+    .filter((t, i, arr) => arr.indexOf(t) === i);
+}
+
+/**
+ * Highlight matching terms in text. Only highlights terms that appear
+ * as whole words (word-boundary aware).
+ */
+function highlightTerms(
   text: string,
-  highlights: [number, number][],
+  terms: string[],
 ): React.ReactNode {
-  if (highlights.length === 0) return text;
-
-  // Sort and merge overlapping ranges
-  const sorted = [...highlights].sort((a, b) => a[0] - b[0]);
-  const merged: [number, number][] = [];
-  for (const [s, e] of sorted) {
-    if (merged.length > 0 && s <= merged[merged.length - 1][1]) {
-      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], e);
-    } else {
-      merged.push([s, e]);
-    }
-  }
-
-  const parts: React.ReactNode[] = [];
-  let pos = 0;
-  for (let i = 0; i < merged.length; i++) {
-    const [s, e] = merged[i];
-    if (s > pos) {
-      parts.push(
-        <span key={`t${i}`}>{text.slice(pos, Math.min(s, text.length))}</span>,
-      );
-    }
-    if (s < text.length) {
-      parts.push(
+  if (terms.length === 0) return text;
+  // Build word-boundary-aware regex
+  const pattern = new RegExp(
+    `\\b(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+    "gi",
+  );
+  const parts = text.split(pattern);
+  return parts.map((part, i) => {
+    const isMatch = terms.some((t) => part.toLowerCase() === t);
+    if (isMatch) {
+      return (
         <mark
-          key={`m${i}`}
+          key={i}
           style={{
             background: "var(--accent-soft, #fff3cd)",
             color: "var(--text, #333)",
@@ -48,20 +82,35 @@ function renderWithHighlights(
             padding: "0 2px",
           }}
         >
-          {text.slice(s, Math.min(e, text.length))}
-        </mark>,
+          {part}
+        </mark>
       );
     }
-    pos = e;
-  }
-  if (pos < text.length) {
-    parts.push(<span key="tail">{text.slice(pos)}</span>);
-  }
-  return parts;
+    return part;
+  });
+}
+
+/**
+ * Clean raw scraped text by stripping common website noise.
+ */
+function cleanChunkText(text: string): string {
+  let cleaned = text;
+  cleaned = cleaned.replace(/menu\s*/gi, "");
+  cleaned = cleaned.replace(/kickass\s*companies\s*meet\s*the\s*team\s*get\s*off\s*the\s*couch/gi, "");
+  cleaned = cleaned.replace(/overview\s*slashing\s*co\s*2/gi, "");
+  cleaned = cleaned.replace(/©\s*\d{4}[^.]*?\./g, "");
+  cleaned = cleaned.replace(/linkedin\s*privacy/gi, "");
+  cleaned = cleaned.replace(/put me in,?\s*coach[\s\S]*$/gi, "");
+  cleaned = cleaned.replace(/my people will call your people[\s\S]*$/gi, "");
+  cleaned = cleaned.replace(/i want to work for\s+\w+/gi, "");
+  cleaned = cleaned.replace(/i want to connect with\s+\w+/gi, "");
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+  return cleaned;
 }
 
 export function SourceEvidence({ investorId }: { investorId: number }) {
   const [chunks, setChunks] = useState<ChunkEvidence[] | null>(null);
+  const [heroText, setHeroText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [indexing, setIndexing] = useState(false);
@@ -70,6 +119,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
     try {
       const ht = sessionStorage.getItem("heroText");
       if (!ht) return;
+      setHeroText(ht);
 
       setLoading(true);
       getChunkEvidence({ investorId, heroText: ht, limit: 8 })
@@ -88,6 +138,8 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
   }, [investorId]);
 
   if (!loading && !chunks && !indexing) return null;
+
+  const terms = heroText ? extractHighlightTerms(heroText) : [];
 
   return (
     <div className="m-section">
@@ -146,6 +198,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
             const path = chunk.page_url
               .replace(/^https?:\/\/[^/]+/, "")
               .slice(0, 50);
+            const cleaned = cleanChunkText(chunk.chunk_text);
             return (
               <div
                 key={`${chunk.page_url}-${chunk.chunk_index}`}
@@ -160,7 +213,7 @@ export function SourceEvidence({ investorId }: { investorId: number }) {
                 }}
               >
                 <p style={{ margin: 0, color: "var(--text)" }}>
-                  &ldquo;{renderWithHighlights(chunk.chunk_text, chunk.highlights)}&rdquo;
+                  &ldquo;{highlightTerms(cleaned, terms)}&rdquo;
                 </p>
                 <div
                   style={{
