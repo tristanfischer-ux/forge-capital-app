@@ -29,11 +29,12 @@ interface PillConfig {
   /** Stage number shown before the label. */
   number: number;
   /** Which page this pill belongs to. */
-  page: "discover" | "pipeline";
+  page: "discover" | "investors" | "pipeline";
 }
 
 const PILLS: PillConfig[] = [
   { anchor: "discover", label: "Discovery", href: "/discover", number: 1, page: "discover" },
+  { anchor: "investors", label: "Investors", href: "/investors", number: 1.5, page: "investors" },
   { anchor: "approval", label: "Approval", href: "/pipeline#approval", number: 2, page: "pipeline" },
   { anchor: "automation", label: "Automation", href: "/pipeline#automation", number: 3, page: "pipeline" },
   { anchor: "templates", label: "Templates", href: "/pipeline#templates", number: 4, page: "pipeline" },
@@ -48,6 +49,7 @@ export function TopNav() {
   const pathname = usePathname() ?? "";
   const onPipeline = pathname === "/pipeline";
   const onDiscover = pathname === "/discover";
+  const onInvestors = pathname === "/investors";
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,6 +97,8 @@ export function TopNav() {
         let active = false;
         if (pill.page === "discover") {
           active = onDiscover;
+        } else if (pill.page === "investors") {
+          active = onInvestors;
         } else if (onPipeline) {
           active = activeSection === pill.anchor;
         }
