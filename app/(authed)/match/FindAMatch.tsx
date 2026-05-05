@@ -2943,6 +2943,29 @@ function PitchInput({
         {/* Spacer pushes Find matches to the far right. */}
         <div style={{ flex: 1 }} />
 
+        {/* Searching indicator — shows while search is in progress */}
+        {isPending && (
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            marginRight: 8,
+            fontSize: 13,
+            color: "var(--text-dim)",
+          }}>
+            <span style={{
+              width: 14,
+              height: 14,
+              border: "2px solid var(--border)",
+              borderTopColor: "var(--accent)",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+              display: "inline-block",
+            }} />
+            Searching...
+          </div>
+        )}
+
         <button
           type="button"
           onClick={isPending ? onCancelSearch : onFindMatches}

@@ -84,6 +84,13 @@ export function AddToCampaignBar({
   const selectedName =
     campaigns.find((c) => c.id === selectedCampaign)?.name ?? "campaign";
 
+  // Sync count to selectedInvestorIds.length when checkboxes are used
+  useEffect(() => {
+    if (selectedInvestorIds.length > 0) {
+      setCount(selectedInvestorIds.length);
+    }
+  }, [selectedInvestorIds.length]);
+
   async function handleAdd() {
     if (!selectedCampaign || selectedInvestorIds.length === 0) return;
     setAdding(true);
@@ -304,7 +311,7 @@ export function AddToCampaignBar({
               letterSpacing: 0.5,
             }}
           >
-            Top matches
+            Top matches {selectedInvestorIds.length > 0 ? "(using selected)" : "(auto-select)"}
           </label>
           <input
             id="add-count-input"
@@ -348,7 +355,7 @@ export function AddToCampaignBar({
             opacity: adding ? 0.7 : 1,
           }}
         >
-          {adding ? "Adding…" : "Add to campaign"}
+          {adding ? "Adding…" : `Add ${selectedInvestorIds.length} investor${selectedInvestorIds.length !== 1 ? "s" : ""} to campaign`}
         </button>
       </div>
 
