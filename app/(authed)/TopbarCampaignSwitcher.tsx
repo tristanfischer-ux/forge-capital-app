@@ -41,10 +41,8 @@ export function TopbarCampaignSwitcher({
       <button
         type="button"
         className="new-camp-btn"
-        disabled
-        title="Campaign creation lands in a later section"
-        aria-label="New campaign (not yet enabled)"
-        style={{ opacity: 0.6, cursor: "not-allowed" }}
+        title="New campaign"
+        aria-label="New campaign"
       >
         +
       </button>

@@ -205,9 +205,7 @@ export function CampaignDropdown({
               campaign creation ships. */}
           <div
             className="new-link"
-            title="Campaign creation lands in a later section"
-            style={{ opacity: 0.7, cursor: "not-allowed" }}
-            aria-disabled="true"
+            title="New campaign"
           >
             <span style={{ fontSize: 16, lineHeight: 0.8 }}>+</span> New
             campaign

@@ -40,11 +40,8 @@ const GATED_PREFIXES = [
   "/approval",
   "/weekly",
   "/import",
-  // /send/[campaignId] — the 9-step customer outreach surface. Previously
-  // ungated, which meant unauth'd prod requests hit the page directly,
-  // RLS blocked the campaigns read, notFound() fired, and the user saw
-  // an unhelpful 404 instead of the login redirect. 2026-04-24.
   "/send",
+  "/investors",
 ];
 
 export async function proxy(request: NextRequest) {
