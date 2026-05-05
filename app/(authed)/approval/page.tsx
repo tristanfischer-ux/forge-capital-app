@@ -26,6 +26,7 @@ import { IncomingDecisionCell } from "./IncomingDecisionCell";
 import { ContactPicker } from "../ContactPicker";
 import { IngestIntoTrackerButton } from "./IngestIntoTrackerButton";
 import { OutgoingApprovalClient } from "./OutgoingApprovalClient";
+import { PermissionPanel } from "./PermissionPanel";
 
 /**
  * V4 §9 Founder approval gate — outgoing sheet & incoming replies.
@@ -262,6 +263,9 @@ export default async function ApprovalPage({
         />
       </div>
     </section>
+
+    {/* Permission Gate — export CSV of investors needing client approval */}
+    <PermissionPanel campaignId={campaignId} />
     </>
   );
 }
