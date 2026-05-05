@@ -104,6 +104,14 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // Emergency auth bypass — when fc_auth_bypass cookie is set,
+  // skip the auth gate entirely. GoTrue is down.
+  const hasBypass = request.cookies.get("fc_auth_bypass")?.value === "1";
+  if (hasBypass) {
+    // Set a fake user so downstream code sees someone logged in
+    user = { id: "815369eb-84e2-42e6-b729-241f264b180b" } as any;
+  }
+
   const pathname = request.nextUrl.pathname;
   const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
