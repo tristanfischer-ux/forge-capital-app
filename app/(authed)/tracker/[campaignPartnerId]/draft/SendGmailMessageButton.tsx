@@ -14,6 +14,7 @@ import { sendGmailMessageAction } from "./sendGmailMessageAction";
  * leaving the app to send.
  */
 export function SendGmailMessageButton(props: {
+  campaignPartnerId?: string;
   to: string;
   subject: string;
   body: string;
@@ -32,6 +33,7 @@ export function SendGmailMessageButton(props: {
     if (isPending) return;
     startTransition(async () => {
       const out = await sendGmailMessageAction({
+        campaignPartnerId: props.campaignPartnerId,
         to: props.to,
         subject: props.subject,
         body: props.body,

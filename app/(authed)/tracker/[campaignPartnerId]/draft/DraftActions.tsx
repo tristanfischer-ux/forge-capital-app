@@ -7,11 +7,13 @@ import { CopyToClipboardButton } from "./CopyToClipboardButton";
 import { AttachmentPicker, type PickedFile } from "./AttachmentPicker";
 
 export function DraftActions({
+  campaignPartnerId,
   to,
   subject,
   body,
   fullClipboardText,
 }: {
+  campaignPartnerId: string;
   to: string;
   subject: string;
   body: string;
@@ -29,6 +31,7 @@ export function DraftActions({
     <section className="rounded-[10px] border border-border bg-surface-alt p-5">
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <SendGmailMessageButton
+          campaignPartnerId={campaignPartnerId}
           to={to}
           subject={subject}
           body={body}

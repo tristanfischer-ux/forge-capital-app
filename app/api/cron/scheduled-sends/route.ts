@@ -177,6 +177,24 @@ export async function GET(request: NextRequest) {
       continue; // Another dispatcher claimed it, or founder cancelled
     }
 
+    // PERMISSION GATE: belt-and-braces check — skip if client denied
+    try {
+      const { data: cpRow } = await supabase
+        .from("campaign_partners")
+        .select("permission_status")
+        .eq("id", row.campaign_partner_id)
+        .single();
+      if ((cpRow as any)?.permission_status === "denied") {
+        await supabase
+          .from("scheduled_sends")
+          .update({ status: "cancelled" })
+          .eq("id", row.id);
+        continue;
+      }
+    } catch {
+      // If permission_status column doesn't exist yet, proceed (backwards compat)
+    }
+
     try {
       const verification = await verifyDeliverability(row.to_email);
       if (!verification.deliverable) {

@@ -69,48 +69,29 @@ export async function proxy(request: NextRequest) {
     },
   );
 
+  // Emergency auth bypass — when fc_auth_bypass cookie is set,
+  // skip the auth gate entirely. GoTrue is down. Check this BEFORE
+  // calling getUser() to avoid the 4s timeout on every request.
+  const hasBypass = request.cookies.get("fc_auth_bypass")?.value === "1";
+
+  if (hasBypass) {
+    // Set a fake user so downstream code sees someone logged in
+    const bypassUser = { id: "815369eb-84e2-42e6-b729-241f264b180b" } as any;
+
+    const pathname = request.nextUrl.pathname;
+    const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+    if (isGated) {
+      // Already have a bypass user — let the request through
+    }
+
+    return response;
+  }
+
   // IMPORTANT: getUser() must be called to refresh the token.
   let {
     data: { user },
   } = await supabase.auth.getUser();
-
-  // Dev bypass: if the flag is on AND we don't have a session yet, mint
-  // one and push it into the current request's supabase client. setSession
-  // fires SIGNED_IN → @supabase/ssr's storage adapter writes the session
-  // cookies via our setAll callback above, so downstream server components
-  // see the same user as if they'd magic-linked in.
-  //
-  // Guarded by `isDevAuthBypassEnabled()` which checks BOTH env vars.
-  // Production is safe: NODE_ENV === "production" short-circuits.
-  if (!user && isDevAuthBypassEnabled()) {
-    try {
-      const devSession = await getDevSession();
-      const { data: setData, error: setError } = await supabase.auth.setSession({
-        access_token: devSession.access_token,
-        refresh_token: devSession.refresh_token,
-      });
-      if (setError) {
-        // Surface loudly in dev logs — silent failure would mean pages
-        // still redirect and we'd debug for 20 minutes.
-        console.warn("[dev-auth] setSession failed:", setError.message);
-      } else {
-        user = setData.user;
-      }
-    } catch (err) {
-      console.warn(
-        "[dev-auth] bypass failed, falling through to normal gate:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
-
-  // Emergency auth bypass — when fc_auth_bypass cookie is set,
-  // skip the auth gate entirely. GoTrue is down.
-  const hasBypass = request.cookies.get("fc_auth_bypass")?.value === "1";
-  if (hasBypass) {
-    // Set a fake user so downstream code sees someone logged in
-    user = { id: "815369eb-84e2-42e6-b729-241f264b180b" } as any;
-  }
 
   const pathname = request.nextUrl.pathname;
   const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

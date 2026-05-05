@@ -108,11 +108,16 @@ export async function queueScheduledBatch(
   // before they can be queued. +0 (Pending approval) is explicitly
   // ineligible and older code paths that queued +0 rows have been
   // closed.
+  //
+  // PERMISSION GATE: Also skip any row where the client said "no"
+  // (permission_status = 'denied'). These rows stay in the campaign
+  // for visibility but must never be queued for outreach.
   const { data: pending, error: pendingErr } = await supabase
     .from("campaign_partners")
-    .select("id, status_code")
+    .select("id, status_code, permission_status")
     .eq("campaign_id", campaignId)
     .in("status_code", ["+1", "+2"])
+    .neq("permission_status", "denied")
     .order("created_at", { ascending: true })
     .limit(capped + 10);
 

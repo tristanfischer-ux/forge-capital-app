@@ -1,5 +1,6 @@
 "use server";
 
+import { createServerClient } from "@/lib/supabase/server";
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
 
 /**
@@ -12,6 +13,10 @@ import { sendGmailMessage } from "@/lib/gmail/create-draft";
  * Caller MUST gate this behind an explicit confirm — V4-FEEDBACK-ROUND-2.md
  * "No auto-send anywhere" rule applies. The button below shows a confirm
  * step before reaching this action.
+ *
+ * PERMISSION GATE: If the client said "no" (permission_status = 'denied'),
+ * the send is blocked. The investor stays in the campaign for visibility
+ * but no outreach may occur.
  */
 
 export interface AttachmentInput {
@@ -22,6 +27,7 @@ export interface AttachmentInput {
 }
 
 export interface SendGmailMessageInput {
+  campaignPartnerId?: string;
   to: string;
   subject: string;
   body: string;
@@ -36,6 +42,23 @@ export async function sendGmailMessageAction(
   input: SendGmailMessageInput,
 ): Promise<SendGmailMessageResult> {
   try {
+    // PERMISSION GATE: check if client denied this investor
+    if (input.campaignPartnerId) {
+      const supabase = await createServerClient();
+      const { data: cp } = await supabase
+        .from("campaign_partners")
+        .select("permission_status")
+        .eq("id", input.campaignPartnerId)
+        .single();
+      if ((cp as any)?.permission_status === "denied") {
+        return {
+          ok: false,
+          error: "SEND_FAILED",
+          message: "Outreach blocked — client denied permission for this investor.",
+        };
+      }
+    }
+
     const gmailAttachments = (input.attachments ?? []).map((a) => ({
       filename: a.filename,
       mimeType: a.mimeType,

@@ -174,6 +174,7 @@ export default async function DraftPage({
       {/* Primary action — only when not blocked */}
       {!blocked ? (
         <DraftActions
+          campaignPartnerId={campaignPartnerId}
           to={data.primary_partner?.email ?? ""}
           subject={draft.subject}
           body={draft.fullBody}

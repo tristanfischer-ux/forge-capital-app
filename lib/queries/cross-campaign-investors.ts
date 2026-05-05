@@ -6,136 +6,121 @@ export interface CrossCampaignInvestor {
   contact_name: string | null;
   contact_title: string | null;
   entity_type: string | null;
-  sector: string | null;
-  website: string | null;
-  hq_location: string | null;
-  thesis_summary: string | null;
-  campaigns: CampaignStatus[];
+  campaigns: CampaignEntry[];
   overlap_count: number;
   best_status: string | null;
   best_status_label: string | null;
-  last_contact: string | null;
 }
 
-export interface CampaignStatus {
+export interface CampaignEntry {
   campaign_id: string;
   campaign_name: string;
   status_code: string | null;
   status_label: string | null;
   days_since: number | null;
-  last_contact_at: string | null;
   permission_status: string;
 }
 
 /**
- * Cross-campaign investor rollup — the web equivalent of Master Investor Tracker.
- * Returns every investor Tristan has ever reached out to, with per-campaign status.
+ * Two-query approach — avoids deep PostgREST !inner nesting.
+ * Query 1: campaign_partners + campaigns (light, no investor data)
+ * Query 2: partner + investor data (separate, lighter payload)
+ * Join in memory by partner_id.
  */
 export async function getCrossCampaignInvestors(): Promise<CrossCampaignInvestor[]> {
   const supabase = await createServerClient();
 
-  // Get all campaigns
+  // Query 1: campaigns map
   const { data: campaigns } = await supabase
     .from("campaigns")
-    .select("id, name, campaign_intent")
+    .select("id, name")
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
   if (!campaigns || campaigns.length === 0) return [];
+  const campaignMap = new Map(campaigns.map((c) => [c.id as string, c.name as string]));
 
-  // Get all campaign_partners with investor + partner data
-  const { data: partners } = await supabase
+  // Query 2: campaign_partners — light, no nested joins
+  const { data: cpRows } = await supabase
     .from("campaign_partners")
-    .select(`
-      id,
-      campaign_id,
-      partner_id,
-      status_code,
-      status_label,
-      last_contact_at,
-      created_at,
-      partners_mirror!inner (
-        id,
-        investor_id,
-        name,
-        title,
-        email,
-        focus_areas,
-        bio,
-        investors_mirror!inner (
-          id,
-          firm_name,
-          type,
-          website,
-          hq_location,
-          thesis_summary,
-          entity_type,
-          sector_focus
-        )
-      )
-    `)
+    .select("id, campaign_id, partner_id, status_code, status_label, last_contact_at, created_at")
     .order("created_at", { ascending: false });
 
-  if (!partners) return [];
+  if (!cpRows || cpRows.length === 0) return [];
 
-  // Group by investor_id
+  // Collect unique partner_ids
+  const partnerIds = [...new Set(cpRows.map((r) => r.partner_id as number))];
+
+  // Query 3: partners + investors in two flat queries (no nesting)
+  const { data: partners } = await supabase
+    .from("partners_mirror")
+    .select("id, investor_id, name, title")
+    .in("id", partnerIds);
+
+  const partnerMap = new Map<number, { investor_id: number; name: string | null; title: string | null }>();
+  const investorIds = new Set<number>();
+  for (const p of partners ?? []) {
+    const row = p as { id: number; investor_id: number; name: string | null; title: string | null };
+    partnerMap.set(row.id, row);
+    investorIds.add(row.investor_id);
+  }
+
+  const { data: investors } = await supabase
+    .from("investors_mirror")
+    .select("id, firm_name, entity_type")
+    .in("id", [...investorIds]);
+
+  const investorMap = new Map<number, { firm_name: string; entity_type: string | null }>();
+  for (const inv of investors ?? []) {
+    const row = inv as { id: number; firm_name: string; entity_type: string | null };
+    investorMap.set(row.id, row);
+  }
+
+  // Assemble — group by investor_id
   const byInvestor = new Map<number, CrossCampaignInvestor>();
 
-  for (const row of partners) {
-    const investorId = (row.partners_mirror as any)?.investors_mirror?.id;
-    if (!investorId) continue;
+  for (const cp of cpRows) {
+    const partner = partnerMap.get(cp.partner_id as number);
+    if (!partner) continue;
+    const inv = investorMap.get(partner.investor_id);
+    if (!inv) continue;
 
-    const firmName = (row.partners_mirror as any)?.investors_mirror?.firm_name ?? "Unknown";
-    const contactName = (row.partners_mirror as any)?.name ?? null;
-    const contactTitle = (row.partners_mirror as any)?.title ?? null;
-    const entityType = (row.partners_mirror as any)?.investors_mirror?.entity_type ?? null;
-    const sector = (row.partners_mirror as any)?.investors_mirror?.sector_focus ?? null;
-    const website = (row.partners_mirror as any)?.investors_mirror?.website ?? null;
-    const hqLocation = (row.partners_mirror as any)?.investors_mirror?.hq_location ?? null;
-    const thesisSummary = (row.partners_mirror as any)?.investors_mirror?.thesis_summary ?? null;
-
-    const campaign = campaigns.find((c) => c.id === row.campaign_id);
-    const daysSince = row.last_contact_at
-      ? Math.floor((Date.now() - new Date(row.last_contact_at).getTime()) / (1000 * 60 * 60 * 24))
+    const investorId = partner.investor_id;
+    const campaignName = campaignMap.get(cp.campaign_id as string) ?? "Unknown";
+    const daysSince = cp.last_contact_at
+      ? Math.floor((Date.now() - new Date(cp.last_contact_at as string).getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
-    const cs: CampaignStatus = {
-      campaign_id: row.campaign_id,
-      campaign_name: campaign?.name ?? "Unknown",
-      status_code: row.status_code,
-      status_label: row.status_label,
+    const ce: CampaignEntry = {
+      campaign_id: cp.campaign_id as string,
+      campaign_name: campaignName,
+      status_code: cp.status_code as string | null,
+      status_label: cp.status_label as string | null,
       days_since: daysSince,
-      last_contact_at: row.last_contact_at,
-      permission_status: "not_required", // Column may not exist yet — run migration SQL to enable
+      permission_status: (cp as any).permission_status ?? "not_required",
     };
 
     if (byInvestor.has(investorId)) {
       const existing = byInvestor.get(investorId)!;
-      existing.campaigns.push(cs);
+      existing.campaigns.push(ce);
       existing.overlap_count = existing.campaigns.length;
     } else {
       byInvestor.set(investorId, {
         investor_id: investorId,
-        firm_name: firmName,
-        contact_name: contactName,
-        contact_title: contactTitle,
-        entity_type: entityType,
-        sector: sector,
-        website: website,
-        hq_location: hqLocation,
-        thesis_summary: thesisSummary,
-        campaigns: [cs],
+        firm_name: inv.firm_name,
+        contact_name: partner.name,
+        contact_title: partner.title,
+        entity_type: inv.entity_type,
+        campaigns: [ce],
         overlap_count: 1,
-        best_status: row.status_code,
-        best_status_label: row.status_label,
-        last_contact: row.last_contact_at,
+        best_status: cp.status_code as string | null,
+        best_status_label: cp.status_label as string | null,
       });
     }
   }
 
-  // Compute best status for each investor
+  // Compute best status per investor
   for (const inv of byInvestor.values()) {
-    // Sort campaigns by status_code numerically (higher = better)
     const sorted = [...inv.campaigns].sort((a, b) => {
       const aNum = parseInt(a.status_code?.replace(/[^0-9-]/g, "") ?? "0", 10);
       const bNum = parseInt(b.status_code?.replace(/[^0-9-]/g, "") ?? "0", 10);
@@ -143,11 +128,9 @@ export async function getCrossCampaignInvestors(): Promise<CrossCampaignInvestor
     });
     inv.best_status = sorted[0]?.status_code ?? null;
     inv.best_status_label = sorted[0]?.status_label ?? null;
-    inv.last_contact = sorted[0]?.last_contact_at ?? null;
   }
 
   return Array.from(byInvestor.values()).sort((a, b) => {
-    // Sort by overlap count desc, then firm name
     if (b.overlap_count !== a.overlap_count) return b.overlap_count - a.overlap_count;
     return a.firm_name.localeCompare(b.firm_name);
   });
