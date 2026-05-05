@@ -1587,7 +1587,7 @@ function ResultCard({
           </div>
         </div>
 
-        {/* Tier 2: Why them (truncated to 2 lines on closed card) */}
+        {/* Tier 2: Why them (full text, no truncation) */}
         {!expanded && row.why_them ? (
           <div
             style={{
@@ -1595,10 +1595,6 @@ function ResultCard({
               color: "var(--text-dim)",
               lineHeight: 1.5,
               marginTop: 6,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
             }}
           >
             <span style={{ fontWeight: 600, color: "var(--orange)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", marginRight: 6 }}>Why them</span>

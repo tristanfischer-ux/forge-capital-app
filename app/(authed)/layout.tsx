@@ -4,7 +4,7 @@ import {
   listActiveCampaigns,
   resolveCurrentCampaignId,
 } from "@/lib/queries/campaigns";
-import { CampaignDropdown } from "./CampaignDropdown";
+import { TopbarCampaignSwitcher } from "./TopbarCampaignSwitcher";
 import { TopNav } from "./TopNav";
 import { WalkTourStrip } from "./WalkTourStrip";
 import { EmailHuntModal } from "./match/EmailHuntModal";
@@ -129,34 +129,13 @@ function TopBar({
       {/* Spacer — V4 line 734 pushes right controls to the edge */}
       <div className="spacer" />
 
-      {/* Campaign switcher — V4 lines 735-741. Renders null if no
-          campaigns are visible (RLS-denied); the sign-in hint below
-          takes its place. */}
-      {campaigns.length > 0 ? (
-        <CampaignDropdown
-          campaigns={campaigns}
-          activeCampaignId={activeCampaignId}
-          totalActive={totalActive}
-        />
-      ) : (
-        <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-          No campaigns visible &mdash; sign in to load your tracker.
-        </span>
-      )}
-
-      {/* "+" new-campaign button — V4 line 742. Disabled in V1 until
-          campaign creation ships (Phase 5). The affordance stays visible
-          for visual parity. */}
-      <button
-        type="button"
-        className="new-camp-btn"
-        disabled
-        title="Campaign creation lands in a later section"
-        aria-label="New campaign (not yet enabled)"
-        style={{ opacity: 0.6, cursor: "not-allowed" }}
-      >
-        +
-      </button>
+      {/* Campaign switcher — hidden on /discover (campaign-agnostic).
+          Uses client component to check pathname. */}
+      <TopbarCampaignSwitcher
+        campaigns={campaigns}
+        activeCampaignId={activeCampaignId}
+        totalActive={totalActive}
+      />
 
       {/* User chip — V4 line 743 */}
       <div className="user-chip" aria-label="Tristan Fischer">
