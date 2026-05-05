@@ -1509,39 +1509,25 @@ function ResultCard({
     <div
       className={`result-card${checked ? " checked" : ""}${expanded ? " rc-expanded" : ""}`}
       data-card={row.investor_id}
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onKeyDown={onKeyDown}
-      style={{ cursor: "pointer" }}
     >
-      <div
-        className="rc-chk-col"
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
-        <span
-          className={`rc-chk${checked ? " on" : ""}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          role="checkbox"
-          aria-checked={checked}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === " " || e.key === "Enter") {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggle();
-            }
-          }}
-        >
-          {checked ? "✓" : ""}
-        </span>
+      <div className="rc-chk-col">
+        <input
+          type="checkbox"
+          className="rc-chk"
+          checked={checked}
+          onChange={() => onToggle()}
+          aria-label={`Select ${row.firm_name}`}
+        />
       </div>
-      <div className="rc-body">
+      <div
+        className="rc-body"
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        role="button"
+        tabIndex={0}
+        style={{ cursor: "pointer" }}
+      >
         {/* Tier 1: Firm name + match % + type badge */}
         <div className="result-top">
           <div className="result-headline">
@@ -2563,39 +2549,25 @@ function LookalikeCard({
     <div
       className={`result-card${checked ? " checked" : ""}${expanded ? " rc-expanded" : ""}`}
       data-card={row.investor_id}
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onKeyDown={onKeyDown}
-      style={{ cursor: "pointer" }}
     >
-      <div
-        className="rc-chk-col"
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
-        <span
-          className={`rc-chk${checked ? " on" : ""}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          role="checkbox"
-          aria-checked={checked}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === " " || e.key === "Enter") {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggle();
-            }
-          }}
-        >
-          {checked ? "✓" : ""}
-        </span>
+      <div className="rc-chk-col">
+        <input
+          type="checkbox"
+          className="rc-chk"
+          checked={checked}
+          onChange={() => onToggle()}
+          aria-label={`Select ${row.firm_name}`}
+        />
       </div>
-      <div className="rc-body">
+      <div
+        className="rc-body"
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        role="button"
+        tabIndex={0}
+        style={{ cursor: "pointer" }}
+      >
         <div className="result-top">
           <div className="result-headline">
             <div className="result-name">

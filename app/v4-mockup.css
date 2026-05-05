@@ -180,9 +180,10 @@ button { font-family: inherit; }
 }
 .result-card:hover { border-color: var(--accent); box-shadow: 0 3px 12px rgba(79,70,229,0.12); }
 .result-card.checked { border-color: var(--accent); background: #fbfaff; }
-.rc-chk-col { display: flex; align-items: flex-start; padding-top: 6px; }
-.rc-chk { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface); cursor: pointer; }
-.rc-chk.on { background: var(--accent); border-color: var(--accent); color: #fff; font-size: 12px; font-weight: 700; }
+.rc-chk-col { display: flex; align-items: flex-start; padding-top: 6px; flex-shrink: 0; }
+.rc-chk { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; appearance: none; -webkit-appearance: none; margin: 0; flex-shrink: 0; position: relative; }
+.rc-chk:checked { background: var(--accent); border-color: var(--accent); }
+.rc-chk:checked::after { content: "✓"; color: #fff; font-size: 12px; font-weight: 700; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .rc-body { min-width: 0; }
 .result-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 10px; }
 .result-headline { min-width: 0; flex: 1; }

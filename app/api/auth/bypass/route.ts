@@ -26,10 +26,12 @@ export async function GET(request: Request) {
   }
 
   // Set a bypass cookie — the middleware checks this to skip the auth gate
+  // Secure flag must be false on localhost (HTTP) — only true on production (HTTPS)
+  const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
   const response = NextResponse.redirect(new URL("/discover", request.url));
   response.cookies.set("fc_auth_bypass", "1", {
     httpOnly: true,
-    secure: true,
+    secure: !isLocalhost,
     sameSite: "lax",
     path: "/",
     maxAge: 3600,
