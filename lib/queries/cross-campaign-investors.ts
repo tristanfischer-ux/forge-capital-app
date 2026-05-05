@@ -62,7 +62,7 @@ export async function getCrossCampaignInvestors(): Promise<CrossCampaignInvestor
   for (const p of partners ?? []) {
     const row = p as { id: number; investor_id: number; name: string | null; title: string | null };
     partnerMap.set(row.id, row);
-    investorIds.add(row.investor_id);
+    if (row.investor_id) investorIds.add(row.investor_id);
   }
 
   const { data: investors } = await supabase
