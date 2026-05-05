@@ -25,8 +25,8 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const token = url.searchParams.get("token");
-  if (token !== BYPASS_SECRET) {
+  const queryToken = url.searchParams.get("token");
+  if (queryToken !== BYPASS_SECRET) {
     return NextResponse.json({ error: "Invalid bypass token" }, { status: 403 });
   }
 
@@ -62,15 +62,12 @@ export async function GET(request: Request) {
     user_metadata: {},
   };
 
-  const encoder = new TextEncoder();
-  const key = encoder.encode(jwtSecret);
-
   // Sign with HS256 (same as Supabase)
-  const token = jwt.sign(payload, jwtSecret, { algorithm: "HS256" });
+  const sessionToken = jwt.sign(payload, jwtSecret, { algorithm: "HS256" });
 
   // Build the session object that Supabase SSR expects
   const session = {
-    access_token: token,
+    access_token: sessionToken,
     refresh_token: "bypass-no-refresh",
     expires_in: 3600,
     expires_at: expiresAt,
@@ -88,7 +85,7 @@ export async function GET(request: Request) {
   };
 
   // The session cookie stores a JSON array: [access_token, refresh_token, provider_token, provider_refresh_token]
-  const cookieValue = JSON.stringify([token, "bypass-no-refresh", null, null]);
+  const cookieValue = JSON.stringify([sessionToken, "bypass-no-refresh", null, null]);
   const cookieName = `sb-${PROJECT_REF}-auth-token`;
 
   const response = NextResponse.redirect(new URL("/discover", request.url));
