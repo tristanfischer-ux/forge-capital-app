@@ -1,3 +1,5 @@
+"use server";
+
 import { createServerClient } from "@/lib/supabase/server";
 import { listActiveCampaigns } from "@/lib/queries/campaigns";
 
