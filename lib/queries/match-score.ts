@@ -522,11 +522,6 @@ function pickNearMiss(
         body: `${firm}'s typical cheque (${firmRange}) doesn't line up with the round size you described. Consider them for a follow-on slot rather than the lead.`,
       };
     }
-    case "data":
-      return {
-        headline: "Near-miss: thin data on file.",
-        body: `We only have partial profile data for ${firm} — thesis, sector, or stage fields are empty. Do a manual website pass before outreach.`,
-      };
     default:
       return null;
   }
