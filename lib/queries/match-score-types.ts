@@ -18,7 +18,6 @@ export interface ScoreDims {
   stage: number;
   geo: number;
   cheque: number;
-  activity: number;
   data: number;
 }
 
@@ -71,11 +70,6 @@ export interface MatchResultRow {
   thesis_summary: string | null;
   thesis_deep: string | null;
   ideal_company_profile: string | null;
-  /** Hardware-focus score from the Forge Capital pipeline, 0–10 scale stored
-   *  as text in the DB (text column, cast to float on read). Null when not yet
-   *  scored by the pipeline. Used in scoring AND displayed as a badge on the
-   *  match card. */
-  hardware_fit_score: number | null;
   dims: ScoreDims;
   match: number;
   primary_partner: {

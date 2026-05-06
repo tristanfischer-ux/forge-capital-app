@@ -315,8 +315,6 @@ function scoreDims(
     hq_location: string | null;
     sector_focus: string | null;
     ideal_company_profile: string | null;
-    /** Raw text value from the DB — parseFloat before use. */
-    hardware_fit_score: string | null;
   },
   heroTokens: Set<string>,
   heroText: string,
@@ -417,21 +415,6 @@ function scoreDims(
     chequeScore = 55;
   }
 
-  // ACTIVITY: inverse of days since synthesized_at or last_enriched.
-  const freshness = investor.synthesized_at ?? investor.last_enriched ?? null;
-  let activityScore = 50;
-  if (freshness) {
-    const ts = Date.parse(freshness);
-    if (Number.isFinite(ts)) {
-      const ageDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
-      if (ageDays < 7) activityScore = 90;
-      else if (ageDays < 30) activityScore = 78;
-      else if (ageDays < 90) activityScore = 65;
-      else if (ageDays < 180) activityScore = 50;
-      else activityScore = 35;
-    }
-  }
-
   // DATA: non-null field density + chrome_verified bonus.
   const dataFields = [
     investor.thesis_summary,
@@ -453,35 +436,16 @@ function scoreDims(
     stage: clamp(stageScore),
     geo: clamp(geoScore),
     cheque: clamp(chequeScore),
-    activity: clamp(activityScore),
     data: clamp(dataScore),
   };
 }
 
 /**
- * Roll up the 6 scoring dimensions into a single match percentage.
- * When a hardware_fit_score is supplied (0-100 normalised from 0-10),
- * it contributes a 15% weight to the rollup — displacing data quality
- * slightly. Without a hardware score the original 6-dim average is used.
- * The hardware score is non-penalising: a missing score (null) does NOT
- * lower the investor's ranking.
+ * Roll up the 5 scoring dimensions into a single match percentage.
  */
-function dimAverage(d: ScoreDims, hardwareFit0to100?: number): number {
-  if (hardwareFit0to100 != null) {
-    // Weighted average: thesis×20 + stage×20 + geo×15 + cheque×15 +
-    //                   activity×15 + data×10 + hardware×15
-    // = 110 total weight (normalised below).
-    const weighted =
-      d.thesis * 20 +
-      d.stage * 20 +
-      d.geo * 15 +
-      d.cheque * 15 +
-      d.activity * 15 +
-      d.data * 10 +
-      hardwareFit0to100 * 15;
-    return Math.round(weighted / 110);
-  }
-  return Math.round((d.thesis + d.stage + d.geo + d.cheque + d.activity + d.data) / 6);
+function dimAverage(d: ScoreDims): number {
+  const weighted = d.thesis * 30 + d.stage * 20 + d.geo * 20 + d.cheque * 15 + d.data * 15;
+  return Math.round(weighted / 100);
 }
 
 function pickNearMiss(
@@ -504,7 +468,6 @@ function pickNearMiss(
     ["stage", d.stage],
     ["geo", d.geo],
     ["cheque", d.cheque],
-    ["activity", d.activity],
     ["data", d.data],
   ];
   entries.sort((a, b) => a[1] - b[1]);
@@ -572,11 +535,6 @@ function pickNearMiss(
         body: `${firm}'s typical cheque (${firmRange}) doesn't line up with the round size you described. Consider them for a follow-on slot rather than the lead.`,
       };
     }
-    case "activity":
-      return {
-        headline: "Near-miss: stale profile.",
-        body: `${firm} hasn't refreshed its public thesis recently — last signal from us is old. Confirm they're still deploying before investing time in outreach.`,
-      };
     case "data":
       return {
         headline: "Near-miss: thin data on file.",
@@ -604,10 +562,6 @@ interface CandidateRow {
   thesis_summary: string | null;
   thesis_deep: string | null;
   ideal_company_profile: string | null;
-  /** Hardware-focus score, 0–10, stored as text in the DB column. Cast to
-   *  float with parseFloat on use. Null when the pipeline hasn't scored this
-   *  investor yet. */
-  hardware_fit_score: string | null;
   /** Investor type (e.g. "vc", "angel_network", "government_grant").
    *  Normalised to display labels by normalizeInvestorType(). */
   entity_type: string | null;
@@ -891,7 +845,7 @@ export async function getMatchScore(
       id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
       cheque_min_usd, cheque_max_usd, fund_size_usd,
       thesis_summary, thesis_deep, ideal_company_profile,
-      hardware_fit_score, entity_type,
+      entity_type,
       synthesis_data, investment_pattern, connection_brief,
       team_expertise, value_add, recent_activity,
       synthesized_at, last_enriched,
@@ -921,7 +875,7 @@ export async function getMatchScore(
             id, firm_name, hq_location, sector_focus, stage_focus, geo_focus,
             cheque_min_usd, cheque_max_usd, fund_size_usd,
             thesis_summary, thesis_deep, ideal_company_profile,
-            hardware_fit_score, entity_type,
+            entity_type,
             synthesis_data, investment_pattern, connection_brief,
             team_expertise, value_add, recent_activity,
             synthesized_at, last_enriched,
@@ -1063,7 +1017,6 @@ export async function getMatchScore(
         hq_location: inv.hq_location,
         sector_focus: inv.sector_focus,
         ideal_company_profile: inv.ideal_company_profile,
-        hardware_fit_score: inv.hardware_fit_score,
       },
       heroTokens,
       heroText,
@@ -1072,11 +1025,7 @@ export async function getMatchScore(
       heroCheque,
       chunkSim,
     );
-    // hardware_fit_score is stored as text in the DB (0-10 scale).
-    // Normalise to 0-100 for the weighted rollup.
-    const hwRaw = inv.hardware_fit_score != null ? parseFloat(inv.hardware_fit_score) : null;
-    const hwNorm = hwRaw != null && Number.isFinite(hwRaw) ? Math.round(hwRaw * 10) : undefined;
-    const match = dimAverage(dims, hwNorm);
+    const match = dimAverage(dims);
     if (match < minMatch) continue;
 
     const nm = pickNearMiss(
@@ -1110,9 +1059,6 @@ export async function getMatchScore(
       thesis_summary: inv.thesis_summary,
       thesis_deep: inv.thesis_deep,
       ideal_company_profile: inv.ideal_company_profile,
-      // Cast the text column to a number (0-10 scale). Store null when
-      // the DB value is absent or non-numeric.
-      hardware_fit_score: hwRaw != null && Number.isFinite(hwRaw) ? hwRaw : null,
       investment_pattern: inv.investment_pattern,
       connection_brief: inv.connection_brief,
       team_expertise: inv.team_expertise,

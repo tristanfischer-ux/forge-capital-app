@@ -1789,30 +1789,6 @@ function ResultCardDrillDown({
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
-      {/* Why them — always first when available */}
-      {row.why_them ? (
-        <div className="rc-expand-block">
-          <div className="rc-expand-label">Why them</div>
-          <p>{row.why_them}</p>
-        </div>
-      ) : null}
-
-      {/* Chunk evidence — website passage that drove the semantic match */}
-      {row.chunk_evidence ? (
-        <div className="ms-card" style={{ borderLeft: "3px solid var(--accent)" }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
-            Matched from their website &middot; {Math.round(row.chunk_evidence.similarity * 100)}% relevance
-          </div>
-          <p style={{ fontSize: 13, lineHeight: 1.65, fontStyle: "italic" }}>
-            &ldquo;{row.chunk_evidence.text}&rdquo;
-          </p>
-          <a href={row.chunk_evidence.url} target="_blank" rel="noreferrer"
-            style={{ fontSize: 11, color: "var(--accent)", marginTop: 4, display: "inline-block" }}>
-            {row.chunk_evidence.url.replace(/^https?:\/\//, "").slice(0, 60)} &#x2197;
-          </a>
-        </div>
-      ) : null}
-
       {/* On-demand insight: "Why they might back you" + "How to pitch" */}
       {insightLoading ? (
         <div
@@ -1874,6 +1850,30 @@ function ResultCardDrillDown({
           >
             Insight unavailable — {insightError}
           </p>
+        </div>
+      ) : null}
+
+      {/* Why them — fallback static synthesis if generated isn't showing or as additional context */}
+      {row.why_them ? (
+        <div className="rc-expand-block">
+          <div className="rc-expand-label">Why them</div>
+          <p>{row.why_them}</p>
+        </div>
+      ) : null}
+
+      {/* Chunk evidence — website passage that drove the semantic match */}
+      {row.chunk_evidence ? (
+        <div className="ms-card" style={{ borderLeft: "3px solid var(--accent)" }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+            Matched from their website &middot; {Math.round(row.chunk_evidence.similarity * 100)}% relevance
+          </div>
+          <p style={{ fontSize: 13, lineHeight: 1.65, fontStyle: "italic" }}>
+            &ldquo;{row.chunk_evidence.text}&rdquo;
+          </p>
+          <a href={row.chunk_evidence.url} target="_blank" rel="noreferrer"
+            style={{ fontSize: 11, color: "var(--accent)", marginTop: 4, display: "inline-block" }}>
+            {row.chunk_evidence.url.replace(/^https?:\/\//, "").slice(0, 60)} &#x2197;
+          </a>
         </div>
       ) : null}
 
@@ -2046,27 +2046,8 @@ function TagChips({ row }: { row: MatchResultRow }) {
 }
 
 function ResultTagRow({ row }: { row: MatchResultRow }) {
-  // hardware_fit_score is 0-10 from the DB pipeline. Convert to percentage
-  // for display. Only show when > 0 — a zero score adds no signal.
-  const hwPct =
-    row.hardware_fit_score != null && row.hardware_fit_score > 0
-      ? Math.round(row.hardware_fit_score * 10)
-      : null;
   return (
     <>
-      {hwPct !== null ? (
-        <span
-          className="tag-chip"
-          style={{
-            background: hwPct >= 60 ? "var(--green-tint, #ecfdf5)" : hwPct >= 30 ? "#fffbeb" : undefined,
-            color: hwPct >= 60 ? "var(--green, #059669)" : hwPct >= 30 ? "#d97706" : undefined,
-            fontWeight: 600,
-          }}
-          title={`Hardware-focus score from the Forge Capital pipeline (0–100%)`}
-        >
-          <span>⚙</span>Hardware fit: {hwPct}%
-        </span>
-      ) : null}
       {row.verified_email_count > 0 ? (
         <span className="tag-chip">
           <span>✉</span>
@@ -2150,7 +2131,6 @@ const DIM_ORDER: Array<{ key: keyof ScoreDims; label: string }> = [
   { key: "stage", label: "Stage" },
   { key: "geo", label: "Geo" },
   { key: "cheque", label: "Cheque" },
-  { key: "activity", label: "Activity" },
   { key: "data", label: "Data depth" },
 ];
 
