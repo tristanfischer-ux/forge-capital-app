@@ -416,18 +416,6 @@ function scoreDims(
   }
 
   // DATA: non-null field density + chrome_verified bonus.
-  const dataFields = [
-    investor.thesis_summary,
-    investor.sector_focus,
-    investor.stage_focus,
-    investor.geo_focus,
-    investor.cheque_min_usd ?? investor.cheque_max_usd,
-    investor.hq_location,
-  ];
-  const filled = dataFields.filter((v) => v !== null && v !== undefined && String(v).trim().length > 0).length;
-  let dataScore = Math.round((filled / dataFields.length) * 70 + 15);
-  if (investor.chrome_verified === true) dataScore = Math.min(100, dataScore + 10);
-
   // Avoid accidental out-of-range
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
   // Small noise so equal-looking rows still sort deterministically via id.
@@ -436,15 +424,15 @@ function scoreDims(
     stage: clamp(stageScore),
     geo: clamp(geoScore),
     cheque: clamp(chequeScore),
-    data: clamp(dataScore),
   };
 }
 
 /**
- * Roll up the 5 scoring dimensions into a single match percentage.
+ * Roll up the 4 scoring dimensions into a single match percentage.
+ * thesis 25% / stage 25% / geo 25% / cheque 25%.
  */
 function dimAverage(d: ScoreDims): number {
-  const weighted = d.thesis * 30 + d.stage * 20 + d.geo * 20 + d.cheque * 15 + d.data * 15;
+  const weighted = d.thesis * 25 + d.stage * 25 + d.geo * 25 + d.cheque * 25;
   return Math.round(weighted / 100);
 }
 
@@ -468,7 +456,6 @@ function pickNearMiss(
     ["stage", d.stage],
     ["geo", d.geo],
     ["cheque", d.cheque],
-    ["data", d.data],
   ];
   entries.sort((a, b) => a[1] - b[1]);
   const [weakKey, weakVal] = entries[0];

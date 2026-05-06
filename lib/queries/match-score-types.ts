@@ -18,7 +18,6 @@ export interface ScoreDims {
   stage: number;
   geo: number;
   cheque: number;
-  data: number;
 }
 
 export interface NearMiss {
