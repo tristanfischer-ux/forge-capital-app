@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Hint } from "../../Hint";
-import { readDeskWeekCache } from "@/lib/queries/desk-calendar";
 import { skipRaiseName } from "@/lib/desk/status-map";
+import { readDeskWeekCache } from "@/lib/queries/desk-calendar";
+import {
+  loadMeetingBriefs,
+  loadMeetingNotes,
+} from "@/lib/queries/meeting-brief";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
+import { MeetingNotes } from "../../MeetingNotes";
 
 export const dynamic = "force-dynamic";
 
@@ -32,40 +36,50 @@ export default async function MeetingPage({
     null;
   if (!meeting) notFound();
 
-  const partner = meeting.partner_id
-    ? await getPartnerProfile(meeting.partner_id)
-    : null;
+  const briefs = loadMeetingBriefs();
+  const filed = briefs[meeting.id] ?? briefs[raw] ?? null;
+  const partnerId = meeting.partner_id ?? filed?.partner_id ?? null;
+  const partner = partnerId ? await getPartnerProfile(partnerId) : null;
   const raises = (partner?.campaign_links ?? []).filter(
     (l) => !skipRaiseName(l.campaign_name),
   );
+  const notes = loadMeetingNotes()[meeting.id]?.text ?? "";
+  const brief = filed?.brief ?? {};
+  const mail = filed?.correspondence ?? [];
+
+  const firmName = partner?.firm?.firm_name ?? filed?.firm_name ?? meeting.firm_name;
+  const firmId = partner?.firm?.id ?? filed?.firm_id ?? null;
+  const raiseName = filed?.campaign_name ?? meeting.campaign_name;
+  const raiseId = filed?.campaign_id ?? meeting.campaign_id;
 
   return (
     <div className="wrap">
       <div className="page-head">
         <div>
-          <h1>{meeting.title ?? "Meeting"}</h1>
+          <h1>
+            {meeting.partner_name ?? meeting.title}
+            {firmName ? ` · ${firmName}` : ""}
+          </h1>
           <p>{when(meeting.event_at)}</p>
         </div>
         <div className="btn-row" style={{ margin: 0 }}>
-          <Link href="/raise-calendar" className="btn">Back to calendar</Link>
+          <Link href="/raise-calendar" className="btn">Calendar</Link>
+          {partnerId ? (
+            <Link href={`/person/${partnerId}`} className="btn btn-primary">
+              Open person
+            </Link>
+          ) : null}
           <Link href="/today" className="btn">Today</Link>
         </div>
       </div>
 
-      {meeting.unmatched ? (
-        <div className="warn-banner">
-          <Hint label="This person is not yet a unique email on the raise tracker. The meeting is still real — we just cannot open a Person page until they are filed.">
-            <strong>Not on the tracker yet.</strong>
-          </Hint>{" "}
-          We have a name or a calendar title, but no unique email match in
-          Forge Capital. Use search, or add them from Company.
-        </div>
-      ) : null}
-
       <div className="grid-2">
         <div className="card">
-          <h2>What this is</h2>
-          <p className="sub">Pulled from your Google Calendar. Nothing here was invented.</p>
+          <h2>Cheat sheet</h2>
+          <p className="sub">
+            Built from the invite, Forge Capital, and the mail we actually
+            found. Nothing here is invented.
+          </p>
           <table>
             <tbody>
               <tr>
@@ -75,70 +89,87 @@ export default async function MeetingPage({
               <tr>
                 <th>Who</th>
                 <td>
-                  {meeting.partner_id ? (
-                    <Link href={`/person/${meeting.partner_id}`}>
-                      {meeting.partner_name ?? "Open person"}
+                  {partnerId ? (
+                    <Link href={`/person/${partnerId}`}>
+                      {meeting.partner_name ?? partner?.name}
                     </Link>
                   ) : (
-                    meeting.partner_name ?? meeting.title ?? "—"
+                    meeting.partner_name ?? meeting.title
                   )}
-                </td>
-              </tr>
-              <tr>
-                <th>
-                  <Hint label="The company you are raising for, if we could read it from the title.">
-                    Raise
-                  </Hint>
-                </th>
-                <td>
-                  {meeting.campaign_id ? (
-                    <Link href={`/company?c=${meeting.campaign_id}`}>
-                      {meeting.campaign_name}
-                    </Link>
-                  ) : (
-                    meeting.campaign_name ?? "Not tied to a raise yet"
-                  )}
+                  {meeting.attendee_emails?.[0] ? (
+                    <div className="faint">{meeting.attendee_emails[0]}</div>
+                  ) : null}
                 </td>
               </tr>
               <tr>
                 <th>Firm</th>
                 <td>
-                  {partner?.firm?.id != null ? (
-                    <Link href={`/firm/${partner.firm.id}`}>{partner.firm.firm_name}</Link>
+                  {firmId ? (
+                    <Link href={`/firm/${firmId}`}>{firmName}</Link>
                   ) : (
-                    meeting.firm_name ?? "—"
+                    firmName ?? "—"
                   )}
                 </td>
               </tr>
               <tr>
-                <th>Attendees</th>
+                <th>Raise</th>
                 <td>
-                  {(meeting.attendee_emails ?? []).length
-                    ? meeting.attendee_emails?.join(", ")
-                    : "No guest list on the calendar invite"}
+                  {raiseId ? (
+                    <Link href={`/company?c=${raiseId}`}>{raiseName}</Link>
+                  ) : (
+                    brief.raise ?? "Not a named raise — see why this call, below"
+                  )}
                 </td>
               </tr>
             </tbody>
           </table>
-          {meeting.notes || meeting.summary ? (
-            <div style={{ padding: "0 16px 16px" }}>
-              <h2>Calendar notes</h2>
-              <p className="sub" style={{ paddingLeft: 0 }}>
-                {(meeting.notes || meeting.summary || "").slice(0, 1200)}
-              </p>
-            </div>
-          ) : (
-            <p className="sub">No description on the calendar event.</p>
-          )}
+          <div style={{ padding: "4px 16px 16px" }}>
+            {brief.who ? (
+              <>
+                <h2>Who they are</h2>
+                <p className="sub" style={{ paddingLeft: 0 }}>{brief.who}</p>
+              </>
+            ) : null}
+            {brief.firm ? (
+              <>
+                <h2>The firm</h2>
+                <p className="sub" style={{ paddingLeft: 0 }}>{brief.firm}</p>
+              </>
+            ) : null}
+            {brief.why_this_call ? (
+              <>
+                <h2>What this call is about</h2>
+                <p className="sub" style={{ paddingLeft: 0 }}>{brief.why_this_call}</p>
+              </>
+            ) : null}
+            {brief.email_story ? (
+              <>
+                <h2>Who emailed whom</h2>
+                <p className="sub" style={{ paddingLeft: 0 }}>{brief.email_story}</p>
+              </>
+            ) : null}
+            {brief.focus && brief.focus.length > 0 ? (
+              <>
+                <h2>Hit these</h2>
+                <ul className="sub" style={{ paddingLeft: 18 }}>
+                  {brief.focus.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
         </div>
+
         <div className="card">
-          <h2>On the desk</h2>
-          {partner ? (
+          <h2>Your notes</h2>
+          <p className="sub">Saved on this meeting. If they are on a raise, the note is also logged on that row.</p>
+          <div style={{ padding: "0 16px 16px" }}>
+            <MeetingNotes meetingId={meeting.id} initial={notes} />
+          </div>
+          {raises.length > 0 ? (
             <>
-              <p className="sub">
-                {partner.name} is on {raises.length} raise
-                {raises.length === 1 ? "" : "s"}.
-              </p>
+              <h2>On the desk</h2>
               <table>
                 <tbody>
                   {raises.map((l) => (
@@ -151,19 +182,45 @@ export default async function MeetingPage({
                   ))}
                 </tbody>
               </table>
-              <div className="btn-row" style={{ padding: 16 }}>
-                <Link className="btn btn-primary" href={`/person/${partner.id}`}>
-                  Open the full person page
-                </Link>
-              </div>
             </>
-          ) : (
-            <p className="sub">
-              No tracker row yet. Search for the name at the top, or open
-              Review if this came from the spreadsheet import.
-            </p>
-          )}
+          ) : null}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2>Correspondence</h2>
+        <p className="sub">
+          Mail to or from their address, skipping Calendly noise.
+          {mail.length === 0
+            ? " None found — this looks like a Calendly inbound with no prior thread."
+            : ` ${mail.length} message${mail.length === 1 ? "" : "s"}.`}
+        </p>
+        {mail.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Who</th>
+                <th>Subject and opening</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mail.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.date ? new Date(m.date).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                  <td>
+                    <div>{m.from}</div>
+                    <div className="faint">to {m.to}</div>
+                  </td>
+                  <td>
+                    <div>{m.subject}</div>
+                    <div className="faint">{m.snippet}</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ const GATED_PREFIXES = [
   "/meeting",
   "/api/desk-search",
   "/api/desk-week",
+  "/api/meeting-notes",
   "/company",
   "/person",
   "/firm",
