@@ -1,4 +1,9 @@
 import { skipRaiseName } from "@/lib/desk/status-map";
+import {
+  mergeMeetings,
+  mergeReplies,
+  readDeskWeekCache,
+} from "@/lib/queries/desk-calendar";
 import { createServerClient } from "@/lib/supabase/server";
 
 export interface DeskMeeting {
@@ -291,9 +296,11 @@ export async function getDeskToday(): Promise<DeskToday> {
   const blockNames = new Map<number, string | null>();
   for (const [pid, v] of byPartner) blockNames.set(pid, v.name);
 
+  const cache = await readDeskWeekCache();
+
   return {
-    meetings,
-    replies,
+    meetings: mergeMeetings(meetings, cache.meetings),
+    replies: mergeReplies(replies, cache.replies),
     stuck: stuck.slice(0, 40),
     stuckByRaise,
     stuckCount: stuck.length,

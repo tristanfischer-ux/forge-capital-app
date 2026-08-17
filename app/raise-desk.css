@@ -194,12 +194,14 @@
 .raise-desk .col h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 8px; }
 .raise-desk .chip-row { background: var(--surface-alt); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px; margin-bottom: 6px; font-size: 13px; }
 .raise-desk .cal { display: grid; grid-template-columns: 72px repeat(5, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.raise-desk .cal > div { background: var(--surface); min-height: 88px; padding: 8px; font-size: 12px; }
-.raise-desk .cal .hd { background: var(--surface-alt); font-weight: 600; min-height: auto; }
+.raise-desk .cal-days { grid-template-columns: repeat(5, 1fr); }
+.raise-desk .cal > div, .raise-desk .cal-day { background: var(--surface); min-height: 88px; padding: 8px; font-size: 12px; }
+.raise-desk .cal .hd { background: var(--surface-alt); font-weight: 600; min-height: auto; margin: -8px -8px 8px; padding: 8px; }
 .raise-desk .cal .hour { background: var(--surface-alt); color: var(--text-dim); font-size: 11px; }
-.raise-desk .evt { background: var(--accent-light); color: var(--accent-dark); border-radius: 6px; padding: 4px 6px; margin-top: 4px; font-weight: 600; }
+.raise-desk .evt { background: var(--accent-light); color: var(--accent-dark); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-weight: 600; }
+.raise-desk .evt.unmatched { background: var(--amber-light); color: var(--amber); }
 
 @media (max-width: 980px) {
-  .raise-desk .tiles, .raise-desk .grid-2, .raise-desk .raise-cards, .raise-desk .kanban { grid-template-columns: 1fr; }
+  .raise-desk .tiles, .raise-desk .grid-2, .raise-desk .raise-cards, .raise-desk .kanban, .raise-desk .cal-days { grid-template-columns: 1fr; }
   .raise-desk .topbar { flex-wrap: wrap; }
 }
