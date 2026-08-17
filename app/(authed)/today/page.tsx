@@ -14,6 +14,7 @@ import {
   proposeTodayJob,
   todayDigest,
 } from "@/lib/desk/mandate-state";
+import { openLoops } from "@/lib/desk/notes-to-action";
 import { Hint } from "../Hint";
 import { WhereWeAre } from "../WhereWeAre";
 
@@ -143,6 +144,15 @@ export default async function TodayPage({
         ) : null}
         <p>{job.body}</p>
         <Link href={job.href} className="btn btn-primary">{job.cta}</Link>
+        {openLoops().length > 0 ? (
+          <ul className="digest" style={{ marginTop: 12 }}>
+            {openLoops().map((l) => (
+              <li key={l.text + l.due}>
+                Open loop · {l.due}: {l.text}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       <div className="tiles">

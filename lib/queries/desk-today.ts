@@ -1,3 +1,4 @@
+import { lookupRegistry, roleLabel } from "@/lib/desk/identity";
 import { skipRaiseName } from "@/lib/desk/status-map";
 import {
   applyCancellations,
@@ -22,6 +23,7 @@ export interface DeskMeeting {
   status_code: string | null;
   unmatched: boolean;
   canceled?: boolean;
+  role_label?: string | null;
   attendee_emails?: string[];
   channel?: string | null;
 }
@@ -312,7 +314,13 @@ export async function getDeskToday(): Promise<DeskToday> {
   const meetingsMerged = applyCancellations(
     mergeMeetings(meetings, cache.meetings),
     repliesMerged,
-  );
+  ).map((m) => {
+    const role = lookupRegistry({
+      name: m.partner_name ?? m.title,
+      email: m.attendee_emails?.[0],
+    });
+    return { ...m, role_label: role ? roleLabel(role.role) : null };
+  });
 
   return {
     meetings: meetingsMerged,

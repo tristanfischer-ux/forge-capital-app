@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { lookupRegistry, roleLabel } from "@/lib/desk/identity";
 import { applyCancellations, readDeskWeekCache } from "@/lib/queries/desk-calendar";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -19,7 +20,13 @@ export async function GET() {
   }
   return NextResponse.json({
     generated_at: cache.generated_at,
-    meetings: applyCancellations(cache.meetings, cache.replies),
+    meetings: applyCancellations(cache.meetings, cache.replies).map((m) => {
+      const role = lookupRegistry({
+        name: m.partner_name ?? m.title,
+        email: m.attendee_emails?.[0],
+      });
+      return { ...m, role_label: role ? roleLabel(role.role) : null };
+    }),
     replies: cache.replies,
     google_ok: googleOk,
   });

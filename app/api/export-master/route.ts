@@ -65,9 +65,57 @@ export async function GET() {
     };
   });
 
+  const { loadRegistry } = await import("@/lib/desk/identity");
+  const { loadReviewFile, ensureRowIds } = await import("@/lib/desk/review-queue");
+  const { readDeskWeekCache } = await import("@/lib/queries/desk-calendar");
+  const week = await readDeskWeekCache();
+  const review = ensureRowIds(loadReviewFile()).filter(
+    (r) => !r.disposition || r.disposition === "unresolved",
+  );
+  const ned = loadRegistry().filter((p) => p.role === "ned");
+
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(longRows);
   XLSX.utils.book_append_sheet(wb, ws, "By raise");
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(
+      ned.map((p) => ({
+        kind: "NED",
+        name: p.name,
+        email: p.email ?? "",
+        firm: p.firm ?? "",
+        mandate: p.mandate ?? "",
+      })),
+    ),
+    "NED",
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(
+      week.meetings.map((m) => ({
+        when: m.event_at,
+        who: m.partner_name ?? m.title,
+        raise: m.campaign_name ?? "",
+        canceled: m.canceled ? "yes" : "",
+      })),
+    ),
+    "This week",
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(
+      review.slice(0, 2000).map((r) => ({
+        raise: r.campaign_name,
+        firm: r.firm_name,
+        contact: r.contact_name,
+        email: r.email,
+        reason: r.reason,
+        status_raw: r.status_raw,
+      })),
+    ),
+    "Review",
+  );
   const banner = XLSX.utils.aoa_to_sheet([
     ["SNAPSHOT — edit in the raise desk, not this file"],
     ["generated_at", generated],

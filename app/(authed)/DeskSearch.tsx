@@ -61,6 +61,7 @@ export function DeskSearch() {
                 onClick={() => {
                   setOpen(false);
                   setQ("");
+                  if (!h.id) return;
                   router.push(h.kind === "person" ? `/person/${h.id}` : `/firm/${h.id}`);
                 }}
               >

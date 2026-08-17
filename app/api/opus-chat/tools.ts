@@ -122,6 +122,18 @@ export const CHAT_TOOLS: AnthropicToolDef[] = [
     },
   },
   {
+    name: "process_pasted_notes",
+    description:
+      "Tristan pasted a meeting transcript, Gemini notes, or a WhatsApp thread. Run the notes-to-action pipeline: identify the event, extract verdicts and commitments, propose Gmail drafts. Does NOT write or send until he confirms in the UI. Use when he pastes a long blob or says process these notes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The raw pasted blob, uncleaned." },
+      },
+      required: ["text"],
+    },
+  },
+  {
     name: "refine_synthesis",
     description:
       "Re-generate the per-investor synthesis paragraph and subject-line angle for a campaign_partners row, using Opus 4.7 with full firm + thesis context. Writes back to campaign_partners.rendered_synthesis / subject_angle. Use when the user says 'refine synthesis for X' or 'regenerate the synthesis for partner Y'.",
@@ -165,6 +177,8 @@ export async function dispatchTool(
         return await runResolveCampaignPartner(input, ctx);
       case "log_interaction":
         return await runLogInteraction(input);
+      case "process_pasted_notes":
+        return await runProcessNotes(input);
       case "refine_synthesis":
         return await runRefineSynthesis(input);
       default:
@@ -503,6 +517,32 @@ async function runRefineSynthesis(
       ok: true,
       rendered_synthesis: result.rendered,
       subject_angle: result.subjectAngle,
+    },
+  };
+}
+
+async function runProcessNotes(input: unknown): Promise<ToolExecutionResult> {
+  const text = typeof (input as { text?: unknown })?.text === "string"
+    ? (input as { text: string }).text
+    : "";
+  if (text.trim().length < 40) {
+    return {
+      summary: "process_pasted_notes: paste more than a line",
+      data: { error: "text too short" },
+      isError: true,
+    };
+  }
+  const { proposeNotesToAction } = await import("@/lib/desk/notes-to-action");
+  const run = await proposeNotesToAction(text);
+  return {
+    summary: `Notes-to-action proposed · ${run.verdicts.length} verdicts · ${run.drafts.length} drafts (not sent)`,
+    data: {
+      id: run.id,
+      summary: run.summary,
+      verdicts: run.verdicts,
+      commitments: run.commitments,
+      drafts: run.drafts.map((d) => ({ to: d.to, subject: d.subject, attach: d.attachMarker })),
+      confirmHint: "Open the meeting page and press Confirm, or POST /api/n2a { confirmId }.",
     },
   };
 }

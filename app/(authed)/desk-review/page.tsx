@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { ReviewActions } from "../ReviewActions";
+import { ensureRowIds, type ReviewRow } from "@/lib/desk/review-queue";
+import { normalizeFirmName } from "@/lib/desk/identity";
 import { createServerClient } from "@/lib/supabase/server";
 
 
@@ -29,7 +32,11 @@ async function loadQueue(): Promise<{ rows: QueueRow[]; source: string }> {
   const file = join(process.cwd(), "data/import-review-queue.json");
   if (existsSync(file)) {
     const arr = JSON.parse(await readFile(file, "utf8")) as QueueRow[];
-    return { rows: arr.filter((r) => (r as { disposition?: string }).disposition !== "excluded").slice(0, 200), source: "local file" };
+    const withIds = ensureRowIds(arr as ReviewRow[]);
+    return {
+      rows: withIds.filter((r) => !r.disposition || r.disposition === "unresolved").slice(0, 200),
+      source: "local file",
+    };
   }
   return { rows: [], source: error ? `table not live (${error.message})` : "empty" };
 }
@@ -45,10 +52,9 @@ export default async function DeskReviewPage() {
           <div>
             <h1>Review queue</h1>
             <p>
-              These are ticks from the old spreadsheet that did not match
-              one unique email in Forge Capital. You do not send from here.
-              You either find the person (search at the top), add them on
-              Company, or leave the row until you have an email.
+              Ticks that did not match one unique email. Merge a dirty
+              name onto the real firm, file as needs-contact, or ignore.
+              You do not send from here.
             </p>
           </div>
         </div>
@@ -80,7 +86,13 @@ export default async function DeskReviewPage() {
                 {rows.map((r, i) => (
                   <tr key={r.id ?? `${r.firm_name}-${r.campaign_name}-${i}`}>
                     <td>{r.campaign_name}</td>
-                    <td>{r.firm_name}</td>
+                    <td>
+                      {r.firm_name}
+                      {r.firm_name && normalizeFirmName(r.firm_name) !== r.firm_name ? (
+                        <div className="faint">→ {normalizeFirmName(r.firm_name)}</div>
+                      ) : null}
+                      {r.id ? <ReviewActions id={r.id} firmName={r.firm_name} /> : null}
+                    </td>
                     <td>
                       {r.contact_name}
                       <div className="side-sub">{r.email}</div>

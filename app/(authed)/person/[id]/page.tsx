@@ -7,6 +7,7 @@ import {
 } from "@/lib/desk/status-map";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
 import { RaiseStatusForm } from "../../partner/[id]/RaiseStatusForm";
+import { lookupRegistry, roleLabel } from "@/lib/desk/identity";
 import { Hint } from "../../Hint";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function DeskPersonPage({
     (l) => !skipRaiseName(l.campaign_name),
   );
   const raiseCount = raiseLinks.length;
+  const role = lookupRegistry({ name: partner.name, email: partner.email });
 
   return (
     <div className="wrap">
@@ -44,8 +46,15 @@ export default async function DeskPersonPage({
           <p>
             {partner.title ?? "Partner"}
             {partner.firm?.firm_name ? ` · ${partner.firm.firm_name}` : ""}.
+            {role
+              ? ` ${roleLabel(role.role)}${role.mandate ? ` · ${role.mandate}` : ""}.`
+              : ""}
             {raiseCount === 0
-              ? " Not on any live raise yet."
+              ? role?.role === "ned"
+                ? " This is a NED conversation, not a raise."
+                : role
+                  ? ""
+                  : " Not on any live raise yet."
               : raiseCount === 1
                 ? " On one raise — that is one tracker row."
                 : ` On ${raiseCount} raises at once. Each raise has its own status.`}
@@ -65,11 +74,13 @@ export default async function DeskPersonPage({
       <div className="raise-cards">
         {raiseLinks.length === 0 ? (
           <div className="raise-card">
-            <h3>Not on a raise yet</h3>
+            <h3>{role?.role === "ned" ? "NED — not a raise" : "Not on a raise yet"}</h3>
             <p className="faint">
-              They are in the Forge Capital directory, but they are not on
-              SkySails, FishFrom, Odysseus, or another live raise. Use
-              Company to add them, or go back via the crumbs above.
+              {role?.role === "ned"
+                ? "Do not drop them into a fundraise wave."
+                : role
+                  ? `${roleLabel(role.role)} — not an unknown lead.`
+                  : "They are in the Forge Capital directory, but they are not on a live raise."}
             </p>
           </div>
         ) : (

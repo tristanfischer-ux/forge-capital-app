@@ -11,6 +11,7 @@ import {
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
 import { inferMandatesForMeeting } from "@/lib/desk/mandate-state";
 import { MeetingNotes } from "../../MeetingNotes";
+import { PasteNotes } from "../../PasteNotes";
 import { WhereWeAre } from "../../WhereWeAre";
 
 export const dynamic = "force-dynamic";
@@ -178,6 +179,11 @@ export default async function MeetingPage({
           <p className="sub">Saved on this meeting. If they are on a raise, the note is also logged on that row.</p>
           <div style={{ padding: "0 16px 16px" }}>
             <MeetingNotes meetingId={meeting.id} initial={notes} />
+            <h2>Paste the transcript</h2>
+            <p className="sub" style={{ paddingLeft: 0 }}>
+              One blob. Propose first. Confirm creates Gmail drafts only.
+            </p>
+            <PasteNotes />
           </div>
           {raises.length > 0 ? (
             <>

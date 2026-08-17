@@ -82,7 +82,11 @@ export function excelDateToIso(value: unknown): string | null {
 
 export function skipRaiseName(name: string | null | undefined): boolean {
   if (!name) return false;
-  return name.startsWith("AUDIT") || name.includes("Wren Aerospace");
+  return (
+    name.startsWith("AUDIT") ||
+    name.includes("Wren Aerospace") ||
+    /magdrive/i.test(name)
+  );
 }
 
 export function badgeClassFor(code: string | null | undefined): string {

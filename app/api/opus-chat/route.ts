@@ -103,6 +103,8 @@ export async function POST(req: Request) {
     "  - If the user pastes a Wispr transcript and says 'log this call with X', call log_interaction with the transcript as notes and run_synthesis=true (the action auto-synthesises).",
     "  - refine_synthesis needs a campaign_partner_id (a uuid). If the user names a partner, chain search_partners → resolve_campaign_partner → refine_synthesis.",
     "  - After tools run, give Tristan a one-line confirmation of what landed — e.g. 'Logged a 30-min call with Astasia Myers at Quiet Capital, follow-up set for Thursday.' Do not repeat the raw JSON.",
+    "  - If he pastes a long transcript or notes blob, call process_pasted_notes. That only PROPOSES. Tell him to confirm on the meeting page. Never claim mail was sent.",
+    "  - You are inside the raise loop: identify, load the record, extract, screen, propose drafts, open loops. You do not send.",
     "",
     "Current app context:",
   ];

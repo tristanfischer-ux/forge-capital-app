@@ -22,9 +22,9 @@ export default function RaiseExcelPage() {
         <div className="card">
           <h2>Download the backup</h2>
           <p className="sub">
-            One row per person × raise from the database. About 1,400 rows
-            today. Use this if you want the old grid on a plane, or to send
-            a counterpart a slice. It is not the thing you edit.
+            Sheets: by raise, NED conversations, this week’s meetings,
+            and the review queue. Still a snapshot — edit in the desk.
+            Filename never says CANONICAL.
           </p>
           <div className="btn-row">
             <a className="btn btn-primary" href="/api/export-master">

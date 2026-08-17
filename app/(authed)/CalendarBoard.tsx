@@ -93,7 +93,9 @@ export function CalendarBoard({ initial }: { initial: DeskMeeting[] }) {
                     <div className="faint">
                       {m.canceled
                         ? "Canceled — do not prep as live"
-                        : m.campaign_name ?? (m.unmatched ? "not on the tracker yet" : "—")}
+                        : m.campaign_name ??
+                          m.role_label ??
+                          (m.unmatched ? "not on the tracker yet" : "—")}
                     </div>
                     {m.unmatched ? (
                       <Hint label="We have the calendar event, but this person is not a unique email on the raise tracker. Click the card to see everything we do have.">

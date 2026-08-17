@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { getDeskToday } from "@/lib/queries/desk-today";
+import { decodeMailText } from "@/lib/queries/meeting-brief";
+import { lookupRegistry, roleLabel } from "@/lib/desk/identity";
 import { Hint } from "../Hint";
+import { ReplyBox } from "../ReplyBox";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +21,10 @@ export default async function RaiseInboxPage() {
         </div>
       </div>
       <div className="note">
-        Google is connected. This list is the live mailbox filtered to
-        people, not newsletters. A full reply / forward / attach composer
-        in this desk is next — for now open the person, or{" "}
+        Reply or park a Gmail draft on a row. Sending is two clicks and
+        never automatic.{" "}
         <a href="https://mail.google.com" target="_blank" rel="noreferrer">
-          Gmail
+          Open Gmail
         </a>
         .
       </div>
@@ -41,7 +43,11 @@ export default async function RaiseInboxPage() {
               </tr>
             </thead>
             <tbody>
-              {data.replies.map((r) => (
+              {data.replies.map((r) => {
+                const email =
+                  r.from?.match(/[\w.+-]+@[\w.-]+/)?.[0] ?? "";
+                const role = lookupRegistry({ name: r.partner_name ?? r.from, email });
+                return (
                 <tr key={r.id}>
                   <td>
                     {r.event_at
@@ -57,9 +63,11 @@ export default async function RaiseInboxPage() {
                     {r.partner_id ? (
                       <Link href={`/person/${r.partner_id}`}>{r.partner_name}</Link>
                     ) : (
-                      r.partner_name ?? "—"
+                      r.partner_name ?? r.from ?? "—"
                     )}
-                    {!r.partner_id ? (
+                    {role ? (
+                      <div className="faint">{roleLabel(role.role)}</div>
+                    ) : !r.partner_id ? (
                       <Hint label="We have their email, but they are not a unique person on the raise tracker.">
                         <div className="faint">not on the tracker yet</div>
                       </Hint>
@@ -71,11 +79,15 @@ export default async function RaiseInboxPage() {
                   <td>
                     <div>{r.summary}</div>
                     {r.preview ? (
-                      <div className="faint">{r.preview.slice(0, 180)}</div>
+                      <div className="faint">{decodeMailText(r.preview).slice(0, 180)}</div>
+                    ) : null}
+                    {email ? (
+                      <ReplyBox to={email} subject={r.summary ?? ""} />
                     ) : null}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
