@@ -52,6 +52,7 @@ export interface TrackerRow {
   partner_id: number | null;
   partner_name: string | null;
   partner_title: string | null;
+  email: string | null;
   /** Two-sentence summary derived from `investors_mirror.thesis_summary`. */
   company_summary: string | null;
   /** Why-them synthesis pulled from `investors_mirror.synthesis_data` jsonb. */
@@ -90,6 +91,7 @@ interface TrackerJoinRow {
     id: number | null;
     name: string | null;
     title: string | null;
+    email: string | null;
     email_tier: string | null;
     investors_mirror: {
       firm_name: string | null;
@@ -401,6 +403,7 @@ export async function getTrackerRows(
           id,
           name,
           title,
+          email,
           email_tier,
           investors_mirror:investor_id (
             firm_name,
@@ -518,6 +521,7 @@ export async function getTrackerRows(
       partner_id: partner?.id ?? null,
       partner_name: partner?.name ?? null,
       partner_title: partner?.title ?? null,
+      email: partner?.email ?? null,
       company_summary: deriveCompanySummary(investor?.thesis_summary ?? null),
       partner_why_them: deriveWhyThem(investor),
       emails_in: agg?.emails_in ?? 0,

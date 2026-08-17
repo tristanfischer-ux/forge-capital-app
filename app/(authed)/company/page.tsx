@@ -6,6 +6,8 @@ import {
   permissionLabel,
   skipRaiseName,
 } from "@/lib/desk/status-map";
+import { CompanyWave } from "../CompanyWave";
+import { screenWave } from "@/lib/desk/wave";
 import { listActiveCampaigns } from "@/lib/queries/campaigns";
 import { getTrackerRows } from "@/lib/queries/tracker";
 
@@ -52,8 +54,8 @@ export default async function CompanyPage({
         <div>
           <h1>{selected?.name ?? "Company"} — this raise</h1>
           <p>
-            Everyone on this raise. The four columns below are a sample;
-            the full list is the table. Hover a tile if the codes are unclear.
+            Screen the wave, send the principal a sign-off draft, then
+            park letters. The table is everyone on this raise.
           </p>
         </div>
       </div>
@@ -95,6 +97,15 @@ export default async function CompanyPage({
           <div className="s">see person before you send</div>
         </div>
       </div>
+      {selected ? (
+        <CompanyWave
+          campaignId={selected.id}
+          raise={selected.name}
+          principal={selected.counterpart_name ?? selected.counterpart_email}
+          rows={screenWave(rows)}
+        />
+      ) : null}
+
       <div className="kanban">
         <div className="col">
           <h3>Pending ({pending.length})</h3>

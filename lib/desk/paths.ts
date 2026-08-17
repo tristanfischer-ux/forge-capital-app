@@ -8,6 +8,7 @@ export const DESK_PREFIXES = [
   "/raise-excel",
   "/desk-review",
   "/meeting",
+  "/log",
 ] as const;
 
 export function isRaiseDeskPath(pathname: string): boolean {

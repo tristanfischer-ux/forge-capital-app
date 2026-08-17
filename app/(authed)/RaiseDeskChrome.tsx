@@ -6,6 +6,7 @@ import { Suspense, type ReactNode } from "react";
 import { DeskCrumbs } from "./DeskCrumbs";
 import { DeskSearch } from "./DeskSearch";
 import { OpusChatBar } from "./OpusChatBar";
+import { ServiceWorkerRegister } from "./ServiceWorkerRegister";
 
 const PILLS = [
   { href: "/today", label: "Today", match: (p: string) => p === "/today" },
@@ -16,12 +17,14 @@ const PILLS = [
   { href: "/raise-calendar", label: "Calendar", match: (p: string) => p.startsWith("/raise-calendar") || p.startsWith("/meeting") },
   { href: "/raise-excel", label: "Excel", match: (p: string) => p.startsWith("/raise-excel") },
   { href: "/desk-review", label: "Review", match: (p: string) => p.startsWith("/desk-review") },
+  { href: "/log", label: "Log", match: (p: string) => p.startsWith("/log") },
 ];
 
 export function RaiseDeskChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   return (
     <div className="raise-desk">
+      <ServiceWorkerRegister />
       <header className="topbar">
         <Link href="/today" className="brand">
           <span className="dot" aria-hidden="true" />

@@ -30,6 +30,8 @@ export function DeskCrumbs() {
     parts.push({ href: "/raise-excel", label: "Excel snapshot" });
   } else if (pathname.startsWith("/desk-review")) {
     parts.push({ href: "/desk-review", label: "Review queue" });
+  } else if (pathname.startsWith("/log")) {
+    parts.push({ href: "/log", label: "Quick log" });
   }
 
   const c = search.get("c");

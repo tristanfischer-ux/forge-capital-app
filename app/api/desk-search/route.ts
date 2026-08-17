@@ -6,13 +6,21 @@ import {
   normalizeFirmName,
   roleLabel,
 } from "@/lib/desk/identity";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const q = (request.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < 2) return NextResponse.json({ hits: [] });
 
-  const supabase = await createServerClient();
+  const session = await createServerClient();
+  const {
+    data: { user },
+  } = await session.auth.getUser();
+  if (!user) return NextResponse.json({ hits: [] });
+  // Desk search is Tristan-only; the encyclopaedia join under anon RLS
+  // often returns an empty set. Service role after a session check.
+  const supabase = createAdminClient();
   const like = `%${q}%`;
   const looksEmail = q.includes("@") || q.includes(".");
   const [people, peopleEmail, firms] = await Promise.all([

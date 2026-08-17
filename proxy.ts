@@ -51,12 +51,15 @@ const GATED_PREFIXES = [
   "/api/desk-review",
   "/api/desk-mail",
   "/api/n2a",
+  "/api/desk-wave",
+  "/api/desk-touch",
   "/company",
   "/person",
   "/firm",
   "/raise-inbox",
   "/raise-calendar",
   "/raise-excel",
+  "/log",
 ];
 
 export async function proxy(request: NextRequest) {
