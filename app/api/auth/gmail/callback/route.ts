@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isRaiseDeskPath } from "@/lib/desk/paths";
 import { createServerClient } from "@/lib/supabase/server";
 import { exchangeCodeForTokens } from "@/lib/gmail/oauth";
 
@@ -15,19 +16,19 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/home?gmail_connect_error=${encodeURIComponent(error)}`, request.url),
+      new URL(`/today?gmail_connect_error=${encodeURIComponent(error)}`, request.url),
     );
   }
   if (!code || !state) {
     return NextResponse.redirect(
-      new URL(`/home?gmail_connect_error=missing_params`, request.url),
+      new URL(`/today?gmail_connect_error=missing_params`, request.url),
     );
   }
 
   const expectedState = request.cookies.get("gmail_oauth_state")?.value;
   if (!expectedState || expectedState !== state) {
     return NextResponse.redirect(
-      new URL(`/home?gmail_connect_error=state_mismatch`, request.url),
+      new URL(`/today?gmail_connect_error=state_mismatch`, request.url),
     );
   }
 
@@ -70,14 +71,19 @@ export async function GET(request: NextRequest) {
       );
     if (upsertError) throw new Error(`gmail_tokens upsert: ${upsertError.message}`);
 
-    const response = NextResponse.redirect(new URL("/pipeline?gmail_connected=1", request.url));
+    const requested = request.cookies.get("gmail_oauth_next")?.value ?? "/today";
+    const dest = isRaiseDeskPath(requested) ? requested : "/today";
+    const response = NextResponse.redirect(
+      new URL(`${dest}?gmail_connected=1`, request.url),
+    );
     response.cookies.delete("gmail_oauth_state");
+    response.cookies.delete("gmail_oauth_next");
     return response;
   } catch (err) {
     const msg =
       err instanceof Error ? err.message : "Gmail OAuth callback error";
     return NextResponse.redirect(
-      new URL(`/home?gmail_connect_error=${encodeURIComponent(msg)}`, request.url),
+      new URL(`/today?gmail_connect_error=${encodeURIComponent(msg)}`, request.url),
     );
   }
 }

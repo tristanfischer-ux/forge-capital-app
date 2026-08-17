@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
+import { isRaiseDeskPath } from "@/lib/desk/paths";
 import { createServerClient } from "@/lib/supabase/server";
 import { buildAuthorizationUrl } from "@/lib/gmail/oauth";
 
@@ -20,14 +21,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const state = randomBytes(24).toString("hex");
+    const requested = request.nextUrl.searchParams.get("next") ?? "/today";
+    const next = isRaiseDeskPath(requested) ? requested : "/today";
     const response = NextResponse.redirect(buildAuthorizationUrl(state));
-    response.cookies.set("gmail_oauth_state", state, {
+    const cookie = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       path: "/",
-      maxAge: 600, // 10 minutes to complete the OAuth handshake
-    });
+      maxAge: 600,
+    };
+    response.cookies.set("gmail_oauth_state", state, cookie);
+    response.cookies.set("gmail_oauth_next", next, cookie);
     return response;
   } catch (err) {
     return NextResponse.redirect(

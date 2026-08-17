@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   listActiveCampaigns,
@@ -46,6 +47,7 @@ export const dynamic = "force-dynamic";
 type SearchParams = Promise<{
   c?: string;
   a?: string;
+  gmail_connected?: string;
 }>;
 
 export default async function PipelinePage({
@@ -58,6 +60,9 @@ export default async function PipelinePage({
   initialCampaignId?: string;
 }) {
   const params = await searchParams;
+  if (params.gmail_connected === "1") {
+    redirect("/today?gmail_connected=1");
+  }
 
   const campaigns = initialCampaigns ?? (await listActiveCampaigns());
   const cookieStore = await cookies();

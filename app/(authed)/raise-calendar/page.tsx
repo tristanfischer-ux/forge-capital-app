@@ -44,8 +44,9 @@ export default async function RaiseCalendarPage() {
       <div className="note">
         Stored Gmail/Calendar OAuth is revoked, so the launchd sync cannot
         refresh itself. This week was ingested from the live Google account.
-        Reconnect at <Link href="/api/auth/gmail">/api/auth/gmail</Link> so
-        the desk stays current without a hand ingest.
+        Reconnect at{" "}
+        <Link href="/api/auth/gmail?next=/raise-calendar">Connect Google</Link>{" "}
+        so the desk stays current without a hand ingest.
       </div>
       <div className="cal cal-days">
         {days.map((d) => {

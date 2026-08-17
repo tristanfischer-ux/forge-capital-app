@@ -21,7 +21,12 @@ function when(iso: string | null): string {
   });
 }
 
-export default async function TodayPage() {
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ gmail_connected?: string }>;
+}) {
+  const { gmail_connected } = await searchParams;
   const data = await getDeskToday();
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -47,6 +52,13 @@ export default async function TodayPage() {
           <Link href="/raise-excel" className="btn">Excel snapshot</Link>
         </div>
       </div>
+
+      {gmail_connected === "1" ? (
+        <div className="note" style={{ marginBottom: 16 }}>
+          Google is connected. Calendar and Gmail sync can run again. You
+          are on the Raise desk, not the old Outreach pipeline.
+        </div>
+      ) : null}
 
       <div className="tiles">
         <div className="tile">

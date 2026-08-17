@@ -19,8 +19,9 @@ export default async function RaiseInboxPage() {
       <div className="note">
         Stored Gmail OAuth is revoked. These inbound rows are from the live
         mailbox, matched to the tracker where the from-address is unique.
-        Reconnect at <Link href="/api/auth/gmail">/api/auth/gmail</Link> so
-        gmail-sync can keep this current.
+        Reconnect at{" "}
+        <Link href="/api/auth/gmail?next=/raise-inbox">Connect Google</Link>{" "}
+        so gmail-sync can keep this current.
       </div>
       <div className="card">
         <h2>Replies this week</h2>
