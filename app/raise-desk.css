@@ -203,6 +203,39 @@
 .raise-desk .evt { background: var(--accent-light); color: var(--accent-dark); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-weight: 600; display: block; text-decoration: none; }
 .raise-desk .evt:hover { text-decoration: none; filter: brightness(0.97); }
 .raise-desk .evt.unmatched { background: var(--amber-light); color: var(--amber); }
+.raise-desk .evt.canceled { background: #fff1f1; color: #991b1b; }
+
+.raise-desk .job-box {
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.raise-desk .job-box .k {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.raise-desk .job-box h2 { font-size: 18px; margin: 4px 0 6px; }
+.raise-desk .job-box p { font-size: 13px; color: var(--text); margin: 0 0 10px; line-height: 1.45; }
+.raise-desk .digest { margin: 0 0 12px; padding-left: 18px; color: var(--text-dim); font-size: 13px; }
+.raise-desk .digest li { margin: 2px 0; }
+
+.raise-desk .where { margin-top: 12px; }
+.raise-desk .where-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: var(--surface-alt);
+}
+.raise-desk .where-card h3 { font-size: 13px; margin: 0 0 4px; }
+.raise-desk .where-card ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-dim); }
+.raise-desk .where-line { font-size: 12px; color: var(--text-dim); margin-top: 8px; line-height: 1.4; }
 
 .raise-desk .hint { position: relative; cursor: help; border-bottom: 1px dotted var(--text-dim); }
 .raise-desk .hint-bubble {

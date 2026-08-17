@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DeskMeeting, DeskReply } from "@/lib/queries/desk-today";
+import { titleMatchesCancel } from "@/lib/desk/mandate-state";
 
 export interface DeskWeekCache {
   generated_at: string | null;
@@ -69,6 +70,21 @@ export function mergeMeetings(
   const seen = new Set(fromCache.map((m) => m.id));
   const extra = fromDb.filter((m) => !seen.has(m.id) && !seen.has(`gcal:${m.id}`));
   return dedupeMeetings([...fromCache, ...extra]);
+}
+
+/** A cancel mail (or a “Canceled:” title) marks the matching slot. */
+export function applyCancellations(
+  meetings: DeskMeeting[],
+  replies: DeskReply[],
+): DeskMeeting[] {
+  return meetings.map((m) => {
+    const titled = /canceled|cancelled/i.test(`${m.title ?? ""} ${m.summary ?? ""}`);
+    const fromMail = replies.some((r) =>
+      titleMatchesCancel(m.title ?? m.partner_name, r.summary),
+    );
+    if (!titled && !fromMail && !m.canceled) return m;
+    return { ...m, canceled: true };
+  });
 }
 
 export function mergeReplies(

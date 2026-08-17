@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readDeskWeekCache } from "@/lib/queries/desk-calendar";
+import { applyCancellations, readDeskWeekCache } from "@/lib/queries/desk-calendar";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function GET() {
   }
   return NextResponse.json({
     generated_at: cache.generated_at,
-    meetings: cache.meetings,
+    meetings: applyCancellations(cache.meetings, cache.replies),
     replies: cache.replies,
     google_ok: googleOk,
   });

@@ -1,5 +1,6 @@
 import { skipRaiseName } from "@/lib/desk/status-map";
 import {
+  applyCancellations,
   mergeMeetings,
   mergeReplies,
   readDeskWeekCache,
@@ -20,6 +21,7 @@ export interface DeskMeeting {
   campaign_id?: string | null;
   status_code: string | null;
   unmatched: boolean;
+  canceled?: boolean;
   attendee_emails?: string[];
   channel?: string | null;
 }
@@ -306,10 +308,15 @@ export async function getDeskToday(): Promise<DeskToday> {
   for (const [pid, v] of byPartner) blockNames.set(pid, v.name);
 
   const cache = await readDeskWeekCache();
+  const repliesMerged = mergeReplies(replies, cache.replies);
+  const meetingsMerged = applyCancellations(
+    mergeMeetings(meetings, cache.meetings),
+    repliesMerged,
+  );
 
   return {
-    meetings: mergeMeetings(meetings, cache.meetings),
-    replies: mergeReplies(replies, cache.replies),
+    meetings: meetingsMerged,
+    replies: repliesMerged,
     stuck: stuck.slice(0, 40),
     stuckByRaise,
     stuckCount: stuck.length,

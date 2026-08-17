@@ -7,7 +7,9 @@ import {
   loadMeetingNotes,
 } from "@/lib/queries/meeting-brief";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
+import { inferMandatesForMeeting } from "@/lib/desk/mandate-state";
 import { MeetingNotes } from "../../MeetingNotes";
+import { WhereWeAre } from "../../WhereWeAre";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,7 @@ export default async function MeetingPage({
   const firmId = partner?.firm?.id ?? filed?.firm_id ?? null;
   const raiseName = filed?.campaign_name ?? meeting.campaign_name;
   const raiseId = filed?.campaign_id ?? meeting.campaign_id;
+  const where = inferMandatesForMeeting(meeting, filed);
 
   return (
     <div className="wrap">
@@ -148,6 +151,7 @@ export default async function MeetingPage({
                 <p className="sub" style={{ paddingLeft: 0 }}>{brief.why_this_call}</p>
               </>
             ) : null}
+            <WhereWeAre items={where} />
             {brief.email_story ? (
               <>
                 <h2>Who emailed whom</h2>

@@ -9,7 +9,13 @@ import {
   formatMailSnippet,
   type MeetingCorrespondence,
 } from "@/lib/queries/meeting-brief";
+import {
+  inferMandatesForMeeting,
+  proposeTodayJob,
+  todayDigest,
+} from "@/lib/desk/mandate-state";
 import { Hint } from "../Hint";
+import { WhereWeAre } from "../WhereWeAre";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +93,20 @@ export default async function TodayPage({
   });
   const firstBlock = data.blocks[0];
   const firstDouble = data.doubleAsks[0];
-  const unmatched = data.meetings.filter((m) => m.unmatched).length;
+  const unmatched = data.meetings.filter((m) => m.unmatched && !m.canceled).length;
+  const canceledMeetings = data.meetings.filter((m) => m.canceled);
+  const job = proposeTodayJob({
+    meetings: data.meetings,
+    replies: data.replies,
+    stuckCount: data.stuckCount,
+    approvalCount: data.approvalCount,
+    canceledMeetings,
+  });
+  const digest = todayDigest({
+    meetings: data.meetings,
+    replies: data.replies,
+    approvalCount: data.approvalCount,
+  });
 
   return (
     <div className="wrap">
@@ -111,6 +130,20 @@ export default async function TodayPage({
           Outreach pipeline.
         </div>
       ) : null}
+
+      <div className="job-box">
+        <div className="k">What to do</div>
+        <h2>{job.title}</h2>
+        {digest.length > 0 ? (
+          <ul className="digest">
+            {digest.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
+        <p>{job.body}</p>
+        <Link href={job.href} className="btn btn-primary">{job.cta}</Link>
+      </div>
 
       <div className="tiles">
         <Hint label="Meetings from your Google Calendar in the next week. Unmatched means the guest is not a unique email on the raise tracker yet — click the meeting to see who it is.">
@@ -189,9 +222,11 @@ export default async function TodayPage({
                 2,
               );
               const canceled =
+                Boolean(m.canceled) ||
                 /canceled|cancelled/i.test(`${m.title ?? ""} ${m.summary ?? ""}`) ||
                 correspondenceLooksCanceled(filedMail) ||
                 correspondenceLooksCanceled(mail);
+              const where = inferMandatesForMeeting(m, filed);
               const about =
                 filed?.brief.why_this_call ??
                 filed?.brief.how_they_arrived ??
@@ -225,6 +260,13 @@ export default async function TodayPage({
                   {about && about.trim() !== who ? (
                     <p className="about">{about}</p>
                   ) : null}
+                  {canceled ? (
+                    <p className="about">
+                      Do not prep as live. Open the briefing if you want to
+                      reschedule from the thread.
+                    </p>
+                  ) : null}
+                  <WhereWeAre items={where} compact />
                   {mail.length > 0 ? (
                     <ul className="meet-mail">
                       {mail.map((c) => (

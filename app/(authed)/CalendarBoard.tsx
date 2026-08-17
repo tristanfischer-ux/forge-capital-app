@@ -86,12 +86,14 @@ export function CalendarBoard({ initial }: { initial: DeskMeeting[] }) {
                   <Link
                     key={m.id}
                     href={meetingHref(m.id)}
-                    className={`evt${m.unmatched ? " unmatched" : ""}`}
+                    className={`evt${m.canceled ? " canceled" : m.unmatched ? " unmatched" : ""}`}
                   >
                     <div className="faint">{timeLocal(m.event_at)}</div>
                     <div>{m.partner_name ?? m.title ?? "Meeting"}</div>
                     <div className="faint">
-                      {m.campaign_name ?? (m.unmatched ? "not on the tracker yet" : "—")}
+                      {m.canceled
+                        ? "Canceled — do not prep as live"
+                        : m.campaign_name ?? (m.unmatched ? "not on the tracker yet" : "—")}
                     </div>
                     {m.unmatched ? (
                       <Hint label="We have the calendar event, but this person is not a unique email on the raise tracker. Click the card to see everything we do have.">
