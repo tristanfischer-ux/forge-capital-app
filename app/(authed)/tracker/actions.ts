@@ -221,5 +221,6 @@ export async function updateCampaignPartnerStatus(input: {
   if (eventErr) return { ok: false, error: eventErr.message };
 
   revalidatePath("/tracker");
+  revalidatePath("/today");
   return { ok: true };
 }

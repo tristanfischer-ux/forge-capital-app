@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Import review queue — contains investor emails
+/data/
+
 # Local env files
 .env
 .env*.local

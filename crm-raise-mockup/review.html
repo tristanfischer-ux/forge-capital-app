@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise desk — dummy</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span> Forge Capital <span class="sub">Raise desk</span></div>
+  <nav class="topnav"><a class="pill" href="index.html">Today</a><a class="pill" href="company.html">Company</a><a class="pill" href="person.html">Person</a><a class="pill" href="firm.html">Firm</a><a class="pill" href="inbox.html">Inbox</a><a class="pill" href="calendar.html">Calendar</a><a class="pill" href="excel.html">Excel</a><a class="pill active" href="review.html">Review</a><a class="pill" href="gap-audit.html">Audit</a></nav>
+  <div class="raise-chip"><span>View</span> All raises</div>
+</header>
+<div class="dummy-banner"><strong>Dummy site.</strong> Invented names. Nothing is wired to Gmail, Calendar, or the live database. Create-draft buttons do not send. Approval gate stays visible.</div>
+<div class="wrap"><div class="page-head"><h1>Review queue — cutover lives here</h1><p>Every ticked spreadsheet cell needs a disposition: matched, local stub, excluded, or unresolved. Unresolved ticked cells block cutover. This is the ninth page the council asked for.</p></div>
+<div class="tiles">
+  <div class="tile"><div class="k">Ticked cells (260812)</div><div class="n">3,607</div><div class="s">sum of eight company ticks</div></div>
+  <div class="tile"><div class="k">Matched unique person</div><div class="n">—</div><div class="s">dummy · not a live import</div></div>
+  <div class="tile warn"><div class="k">Need you</div><div class="n">4</div><div class="s">examples below</div></div>
+  <div class="tile bad"><div class="k">Drift (dual-run)</div><div class="n">1</div><div class="s">DB wins unless you waive</div></div>
+  <div class="tile"><div class="k">Unmapped status</div><div class="n">1</div><div class="s">import_needs_review</div></div>
+</div>
+<div class="card">
+  <h2>Need a person decision</h2>
+  <p class="sub">Firm matched. Several partners. Spreadsheet email empty or shared. Never auto-pick.</p>
+  <table>
+    <tr><th>Spreadsheet firm</th><th>Matched firm</th><th>Partners on file</th><th></th></tr>
+    <tr><td>Northwind Ventures</td><td><a href="firm.html">Northwind Ventures</a></td><td>Helena Voss · Marcus Abel · Priya Shah</td><td><span class="btn">Pick person</span> <span class="btn">Make stub</span></td></tr>
+  </table>
+</div>
+<div class="card" style="margin-top:16px">
+  <h2>Unmapped status</h2>
+  <table>
+    <tr><th>Firm</th><th>Raise</th><th>status_raw</th><th>Proposal</th></tr>
+    <tr><td>0100.vc</td><td>Odysseus</td><td>Ongoing discussions</td><td>null + import_needs_review · contact_policy from Jordan visible row</td></tr>
+  </table>
+</div>
+<div class="card" style="margin-top:16px">
+  <h2>Drift — database already won</h2>
+  <p class="sub">Someone edited the nightly export out of habit. Gate is drift count = 0, not “explained”.</p>
+  <table>
+    <tr><th>Person</th><th>Raise</th><th>Desk</th><th>Excel edit</th><th></th></tr>
+    <tr><td>Andreas Etten</td><td>SkySails</td><td>+5 Follow-up sent</td><td>+3 Email sent</td><td>Keep desk · waive</td></tr>
+  </table>
+</div>
+<div class="card" style="margin-top:16px">
+  <h2>Unmatched attendee</h2>
+  <table>
+    <tr><th>When</th><th>Email</th><th></th></tr>
+    <tr><td>Thu 20 Aug 09:00</td><td>unknown@lattice.example</td><td>Link to person · ignore</td></tr>
+  </table>
+</div>
+
+<p class="faint" style="margin-top:28px">Dummy only · 16 Aug 2026 · plan at RAISE-DESK-PLAN.md · no production schema changed</p>
+</div>
+</body>
+</html>

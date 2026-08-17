@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise desk — dummy</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span> Forge Capital <span class="sub">Raise desk</span></div>
+  <nav class="topnav"><a class="pill active" href="index.html">Today</a><a class="pill" href="company.html">Company</a><a class="pill" href="person.html">Person</a><a class="pill" href="firm.html">Firm</a><a class="pill" href="inbox.html">Inbox</a><a class="pill" href="calendar.html">Calendar</a><a class="pill" href="excel.html">Excel</a><a class="pill" href="review.html">Review</a><a class="pill" href="gap-audit.html">Audit</a></nav>
+  <div class="raise-chip"><span>View</span> All raises</div>
+</header>
+<div class="dummy-banner"><strong>Dummy site.</strong> Invented names. Nothing is wired to Gmail, Calendar, or the live database. Create-draft buttons do not send. Approval gate stays visible.</div>
+<div class="wrap"><div class="page-head"><h1>Today — Sunday 17 August</h1><p>All eight raises. Work queue, not another dashboard. Double-ask and Jordan blocks sit at the top so a 200-email wave cannot hide them.</p></div>
+<div class="tiles">
+  <div class="tile"><div class="k">Meetings (7 days)</div><div class="n">3</div><div class="s">1 unmatched attendee</div></div>
+  <div class="tile"><div class="k">Unfiled replies</div><div class="n">4</div><div class="s">1 mentions two raises</div></div>
+  <div class="tile"><div class="k">Follow-ups due</div><div class="n">11</div><div class="s">across 5 raises</div></div>
+  <div class="tile warn"><div class="k">Stuck &gt; 7 days</div><div class="n">38</div><div class="s">+0 or +3 with no reply</div></div>
+  <div class="tile bad"><div class="k">Double-ask</div><div class="n">2</div><div class="s">same person, two live raises</div></div>
+</div>
+
+<div class="block-banner"><strong>Do not send — Helena Voss, Northwind Ventures.</strong> Jordan rule <em>DO_NOT_OUTREACH</em> on Odysseus. She is also +8 Meeting scheduled on SkySails (Tuesday) and +5 Follow-up sent on FishFrom. Person-global block beats any campaign +2.</div>
+
+<div class="warn-banner"><strong>Double-ask:</strong> Casper Hale at Meridian Peak is +3 Email sent on US Arbitrage (27 Jul, Fractional Forge mailbox) and +0 Pending approval on Space Solar. Approval card must show both raises before a queue.</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Next meetings</h2>
+    <p class="sub">From Google Calendar ingest. Unmatched attendees go to Review.</p>
+    <table>
+      <tr><th>When</th><th>Who</th><th>Raise</th><th></th></tr>
+      <tr class="clickable"><td>Tue 18 Aug · 15:00</td><td><a href="person.html">Helena Voss</a> · Northwind</td><td><span class="badge b-raise">SkySails</span></td><td><span class="badge b-progress">+8 scheduled</span></td></tr>
+      <tr class="clickable"><td>Wed 19 Aug · 10:30</td><td>Olivier Moreau · Panatere counterpart</td><td><span class="badge b-raise">Panatere</span></td><td><span class="badge b-ok">internal</span></td></tr>
+      <tr class="clickable"><td>Thu 20 Aug · 09:00</td><td>unknown@lattice.example</td><td><span class="badge b-pending">unmatched</span></td><td><a href="review.html">File this</a></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Approvals — queue, not send</h2>
+    <p class="sub">Nothing enters scheduled_sends unless status is +1 or +2 <em>and</em> permission is approved or not_required. This button does not send.</p>
+    <table>
+      <tr><th>Person</th><th>Raise</th><th>Status</th><th>Permission</th></tr>
+      <tr><td><a href="person.html">Helena Voss</a></td><td>FishFrom</td><td><span class="badge b-progress">+5 follow-up</span></td><td><span class="badge b-ok">not required</span></td></tr>
+      <tr><td>Casper Hale</td><td>Space Solar</td><td><span class="badge b-pending">+1 awaiting draft</span></td><td><span class="badge b-pending">pending approval</span></td></tr>
+      <tr><td>Ivo Kertesz</td><td>Odysseus</td><td><span class="badge b-pending">+1 draft held</span></td><td><span class="badge b-dead">DO_NOT — blocked</span></td></tr>
+    </table>
+    <div class="btn-row" style="padding:0 16px 14px">
+      <span class="btn btn-primary">Create Gmail draft — dummy, does not send</span>
+      <span class="btn">Open in Gmail — human send, not gated</span>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>Stuck more than 7 days</h2>
+  <p class="sub">Status +0 or +3, no inbound event. Sorted by raise so a 200-row wave is visible as a wave.</p>
+  <table>
+    <tr><th>Raise</th><th>Stuck</th><th>Oldest</th><th></th></tr>
+    <tr><td><a href="company.html">SkySails</a></td><td>9</td><td>44 days · 10x Founders</td><td><a href="company.html">Open raise</a></td></tr>
+    <tr><td>FishFrom</td><td>14</td><td>78 days · 10x Group</td><td>Open raise</td></tr>
+    <tr><td>Space Solar</td><td>12</td><td>18 days · 137 Ventures</td><td>Open raise</td></tr>
+    <tr><td>Odysseus</td><td>3</td><td>Jordan “No answer” still in free text</td><td><a href="review.html">Review queue</a></td></tr>
+  </table>
+</div>
+
+<p class="faint" style="margin-top:28px">Dummy only · 16 Aug 2026 · plan at RAISE-DESK-PLAN.md · no production schema changed</p>
+</div>
+</body>
+</html>

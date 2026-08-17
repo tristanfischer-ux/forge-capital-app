@@ -42,6 +42,8 @@ const GATED_PREFIXES = [
   "/import",
   "/send",
   "/investors",
+  "/today",
+  "/desk-review",
 ];
 
 export async function proxy(request: NextRequest) {
@@ -92,6 +94,17 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  if (isGated && !user && isDevAuthBypassEnabled()) {
+    const session = await getDevSession();
+    const { error } = await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+    if (!error) {
+      user = session.user;
+    }
+  }
 
   if (isGated && !user) {
     const loginUrl = new URL("/", request.url);

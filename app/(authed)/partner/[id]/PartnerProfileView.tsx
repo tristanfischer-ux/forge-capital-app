@@ -7,6 +7,7 @@ import type {
   ContactEventDirection,
 } from "@/lib/queries/partner-profile";
 import { TierBadge } from "@/app/(authed)/tracker/TierBadge";
+import { RaiseStatusForm } from "./RaiseStatusForm";
 
 /**
  * Full partner profile view. Uses V4 vocabulary — `.section`,
@@ -385,6 +386,10 @@ function CampaignActivityBlock({
                 "No status set"
               )}
             </div>
+            <RaiseStatusForm
+              campaignPartnerId={l.campaign_partner_id}
+              currentCode={l.status_code}
+            />
             {l.approver_note ? (
               <div
                 style={{

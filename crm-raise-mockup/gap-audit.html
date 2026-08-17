@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise desk — dummy</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span> Forge Capital <span class="sub">Raise desk</span></div>
+  <nav class="topnav"><a class="pill" href="index.html">Today</a><a class="pill" href="company.html">Company</a><a class="pill" href="person.html">Person</a><a class="pill" href="firm.html">Firm</a><a class="pill" href="inbox.html">Inbox</a><a class="pill" href="calendar.html">Calendar</a><a class="pill" href="excel.html">Excel</a><a class="pill" href="review.html">Review</a><a class="pill active" href="gap-audit.html">Audit</a></nav>
+  <div class="raise-chip"><span>View</span> All raises</div>
+</header>
+<div class="dummy-banner"><strong>Dummy site.</strong> Invented names. Nothing is wired to Gmail, Calendar, or the live database. Create-draft buttons do not send. Approval gate stays visible.</div>
+<div class="wrap"><div class="page-head"><h1>Gap audit</h1><p>What this dummy set covers, what it must still mock before code, and what the council would break.</p></div>
+<div class="audit-stats">
+  <div class="tile"><div class="k">Pages built</div><div class="n">9</div><div class="s">Today → Audit</div></div>
+  <div class="tile"><div class="k">Gaps listed</div><div class="n">18</div><div class="s">must / nice / defer</div></div>
+  <div class="tile warn"><div class="k">Must mock before code</div><div class="n">6</div><div class="s">if you want another round</div></div>
+  <div class="tile"><div class="k">Council issues folded</div><div class="n">16</div><div class="s">2+ seat blockers</div></div>
+</div>
+
+<div class="gap">
+  <h3>1. Today</h3>
+  <ol>
+    <li><span class="tag must">MUST</span>1.1 Empty morning — no meetings, no replies, no stuck rows.</li>
+    <li><span class="tag must">MUST</span>1.2 Error — calendar sync stale (last run timestamp missing).</li>
+    <li><span class="tag nice">NICE</span>1.3 Mobile stacked tiles (CSS exists, not exercised).</li>
+  </ol>
+</div>
+<div class="gap">
+  <h3>2. Company</h3>
+  <ol>
+    <li><span class="tag must">MUST</span>2.1 Empty raise — new campaign, zero campaign_partners.</li>
+    <li><span class="tag nice">NICE</span>2.2 Add-from-Forge-Capital search results.</li>
+    <li><span class="tag defer">DEFER</span>2.3 Full 17-column kanban, not four families.</li>
+  </ol>
+</div>
+<div class="gap">
+  <h3>3. Person</h3>
+  <ol>
+    <li><span class="tag must">MUST</span>3.1 Person on one raise only (the easy case).</li>
+    <li><span class="tag must">MUST</span>3.2 Override-reason modal for a global block.</li>
+    <li><span class="tag nice">NICE</span>3.3 Wispr paste → synthesised actions.</li>
+  </ol>
+</div>
+<div class="gap">
+  <h3>4. Review queue</h3>
+  <ol>
+    <li><span class="tag must">MUST</span>4.1 Excel-only stub firm (not in encyclopaedia).</li>
+    <li><span class="tag nice">NICE</span>4.2 Merge stub onto a later Forge Capital id.</li>
+  </ol>
+</div>
+<div class="gap">
+  <h3>Cross-cutting</h3>
+  <ol>
+    <li><span class="tag defer">DEFER</span>Onboarding / settings / counterpart RLS (V1 is you only).</li>
+    <li><span class="tag defer">DEFER</span>WhatsApp paste and iMessage metadata (Phase 2).</li>
+    <li><span class="tag must">MUST</span>Keyboard: none. Dummy is mouse-first.</li>
+    <li><span class="tag must">MUST</span>Audit log of status changes — not shown as a page.</li>
+  </ol>
+</div>
+
+<div class="gap">
+  <h3>Five red-team critiques</h3>
+  <ol>
+    <li><strong>High — dual-write coma.</strong> A pretty Today will not kill Excel if agents can still write xlsx. Mitigation is archive + mutation RPC, not this HTML.</li>
+    <li><strong>High — wrong person at a firm.</strong> Dummy shows the three-partner case; code must refuse auto-pick.</li>
+    <li><strong>High — send claim.</strong> Dummy labels Gmail as human send. Production must not advertise a hard gate on clipboard.</li>
+    <li><strong>Medium — second mailbox.</strong> US Arb event is labelled Fractional Forge. Easy to forget in a real sync.</li>
+    <li><strong>Medium — confidentiality.</strong> Person timeline shows Odysseus notes. Company view must hide bodies from counterpart users if they ever log in.</li>
+  </ol>
+</div>
+
+<div class="gap">
+  <h3>Proposed V1 after dummy sign-off</h3>
+  <ol>
+    <li>Schema: status check, contact_policy, raise_people, event junction, gmail_message_id, mutation_audit, trigger v2.</li>
+    <li>Idempotent import + this Review queue as a real page.</li>
+    <li>Today (single-user) + Person as write surface.</li>
+    <li>Exports to Forge-Capital/exports/ · archive old CANONICAL files.</li>
+  </ol>
+  <p class="muted" style="margin-top:10px"><strong>V1 cuts:</strong> WhatsApp, iMessage, counterpart login, second Gmail OAuth, Visible-style data rooms, buying Affinity.</p>
+</div>
+
+<p class="faint" style="margin-top:28px">Dummy only · 16 Aug 2026 · plan at RAISE-DESK-PLAN.md · no production schema changed</p>
+</div>
+</body>
+</html>

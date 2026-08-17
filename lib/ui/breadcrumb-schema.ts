@@ -18,6 +18,8 @@ export type BreadcrumbCrumb = {
 };
 
 export const STATIC_TRAILS: Record<string, BreadcrumbCrumb[]> = {
+  "/today": [{ label: "Today" }],
+  "/desk-review": [{ label: "Today", href: "/today" }, { label: "Review queue" }],
   "/discover": [{ label: "Discovery" }],
   "/pipeline": [{ label: "Discovery", href: "/discover" }, { label: "My Pipeline" }],
   "/home": [{ label: "Discovery" }],
