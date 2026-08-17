@@ -2,8 +2,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { CHAT_TOOLS, dispatchTool } from "./tools";
 
 /**
- * In-app GPT-4.1 chat endpoint (migrated from Anthropic Opus 4.7
- * to OpenRouter on 2026-04-30). Streams responses back to the client.
+ * In-app Grok 4.6 chat (OpenRouter `x-ai/grok-4.6`).
+ * The widget used to say Opus 4.7 while calling GPT-4.1 — that was a lie.
  *
  * V2 (2026-04-23): tool-using. The model can call search_partners,
  * resolve_campaign_partner, log_interaction, refine_synthesis — each
@@ -40,8 +40,9 @@ interface ChatRequest {
   currentCampaignName?: string | null;
 }
 
-// Voice-critical interactive chat — use GPT-4.1 for quality.
-const CHAT_MODEL = "openai/gpt-4.1";
+// Same family as Grok Build. The TUI itself cannot sit inside Next —
+// this is the Grok 4.6 API via OpenRouter (key already in .env.local).
+const CHAT_MODEL = "x-ai/grok-4.6";
 const MAX_TOOL_ITERATIONS = 5;
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
 const HTTP_REFERER = "https://forge-capital-app.vercel.app";
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
   }
 
   const systemLines = [
-    "You are an in-app assistant inside the Forge Capital app (fractional-forge outreach tool Tristan Fischer built for his fundraising work).",
+    "You are Grok 4.6, the Raise desk assistant inside Forge Capital (Tristan Fischer's fundraising desk). British spelling. You are not Opus and you are not GPT.",
     "",
     "You help Tristan think through the app, its flow, its copy, its data model, and its code. You also have tools that let you make real changes to his outreach database on his behalf. You are running in a chat widget that sits at the top of every authed page.",
     "",

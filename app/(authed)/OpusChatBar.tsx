@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 /**
  * Sticky Opus chat bar at the top of every authed page. Collapsed by
- * default into a one-line "Ask Opus 4.7…" input; opens into a message
+ * default into a one-line "Ask Grok 4.6…" input; opens into a message
  * stack with streaming replies when the user hits Enter. Stays pinned
  * as the page scrolls — per Tristan 2026-04-23 ask: "maybe it's just
  * a box which stays at the top which I can just tap into even if I
@@ -232,7 +232,7 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
             <input
               type="text"
               value={input}
-              placeholder="Ask Opus 4.7 about this page, campaign, or app…"
+              placeholder="Ask Grok 4.6 about this page, a person, or a raise…"
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setExpanded(true)}
               onKeyDown={(e) => {
@@ -261,7 +261,7 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
                 color: "var(--text)",
               }}
             >
-              Opus 4.7 · in-app assistant
+              Grok 4.6 · Raise desk
             </span>
           )}
           <span
@@ -430,10 +430,8 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
                 lineHeight: 1.5,
               }}
             >
-              Enter sends · Shift+Enter for new line · Esc closes. Opus sees
-              the current route + campaign name. Code suggestions must be
-              applied manually via terminal — in-app chat does not write
-              to the codebase or DB.
+              Grok 4.6 via OpenRouter · sees this page. Can search the
+              tracker and log a call. Does not edit the app&apos;s code.
             </div>
           </>
         ) : null}

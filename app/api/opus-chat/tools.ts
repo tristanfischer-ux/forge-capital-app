@@ -3,7 +3,7 @@ import { logInteraction } from "@/app/(authed)/partner/[id]/logInteractionAction
 import { refineSynthesisWithOpus } from "@/app/(authed)/tracker/[campaignPartnerId]/draft/refineSynthesisAction";
 
 /**
- * Tool definitions + dispatcher for the in-app Opus 4.7 chat.
+ * Tool definitions + dispatcher for the in-app Grok 4.6 desk chat.
  *
  * V2 upgrade — Tristan dictates things like "log a 30-min call with
  * Astasia Myers just now" and the chat resolves the name, logs the
