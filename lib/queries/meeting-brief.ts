@@ -23,6 +23,7 @@ export interface MeetingBriefFile {
     who?: string;
     firm?: string;
     why_this_call?: string;
+    how_they_arrived?: string;
     focus?: string[];
     raise?: string;
     email_story?: string;
@@ -38,6 +39,91 @@ export function loadMeetingBriefs(): Record<string, MeetingBriefFile> {
   } catch {
     return {};
   }
+}
+
+export function briefForMeetingId(
+  briefs: Record<string, MeetingBriefFile>,
+  id: string,
+): MeetingBriefFile | null {
+  return (
+    briefs[id] ??
+    briefs[`gcal:${id}`] ??
+    briefs[id.replace(/^gcal:/, "")] ??
+    null
+  );
+}
+
+export function decodeMailText(s: string): string {
+  return s
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const MAIL_NOISE =
+  /calendly@|notifications@calendly|boardy@boardy|accepted:|invitation from an unknown sender|reacted to your message|out of office|automatic reply/i;
+
+export function isYouAddress(s: string): boolean {
+  return /tristan\.fischer@|tristan fischer/i.test(s);
+}
+
+export function mailDisplayName(header: string): string {
+  const named = header.match(/^"?([^"<]+)"?\s*</);
+  if (named?.[1]?.trim()) return named[1].trim();
+  const email = header.match(/[\w.+-]+@[\w.-]+/);
+  return email ? email[0] : header.trim();
+}
+
+export function formatMailDate(date: string): string {
+  const d = new Date(date);
+  if (!Number.isFinite(d.getTime())) return date;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+export function formatMailSnippet(s: string, max = 180): string {
+  const t = decodeMailText(s);
+  if (t.length <= max) return t;
+  return `${t.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
+
+export function isUsefulCorrespondence(m: MeetingCorrespondence): boolean {
+  const blob = `${m.from} ${m.subject} ${m.snippet}`;
+  if (MAIL_NOISE.test(blob)) return false;
+  return Boolean(decodeMailText(m.snippet || "").trim() || decodeMailText(m.subject || "").trim());
+}
+
+/** Newest inbound + newest outbound, then extras, shown oldest-first. */
+export function pickCorrespondence(
+  mail: MeetingCorrespondence[],
+  limit = 3,
+): MeetingCorrespondence[] {
+  const useful = mail.filter(isUsefulCorrespondence);
+  const inbound = useful.filter((m) => !isYouAddress(m.from));
+  const outbound = useful.filter((m) => isYouAddress(m.from));
+  const picked: MeetingCorrespondence[] = [];
+  if (inbound[0]) picked.push(inbound[0]);
+  if (outbound[0]) picked.push(outbound[0]);
+  for (const m of useful) {
+    if (picked.length >= limit) break;
+    if (!picked.includes(m)) picked.push(m);
+  }
+  return picked.sort((a, b) => Date.parse(a.date) - Date.parse(b.date) || 0);
+}
+
+export function mailDirection(m: MeetingCorrespondence): string {
+  const from = isYouAddress(m.from) ? "You" : mailDisplayName(m.from);
+  const toFirst = (m.to || "").split(",")[0] ?? "";
+  const to = isYouAddress(toFirst) ? "You" : mailDisplayName(toFirst) || "—";
+  return `${formatMailDate(m.date)} · ${from} → ${to}`;
+}
+
+export function correspondenceLooksCanceled(mail: MeetingCorrespondence[]): boolean {
+  return mail.some((m) => /canceled|cancelled/i.test(`${m.subject} ${m.snippet}`));
 }
 
 export function loadMeetingNotes(): Record<string, { text: string; updated_at: string }> {

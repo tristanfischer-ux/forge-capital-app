@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { getDeskToday } from "@/lib/queries/desk-today";
+import { getDeskToday, type DeskMeeting, type DeskReply } from "@/lib/queries/desk-today";
+import {
+  briefForMeetingId,
+  correspondenceLooksCanceled,
+  loadMeetingBriefs,
+  mailDirection,
+  pickCorrespondence,
+  formatMailSnippet,
+  type MeetingCorrespondence,
+} from "@/lib/queries/meeting-brief";
 import { Hint } from "../Hint";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +30,47 @@ function meetingHref(id: string): string {
   return `/meeting/${encodeURIComponent(id)}`;
 }
 
+function invitePurpose(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const cleaned = notes
+    .replace(/_{8,}[\s\S]*$/m, "")
+    .replace(/Microsoft Teams meeting[\s\S]*/i, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < 24) return null;
+  return formatMailSnippet(cleaned, 280);
+}
+
+function replyAsMail(r: DeskReply): MeetingCorrespondence {
+  return {
+    id: r.id,
+    threadId: r.gmail_thread_id ?? undefined,
+    from: r.from ?? r.partner_name ?? "Unknown",
+    to: "Tristan Fischer",
+    subject: r.summary ?? "",
+    date: r.event_at,
+    snippet: r.preview ?? "",
+  };
+}
+
+function repliesForMeeting(meeting: DeskMeeting, replies: DeskReply[]): MeetingCorrespondence[] {
+  const keys: string[] = [];
+  if (meeting.partner_name) keys.push(meeting.partner_name.toLowerCase());
+  if (meeting.firm_name) keys.push(meeting.firm_name.toLowerCase());
+  const title = (meeting.title ?? "").toLowerCase();
+  for (const phrase of ["medina", "gareth stockman", "raul henriquez"]) {
+    if (title.includes(phrase)) keys.push(phrase);
+  }
+  if (keys.length === 0) return [];
+  return replies
+    .filter((r) => {
+      const blob = `${r.partner_name ?? ""} ${r.from ?? ""} ${r.summary ?? ""}`.toLowerCase();
+      return keys.some((k) => blob.includes(k));
+    })
+    .map(replyAsMail);
+}
+
 export default async function TodayPage({
   searchParams,
 }: {
@@ -28,6 +78,7 @@ export default async function TodayPage({
 }) {
   const { gmail_connected } = await searchParams;
   const data = await getDeskToday();
+  const briefs = loadMeetingBriefs();
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -44,8 +95,8 @@ export default async function TodayPage({
         <div>
           <h1>Today — {today}</h1>
           <p>
-            Work queue for every raise. Hover a number if the jargon is
-            unclear. Click a meeting to open the briefing.
+            Next meetings first — what each one is, and a bit of the mail.
+            Then the queue. Hover a number if the jargon is unclear.
           </p>
         </div>
         <div className="btn-row" style={{ margin: 0 }}>
@@ -120,38 +171,86 @@ export default async function TodayPage({
         </div>
       ) : null}
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>Next meetings</h2>
+        <p className="sub">
+          What the slot is, then a little of the correspondence. Click a
+          card for the full cheat sheet and the rest of the thread.
+        </p>
+        {data.meetings.length === 0 ? (
+          <p className="sub">No meetings in the next 7 days.</p>
+        ) : (
+          <div className="meet-list">
+            {data.meetings.map((m) => {
+              const filed = briefForMeetingId(briefs, m.id);
+              const filedMail = filed?.correspondence ?? [];
+              const mail = pickCorrespondence(
+                filedMail.length > 0 ? filedMail : repliesForMeeting(m, data.replies),
+                2,
+              );
+              const canceled =
+                /canceled|cancelled/i.test(`${m.title ?? ""} ${m.summary ?? ""}`) ||
+                correspondenceLooksCanceled(filedMail) ||
+                correspondenceLooksCanceled(mail);
+              const about =
+                filed?.brief.why_this_call ??
+                filed?.brief.how_they_arrived ??
+                invitePurpose(m.notes) ??
+                (m.title && m.title !== (m.partner_name ?? "")
+                  ? m.title.trim()
+                  : null);
+              const who = (m.partner_name ?? m.title ?? "Meeting").trim();
+              const firm = m.firm_name ?? filed?.firm_name;
+              const showFirm =
+                Boolean(firm) && !who.toLowerCase().includes((firm ?? "").toLowerCase());
+              const raise = m.campaign_name ?? filed?.campaign_name;
+              return (
+                <Link
+                  key={m.id}
+                  href={meetingHref(m.id)}
+                  className={canceled ? "meet-item canceled" : "meet-item"}
+                >
+                  <div className="when">
+                    <span>{when(m.event_at)}</span>
+                    {canceled ? <span className="badge b-dead">Canceled</span> : null}
+                    {raise ? <span className="badge b-raise">{raise}</span> : null}
+                    {!raise && m.unmatched ? (
+                      <span className="badge b-pending">Not on the tracker</span>
+                    ) : null}
+                  </div>
+                  <h3>
+                    {who}
+                    {showFirm ? ` · ${firm}` : ""}
+                  </h3>
+                  {about && about.trim() !== who ? (
+                    <p className="about">{about}</p>
+                  ) : null}
+                  {mail.length > 0 ? (
+                    <ul className="meet-mail">
+                      {mail.map((c) => (
+                        <li key={c.id}>
+                          <div className="dir">{mailDirection(c)}</div>
+                          {c.subject ? <div className="subj">{c.subject}</div> : null}
+                          {c.snippet ? (
+                            <div className="snip">{formatMailSnippet(c.snippet)}</div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="about faint" style={{ marginTop: 8 }}>
+                      No correspondence on file for this slot.
+                    </p>
+                  )}
+                  <div className="meet-more">Open the briefing</div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="grid-2">
-        <div className="card">
-          <h2>Next meetings</h2>
-          <p className="sub">Click a row to open the briefing for that meeting.</p>
-          {data.meetings.length === 0 ? (
-            <p className="sub">No meetings in the next 7 days.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr><th>When</th><th>Who</th><th>Raise</th></tr>
-              </thead>
-              <tbody>
-                {data.meetings.map((m) => (
-                  <tr key={m.id} className="clickable">
-                    <td>
-                      <Link href={meetingHref(m.id)}>{when(m.event_at)}</Link>
-                    </td>
-                    <td>
-                      <Link href={meetingHref(m.id)}>
-                        {m.partner_name ?? m.title ?? "Meeting"}
-                      </Link>
-                      <div className="faint">
-                        {m.unmatched ? "Not on the tracker yet" : m.firm_name}
-                      </div>
-                    </td>
-                    <td><span className="badge b-raise">{m.campaign_name ?? "—"}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
         <div className="card">
           <h2>Letters waiting</h2>
           <p className="sub">
@@ -248,9 +347,8 @@ export default async function TodayPage({
             );
           })()}
         </div>
-      </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
+      <div className="card">
         <h2>Quiet more than 7 days</h2>
         <p className="sub">
           Grouped by the company you are raising for, so a 200-name wave
@@ -288,6 +386,7 @@ export default async function TodayPage({
             </tbody>
           </table>
         )}
+      </div>
       </div>
     </div>
   );

@@ -124,6 +124,12 @@ export default async function MeetingPage({
             </tbody>
           </table>
           <div style={{ padding: "4px 16px 16px" }}>
+            {brief.how_they_arrived ? (
+              <>
+                <h2>How they got here</h2>
+                <p className="sub" style={{ paddingLeft: 0 }}>{brief.how_they_arrived}</p>
+              </>
+            ) : null}
             {brief.who ? (
               <>
                 <h2>Who they are</h2>
