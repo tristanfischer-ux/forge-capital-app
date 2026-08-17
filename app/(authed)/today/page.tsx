@@ -1,9 +1,4 @@
 import Link from "next/link";
-import {
-  badgeClassFor,
-  permissionBadgeClass,
-  permissionLabel,
-} from "@/lib/desk/status-map";
 import { getDeskToday } from "@/lib/queries/desk-today";
 import { Hint } from "../Hint";
 
@@ -97,11 +92,11 @@ export default async function TodayPage({
             <div className="s">same person, two live raises</div>
           </div>
         </Hint>
-        <Hint label="Status +1 or +2: approved or drafted. These can enter the send queue. Nothing sends until you say so.">
+        <Hint label="People the counterpart already approved (+1) or for whom a letter exists (+2). This is not a send button. Work one raise as a wave from Company, not twenty names from here.">
           <div className="tile">
-            <div className="k">Ready to draft</div>
+            <div className="k">Letters waiting</div>
             <div className="n">{data.approvalCount}</div>
-            <div className="s">queue, not send</div>
+            <div className="s">approved or drafted — not sent</div>
           </div>
         </Hint>
       </div>
@@ -158,38 +153,100 @@ export default async function TodayPage({
           )}
         </div>
         <div className="card">
-          <h2>Ready to draft — queue, not send</h2>
+          <h2>Letters waiting</h2>
           <p className="sub">
-            Status +1 (approved, needs a draft) or +2 (draft ready). Nothing
-            leaves this desk until you send it yourself.
+            This is not a send list. +2 means a letter already exists — open
+            it. +1 means the counterpart said yes and nobody has written the
+            email yet. Do that as a wave on the Company tab, not by picking
+            names at random here.
           </p>
-          {data.approvals.length === 0 ? (
-            <p className="sub">No +1 / +2 rows.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr><th>Person</th><th>Raise</th><th>Status</th><th>Permission</th></tr>
-              </thead>
-              <tbody>
-                {data.approvals.slice(0, 20).map((a) => (
-                  <tr key={a.campaign_partner_id}>
-                    <td>
-                      {a.partner_id ? (
-                        <Link href={`/person/${a.partner_id}`}>{a.partner_name ?? "—"}</Link>
-                      ) : "—"}
-                    </td>
-                    <td>{a.campaign_name}</td>
-                    <td><span className={`badge ${badgeClassFor(a.status_code)}`}>{a.status_code}</span></td>
-                    <td>
-                      <span className={`badge ${permissionBadgeClass(a.permission_status, a.blocked)}`}>
-                        {permissionLabel(a.permission_status, a.blocked)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {(() => {
+            const real = data.approvals.filter(
+              (a) =>
+                a.partner_name &&
+                !/general enquir/i.test(a.partner_name),
+            );
+            const drafted = real.filter((a) => a.status_code === "+2");
+            const approved = real.filter((a) => a.status_code === "+1");
+            const byRaise = new Map<string, { name: string; id: string | null; n: number }>();
+            for (const a of approved) {
+              const key = a.campaign_id ?? a.campaign_name ?? "—";
+              const cur = byRaise.get(key) ?? {
+                name: a.campaign_name ?? "—",
+                id: a.campaign_id ?? null,
+                n: 0,
+              };
+              cur.n += 1;
+              byRaise.set(key, cur);
+            }
+            const waves = [...byRaise.values()].sort((a, b) => b.n - a.n);
+            if (real.length === 0) {
+              return <p className="sub">Nobody named is waiting on a letter.</p>;
+            }
+            return (
+              <>
+                {drafted.length > 0 ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Letter written</th>
+                        <th>Raise</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drafted.slice(0, 8).map((a) => (
+                        <tr key={a.campaign_partner_id}>
+                          <td>
+                            {a.partner_id ? (
+                              <Link href={`/person/${a.partner_id}`}>{a.partner_name}</Link>
+                            ) : a.partner_name}
+                            <div className="faint">{a.firm_name}</div>
+                          </td>
+                          <td>{a.campaign_name}</td>
+                          <td>
+                            <Link href={`/tracker/${a.campaign_partner_id}/draft`}>
+                              Open the letter
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : null}
+                {waves.length > 0 ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Approved, no letter yet</th>
+                        <th>People</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {waves.map((w) => (
+                        <tr key={w.id ?? w.name}>
+                          <td>{w.name}</td>
+                          <td>{w.n}</td>
+                          <td>
+                            <Link
+                              href={
+                                w.id
+                                  ? `/company?c=${w.id}`
+                                  : `/company?c=${encodeURIComponent(w.name)}`
+                              }
+                            >
+                              Work this wave
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : null}
+              </>
+            );
+          })()}
         </div>
       </div>
 

@@ -67,6 +67,7 @@ export interface DeskDoubleAsk {
 
 export interface DeskApproval {
   campaign_partner_id: string;
+  campaign_id?: string | null;
   partner_id: number | null;
   partner_name: string | null;
   firm_name: string | null;
@@ -253,6 +254,7 @@ export async function getDeskToday(): Promise<DeskToday> {
     if (row.status_code === "+1" || row.status_code === "+2") {
       approvals.push({
         campaign_partner_id: row.id,
+        campaign_id: row.campaigns?.id ?? null,
         partner_id: row.partner_id,
         partner_name: row.partners_mirror?.name ?? null,
         firm_name: row.partners_mirror?.investors_mirror?.firm_name ?? null,
