@@ -232,7 +232,8 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
             <input
               type="text"
               value={input}
-              placeholder="Ask Grok 4.6 about this page, a person, or a raise…"
+              className="opus-ask"
+              placeholder="Ask Grok 4.6…"
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setExpanded(true)}
               onKeyDown={(e) => {
@@ -265,6 +266,7 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
             </span>
           )}
           <span
+            className="opus-path"
             style={{
               fontSize: 10,
               color: "var(--text-faint)",

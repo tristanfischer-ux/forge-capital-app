@@ -1,0 +1,12 @@
+{
+  "name": "Forge Capital Raise desk",
+  "short_name": "Raise desk",
+  "description": "Meetings, inbox and the next job — nothing auto-sends.",
+  "start_url": "/today",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f6f8",
+  "theme_color": "#f5f6f8",
+  "lang": "en-GB"
+}
