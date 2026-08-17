@@ -81,6 +81,8 @@
 .raise-desk .page-head p { color: var(--text-dim); margin-top: 4px; max-width: 720px; }
 
 .raise-desk .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 22px; }
+.raise-desk .tiles > .hint { display: block; }
+.raise-desk .tiles > .hint .tile { height: 100%; }
 .raise-desk .tile {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -198,8 +200,76 @@
 .raise-desk .cal > div, .raise-desk .cal-day { background: var(--surface); min-height: 88px; padding: 8px; font-size: 12px; }
 .raise-desk .cal .hd { background: var(--surface-alt); font-weight: 600; min-height: auto; margin: -8px -8px 8px; padding: 8px; }
 .raise-desk .cal .hour { background: var(--surface-alt); color: var(--text-dim); font-size: 11px; }
-.raise-desk .evt { background: var(--accent-light); color: var(--accent-dark); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-weight: 600; }
+.raise-desk .evt { background: var(--accent-light); color: var(--accent-dark); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-weight: 600; display: block; text-decoration: none; }
+.raise-desk .evt:hover { text-decoration: none; filter: brightness(0.97); }
 .raise-desk .evt.unmatched { background: var(--amber-light); color: var(--amber); }
+
+.raise-desk .hint { position: relative; cursor: help; border-bottom: 1px dotted var(--text-dim); }
+.raise-desk .hint-bubble {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  width: min(280px, 70vw);
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.raise-desk .hint:hover .hint-bubble,
+.raise-desk .hint:focus-within .hint-bubble { display: block; }
+
+.raise-desk .desk-crumbs {
+  padding: 8px 24px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.raise-desk .crumb-sep { color: var(--text-faint); }
+
+.raise-desk .desk-search { position: relative; min-width: 220px; }
+.raise-desk .desk-search input {
+  width: 220px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+}
+.raise-desk .desk-search-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  width: 320px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 60;
+  max-height: 320px;
+  overflow: auto;
+}
+.raise-desk .desk-search-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.raise-desk .desk-search-list button:hover { background: var(--accent-light); }
+.raise-desk .desk-search-list span { font-size: 11px; color: var(--text-dim); }
+
+.raise-desk .opus-wrap { border-bottom: 1px solid var(--border-soft); background: #fff; }
 
 @media (max-width: 980px) {
   .raise-desk .tiles, .raise-desk .grid-2, .raise-desk .raise-cards, .raise-desk .kanban, .raise-desk .cal-days { grid-template-columns: 1fr; }

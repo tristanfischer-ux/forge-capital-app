@@ -30,6 +30,7 @@ export interface InvestorProfilePartner {
 export interface InvestorProfileCampaignLink {
   campaign_id: string;
   campaign_name: string | null;
+  partner_id: number | null;
   partner_name: string | null;
   status_code: string | null;
   status_label: string | null;
@@ -280,6 +281,7 @@ export async function getInvestorProfile(
       campaignLinks = rows.map((r) => ({
         campaign_id: r.campaign_id,
         campaign_name: r.campaigns?.name ?? null,
+        partner_id: r.partner_id,
         partner_name: partnerNameById.get(r.partner_id) ?? null,
         status_code: r.status_code,
         status_label: r.status_label,

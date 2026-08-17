@@ -9,20 +9,27 @@ import { createServerClient } from "@/lib/supabase/server";
 export interface DeskMeeting {
   id: string;
   event_at: string;
+  end_at?: string | null;
   title: string | null;
   summary: string | null;
+  notes?: string | null;
   partner_id: number | null;
   partner_name: string | null;
   firm_name: string | null;
   campaign_name: string | null;
+  campaign_id?: string | null;
   status_code: string | null;
   unmatched: boolean;
+  attendee_emails?: string[];
+  channel?: string | null;
 }
 
 export interface DeskReply {
   id: string;
   event_at: string;
   summary: string | null;
+  preview?: string | null;
+  from?: string | null;
   partner_id: number | null;
   partner_name: string | null;
   firm_name: string | null;

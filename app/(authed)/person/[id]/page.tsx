@@ -7,8 +7,19 @@ import {
 } from "@/lib/desk/status-map";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
 import { RaiseStatusForm } from "../../partner/[id]/RaiseStatusForm";
+import { Hint } from "../../Hint";
 
 export const dynamic = "force-dynamic";
+
+function eventLabel(channel: string | null, direction: string | null): string {
+  if (channel === "gmail" && direction === "inbound") return "They emailed you";
+  if (channel === "gmail" && direction === "outbound") return "You emailed them";
+  if (channel === "google_meet" || channel === "meeting" || channel === "teams" || channel === "zoom") {
+    return "Meeting";
+  }
+  if (channel === "manual") return "Note you logged";
+  return channel ?? direction ?? "Event";
+}
 
 export default async function DeskPersonPage({
   params,
@@ -29,23 +40,37 @@ export default async function DeskPersonPage({
     <div className="wrap">
       <div className="page-head">
         <div>
-          <h1>
-            {partner.name ?? "Unnamed partner"}
-            {raiseCount > 1 ? ` — talking about ${raiseCount} companies` : ""}
-          </h1>
+          <h1>{partner.name ?? "Unnamed partner"}</h1>
           <p>
             {partner.title ?? "Partner"}
             {partner.firm?.firm_name ? ` · ${partner.firm.firm_name}` : ""}.
-            Each raise has its own status. There is no single overall status.
+            {raiseCount === 0
+              ? " Not on any live raise yet."
+              : raiseCount === 1
+                ? " On one raise — that is one tracker row."
+                : ` On ${raiseCount} raises at once. Each raise has its own status.`}
           </p>
+        </div>
+        <div className="btn-row" style={{ margin: 0 }}>
+          <Link href="/person" className="btn">Find someone else</Link>
+          {partner.firm?.id != null ? (
+            <Link href={`/firm/${partner.firm.id}`} className="btn">
+              Open {partner.firm.firm_name}
+            </Link>
+          ) : null}
+          <Link href="/today" className="btn">Back to Today</Link>
         </div>
       </div>
 
       <div className="raise-cards">
         {raiseLinks.length === 0 ? (
           <div className="raise-card">
-            <h3>No raise yet</h3>
-            <p className="faint">Add them from Company or Find a Match.</p>
+            <h3>Not on a raise yet</h3>
+            <p className="faint">
+              They are in the Forge Capital directory, but they are not on
+              SkySails, FishFrom, Odysseus, or another live raise. Use
+              Company to add them, or go back via the crumbs above.
+            </p>
           </div>
         ) : (
           raiseLinks.map((l) => (
@@ -59,7 +84,7 @@ export default async function DeskPersonPage({
               </div>
               <p className="faint" style={{ marginTop: 8 }}>
                 {l.days_since_last_contact == null
-                  ? "No contact yet"
+                  ? "No contact logged yet"
                   : `${l.days_since_last_contact}d since last contact`}
               </p>
               <RaiseStatusForm
@@ -67,9 +92,11 @@ export default async function DeskPersonPage({
                 currentCode={l.status_code}
               />
               <div className="btn-row">
-                <Link className="btn" href={`/company?c=${l.campaign_id}`}>
-                  Open raise
-                </Link>
+                <Hint label="Opens the Company tab — the tracker of everyone on this raise, not a new email.">
+                  <Link className="btn" href={`/company?c=${l.campaign_id}`}>
+                    Open the {l.campaign_name} tracker
+                  </Link>
+                </Hint>
               </div>
             </div>
           ))
@@ -78,11 +105,14 @@ export default async function DeskPersonPage({
 
       <div className="grid-2">
         <div className="card">
-          <h2>Timeline — person, not raise</h2>
-          <p className="sub">Events stay on the person. Status is per raise.</p>
+          <h2>What has happened</h2>
+          <p className="sub">
+            Emails, meetings and notes for this person. Status still lives
+            on each raise card above.
+          </p>
           <div className="timeline">
             {partner.recent_events.length === 0 ? (
-              <p className="sub">No contact_events yet.</p>
+              <p className="sub">Nothing logged yet — no email or meeting on file.</p>
             ) : (
               partner.recent_events.map((e) => (
                 <div key={e.id} className="tl-item">
@@ -96,7 +126,7 @@ export default async function DeskPersonPage({
                   </div>
                   <div className="tl-dot" />
                   <div>
-                    <strong>{e.channel ?? e.direction ?? "event"}</strong>
+                    <strong>{eventLabel(e.channel, e.direction)}</strong>
                     <div className="faint">{e.summary}</div>
                   </div>
                 </div>
@@ -105,8 +135,10 @@ export default async function DeskPersonPage({
           </div>
         </div>
         <div className="card">
-          <h2>From the encyclopaedia</h2>
-          <p className="sub">Read-only. This desk does not write back to Forge Capital.</p>
+          <h2>From Forge Capital</h2>
+          <p className="sub">
+            Read-only directory. The raise desk does not write back here.
+          </p>
           <table>
             <tbody>
               <tr>

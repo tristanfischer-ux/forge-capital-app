@@ -9,7 +9,7 @@ const checks = [
   {
     name: "Today",
     path: "/today",
-    must: ["Raise desk", "Today —", "Stuck", "Double-ask"],
+    must: ["Raise desk", "Today —", "Quiet", "On two raises"],
     mustNot: ["desk-today cp_rows", "ReferenceError", "first 80 rows"],
     extra: (html) =>
       /Meetings \(7 days\)\s*<\/div>\s*<div class="n">0<\/div>/.test(html)
@@ -25,14 +25,14 @@ const checks = [
   {
     name: "Person",
     path: "/person",
-    must: ["Each raise has its own status", "Save status"],
+    must: ["People", "Find a person or firm"],
     mustNot: ["ReferenceError"],
   },
   {
     name: "Firm",
     path: "/firm",
-    must: ["The fund is not the tracker row", "Encyclopaedia"],
-    mustNot: ["ReferenceError"],
+    must: ["Firms", "Find a person or firm"],
+    mustNot: ["Encyclopaedia"],
   },
   {
     name: "Inbox",
@@ -44,7 +44,7 @@ const checks = [
     name: "Calendar",
     path: "/raise-calendar",
     must: ["Calendar — this week", "Mon"],
-    mustNot: ["No meetings in the ingested week", "No meetings in contact_events"],
+    mustNot: ["File this", "OAuth is revoked"],
     extra: (html) =>
       /Miha|Thorsten|Odysseus|Gareth|Stephan/.test(html)
         ? null
@@ -53,7 +53,7 @@ const checks = [
   {
     name: "Excel",
     path: "/raise-excel",
-    must: ["Excel is a download", "Download snapshot", "never contains CANONICAL"],
+    must: ["Excel is a download", "Download snapshot", "CANONICAL"],
     mustNot: ["desk-today cp_rows"],
   },
   {

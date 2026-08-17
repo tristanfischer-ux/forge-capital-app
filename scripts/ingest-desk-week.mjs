@@ -254,6 +254,7 @@ async function ingestMeetings(partners, campaigns) {
       end_at: parseDate(ev.end_time),
       title: ev.summary,
       summary: ev.summary,
+      notes: ev.description || null,
       partner_id: partner?.id ?? null,
       partner_name: partner?.name ?? guessNameFromTitle(ev.summary),
       firm_name: partner?.investors_mirror?.firm_name ?? null,

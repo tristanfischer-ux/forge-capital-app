@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { DeskCrumbs } from "./DeskCrumbs";
+import { DeskSearch } from "./DeskSearch";
+import { OpusChatBar } from "./OpusChatBar";
 
 const PILLS = [
   { href: "/today", label: "Today", match: (p: string) => p === "/today" },
@@ -10,7 +13,7 @@ const PILLS = [
   { href: "/person", label: "Person", match: (p: string) => p.startsWith("/person") },
   { href: "/firm", label: "Firm", match: (p: string) => p.startsWith("/firm") },
   { href: "/raise-inbox", label: "Inbox", match: (p: string) => p.startsWith("/raise-inbox") },
-  { href: "/raise-calendar", label: "Calendar", match: (p: string) => p.startsWith("/raise-calendar") },
+  { href: "/raise-calendar", label: "Calendar", match: (p: string) => p.startsWith("/raise-calendar") || p.startsWith("/meeting") },
   { href: "/raise-excel", label: "Excel", match: (p: string) => p.startsWith("/raise-excel") },
   { href: "/desk-review", label: "Review", match: (p: string) => p.startsWith("/desk-review") },
 ];
@@ -35,16 +38,16 @@ export function RaiseDeskChrome({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="raise-chip">
-          <span>View</span> All raises
-        </div>
+        <DeskSearch />
       </header>
+      <OpusChatBar />
       <div className="live-banner">
         Live desk · real tracker rows · Excel is a download · nothing auto-sends
       </div>
+      <Suspense fallback={null}>
+        <DeskCrumbs />
+      </Suspense>
       {children}
     </div>
   );
 }
-
-

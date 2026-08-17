@@ -5,6 +5,7 @@ import {
   permissionLabel,
 } from "@/lib/desk/status-map";
 import { getDeskToday } from "@/lib/queries/desk-today";
+import { Hint } from "../Hint";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ function when(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function meetingHref(id: string): string {
+  return `/meeting/${encodeURIComponent(id)}`;
 }
 
 export default async function TodayPage({
@@ -36,6 +41,7 @@ export default async function TodayPage({
   });
   const firstBlock = data.blocks[0];
   const firstDouble = data.doubleAsks[0];
+  const unmatched = data.meetings.filter((m) => m.unmatched).length;
 
   return (
     <div className="wrap">
@@ -43,8 +49,8 @@ export default async function TodayPage({
         <div>
           <h1>Today — {today}</h1>
           <p>
-            All raises. Work queue, not another dashboard. Double-ask and
-            do-not-outreach sit at the top so a 200-email wave cannot hide them.
+            Work queue for every raise. Hover a number if the jargon is
+            unclear. Click a meeting to open the briefing.
           </p>
         </div>
         <div className="btn-row" style={{ margin: 0 }}>
@@ -55,50 +61,62 @@ export default async function TodayPage({
 
       {gmail_connected === "1" ? (
         <div className="note" style={{ marginBottom: 16 }}>
-          Google is connected. Calendar and Gmail sync can run again. You
-          are on the Raise desk, not the old Outreach pipeline.
+          Google is connected. You are on the Raise desk, not the old
+          Outreach pipeline.
         </div>
       ) : null}
 
       <div className="tiles">
-        <div className="tile">
-          <div className="k">Meetings (7 days)</div>
-          <div className="n">{data.meetings.length}</div>
-          <div className="s">{data.meetings.filter((m) => m.unmatched).length} unmatched</div>
-        </div>
-        <div className="tile">
-          <div className="k">Replies (7 days)</div>
-          <div className="n">{data.replies.length}</div>
-          <div className="s">from Gmail sync</div>
-        </div>
-        <div className="tile warn">
-          <div className="k">Stuck &gt; 7 days</div>
-          <div className="n">{data.stuckCount}</div>
-          <div className="s">+0 / +3 / +5 with a dated last touch</div>
-        </div>
-        <div className="tile bad">
-          <div className="k">Double-ask</div>
-          <div className="n">{data.doubleAskCount}</div>
-          <div className="s">same person, two live raises</div>
-        </div>
-        <div className="tile">
-          <div className="k">Ready to draft</div>
-          <div className="n">{data.approvalCount}</div>
-          <div className="s">+1 / +2 — queue, not send</div>
-        </div>
+        <Hint label="Meetings from your Google Calendar in the next week. Unmatched means the guest is not a unique email on the raise tracker yet — click the meeting to see who it is.">
+          <div className="tile">
+            <div className="k">Meetings</div>
+            <div className="n">{data.meetings.length}</div>
+            <div className="s">
+              {unmatched} not yet on the tracker
+            </div>
+          </div>
+        </Hint>
+        <Hint label="Inbound emails from the last week that look like real people, not newsletters. Click Inbox to read the first lines.">
+          <div className="tile">
+            <div className="k">Replies</div>
+            <div className="n">{data.replies.length}</div>
+            <div className="s">inbound this week</div>
+          </div>
+        </Hint>
+        <Hint label="People sitting at +0 (not emailed), +3 (email sent) or +5 (follow-up sent) whose last dated touch is more than a week ago. Grouped by raise in the table below.">
+          <div className="tile warn">
+            <div className="k">Quiet &gt; 7 days</div>
+            <div className="n">{data.stuckCount}</div>
+            <div className="s">no recent dated touch</div>
+          </div>
+        </Hint>
+        <Hint label="The same person is live on two or more raises at once. Open the person before you queue another email so you do not ask twice.">
+          <div className="tile bad">
+            <div className="k">On two raises</div>
+            <div className="n">{data.doubleAskCount}</div>
+            <div className="s">same person, two live raises</div>
+          </div>
+        </Hint>
+        <Hint label="Status +1 or +2: approved or drafted. These can enter the send queue. Nothing sends until you say so.">
+          <div className="tile">
+            <div className="k">Ready to draft</div>
+            <div className="n">{data.approvalCount}</div>
+            <div className="s">queue, not send</div>
+          </div>
+        </Hint>
       </div>
 
       {firstBlock ? (
         <div className="block-banner">
           <strong>Do not send — {firstBlock.partner_name ?? `partner ${firstBlock.partner_id}`}</strong>
-          {firstBlock.reason ? `. ${firstBlock.reason}` : ""}. Person-global
-          block beats any campaign +2.
+          {firstBlock.reason ? `. ${firstBlock.reason}` : ""}. A person-level
+          block beats any campaign status.
         </div>
       ) : null}
 
       {firstDouble ? (
         <div className="warn-banner">
-          <strong>Double-ask:</strong>{" "}
+          <strong>On two raises:</strong>{" "}
           <Link href={`/person/${firstDouble.partner_id}`}>
             {firstDouble.partner_name ?? firstDouble.firm_name}
           </Link>{" "}
@@ -110,9 +128,9 @@ export default async function TodayPage({
       <div className="grid-2">
         <div className="card">
           <h2>Next meetings</h2>
-          <p className="sub">From Google Calendar ingest. Unmatched attendees go to Review.</p>
+          <p className="sub">Click a row to open the briefing for that meeting.</p>
           {data.meetings.length === 0 ? (
-            <p className="sub">No meetings in the next 7 days in contact_events yet. Calendar sync fills this.</p>
+            <p className="sub">No meetings in the next 7 days.</p>
           ) : (
             <table>
               <thead>
@@ -121,14 +139,16 @@ export default async function TodayPage({
               <tbody>
                 {data.meetings.map((m) => (
                   <tr key={m.id} className="clickable">
-                    <td>{when(m.event_at)}</td>
                     <td>
-                      {m.partner_id ? (
-                        <Link href={`/person/${m.partner_id}`}>{m.partner_name ?? "Partner"}</Link>
-                      ) : (
-                        m.title ?? m.summary ?? "Unmatched"
-                      )}
-                      <div className="faint">{m.firm_name}</div>
+                      <Link href={meetingHref(m.id)}>{when(m.event_at)}</Link>
+                    </td>
+                    <td>
+                      <Link href={meetingHref(m.id)}>
+                        {m.partner_name ?? m.title ?? "Meeting"}
+                      </Link>
+                      <div className="faint">
+                        {m.unmatched ? "Not on the tracker yet" : m.firm_name}
+                      </div>
                     </td>
                     <td><span className="badge b-raise">{m.campaign_name ?? "—"}</span></td>
                   </tr>
@@ -138,8 +158,11 @@ export default async function TodayPage({
           )}
         </div>
         <div className="card">
-          <h2>Approvals — queue, not send</h2>
-          <p className="sub">Nothing enters the send queue unless status is +1 or +2 and permission is approved or not required.</p>
+          <h2>Ready to draft — queue, not send</h2>
+          <p className="sub">
+            Status +1 (approved, needs a draft) or +2 (draft ready). Nothing
+            leaves this desk until you send it yourself.
+          </p>
           {data.approvals.length === 0 ? (
             <p className="sub">No +1 / +2 rows.</p>
           ) : (
@@ -171,14 +194,18 @@ export default async function TodayPage({
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h2>Stuck more than 7 days</h2>
-        <p className="sub">Status +0 or +3 or +5 with a last-touch date. Grouped by raise so a wave is visible as a wave.</p>
+        <h2>Quiet more than 7 days</h2>
+        <p className="sub">
+          Grouped by the company you are raising for, so a 200-name wave
+          reads as a wave. “Open this raise” is the Company tab for that
+          company.
+        </p>
         {data.stuckByRaise.length === 0 ? (
-          <p className="sub">No dated +0 / +3 / +5 rows older than 7 days.</p>
+          <p className="sub">No dated quiet rows.</p>
         ) : (
           <table>
             <thead>
-              <tr><th>Raise</th><th>Stuck</th><th>Oldest</th><th></th></tr>
+              <tr><th>Raise</th><th>Quiet</th><th>Oldest</th><th></th></tr>
             </thead>
             <tbody>
               {data.stuckByRaise.map((g) => {
@@ -193,7 +220,11 @@ export default async function TodayPage({
                       {g.oldestDays == null ? "no date" : `${g.oldestDays} days`}
                       {g.oldestName ? ` · ${g.oldestName}` : ""}
                     </td>
-                    <td><Link href={href}>Open raise</Link></td>
+                    <td>
+                      <Hint label="Opens the Company tab for this raise — the tracker of everyone on that company.">
+                        <Link href={href}>Open this raise</Link>
+                      </Hint>
+                    </td>
                   </tr>
                 );
               })}

@@ -45,8 +45,10 @@ export default async function DeskReviewPage() {
           <div>
             <h1>Review queue</h1>
             <p>
-              Unmatched or unmapped rows from the master tracker import.
-              Unresolved ticked cells stay here. Nothing here is auto-sent.
+              These are ticks from the old spreadsheet that did not match
+              one unique email in Forge Capital. You do not send from here.
+              You either find the person (search at the top), add them on
+              Company, or leave the row until you have an email.
             </p>
           </div>
         </div>

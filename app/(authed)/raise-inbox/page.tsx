@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDeskToday } from "@/lib/queries/desk-today";
+import { Hint } from "../Hint";
 
 export const dynamic = "force-dynamic";
 
@@ -11,17 +12,19 @@ export default async function RaiseInboxPage() {
         <div>
           <h1>Inbox — inbound, all raises</h1>
           <p>
-            Replies land on the person. Filing stays on the thread so sync
-            does not ask again.
+            Replies from the last week. Click the person to open their
+            page. The first lines of the mail are in the last column.
           </p>
         </div>
       </div>
       <div className="note">
-        Stored Gmail OAuth is revoked. These inbound rows are from the live
-        mailbox, matched to the tracker where the from-address is unique.
-        Reconnect at{" "}
-        <Link href="/api/auth/gmail?next=/raise-inbox">Connect Google</Link>{" "}
-        so gmail-sync can keep this current.
+        Google is connected. This list is the live mailbox filtered to
+        people, not newsletters. A full reply / forward / attach composer
+        in this desk is next — for now open the person, or{" "}
+        <a href="https://mail.google.com" target="_blank" rel="noreferrer">
+          Gmail
+        </a>
+        .
       </div>
       <div className="card">
         <h2>Replies this week</h2>
@@ -34,7 +37,7 @@ export default async function RaiseInboxPage() {
                 <th>When</th>
                 <th>From</th>
                 <th>Raise</th>
-                <th>Note</th>
+                <th>Subject and opening</th>
               </tr>
             </thead>
             <tbody>
@@ -57,13 +60,20 @@ export default async function RaiseInboxPage() {
                       r.partner_name ?? "—"
                     )}
                     {!r.partner_id ? (
-                      <div className="faint">unmatched</div>
+                      <Hint label="We have their email, but they are not a unique person on the raise tracker.">
+                        <div className="faint">not on the tracker yet</div>
+                      </Hint>
                     ) : null}
                   </td>
                   <td>
                     <span className="badge b-raise">{r.campaign_name ?? "—"}</span>
                   </td>
-                  <td>{(r.summary ?? "").slice(0, 80)}</td>
+                  <td>
+                    <div>{r.summary}</div>
+                    {r.preview ? (
+                      <div className="faint">{r.preview.slice(0, 180)}</div>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

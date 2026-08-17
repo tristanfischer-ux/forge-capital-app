@@ -8,20 +8,23 @@ export default function RaiseExcelPage() {
         <div>
           <h1>Excel is a download</h1>
           <p>
-            The desk writes the file. You do not write the file. Filename
-            never contains CANONICAL.
+            The live book is this desk. The spreadsheet is a backup you
+            can open in Excel. You do not type into it. The filename never
+            says CANONICAL.
           </p>
         </div>
       </div>
       <div className="note">
-        Snapshot {day} · edit in the desk, not the workbook.
+        Snapshot {day}. Change status on the Person page. Then download
+        again if you need a file to email someone.
       </div>
       <div className="grid-2">
         <div className="card">
-          <h2>Master (by raise)</h2>
+          <h2>Download the backup</h2>
           <p className="sub">
-            One row per person × raise from the live database. This is
-            the backup you asked for.
+            One row per person × raise from the database. About 1,400 rows
+            today. Use this if you want the old grid on a plane, or to send
+            a counterpart a slice. It is not the thing you edit.
           </p>
           <div className="btn-row">
             <a className="btn btn-primary" href="/api/export-master">
@@ -30,13 +33,14 @@ export default function RaiseExcelPage() {
           </div>
         </div>
         <div className="card">
-          <h2>Review queue</h2>
+          <h2>Rows that did not import cleanly</h2>
           <p className="sub">
-            Rows from the 260812 book that did not match a unique email
-            stay here until you file them.
+            The 260812 book had ticks we could not match to a unique email.
+            Those sit in Review until you file them. They are not missing
+            from the backup — they were never a tracker row.
           </p>
           <div className="btn-row">
-            <Link className="btn" href="/desk-review">Open review queue</Link>
+            <Link className="btn" href="/desk-review">Open the review queue</Link>
           </div>
         </div>
       </div>

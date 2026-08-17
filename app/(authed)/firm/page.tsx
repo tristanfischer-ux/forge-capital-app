@@ -1,21 +1,24 @@
-import { redirect } from "next/navigation";
-import { getDeskToday } from "@/lib/queries/desk-today";
-import { getPartnerProfile } from "@/lib/queries/partner-profile";
+import { DeskSearch } from "../DeskSearch";
 
 export const dynamic = "force-dynamic";
 
-export default async function FirmIndexPage() {
-  const data = await getDeskToday();
-  const pid = data.doubleAsks[0]?.partner_id ?? data.approvals.find((a) => a.partner_id)?.partner_id;
-  if (pid) {
-    const p = await getPartnerProfile(pid);
-    if (p?.firm?.id) redirect(`/firm/${p.firm.id}`);
-  }
+export default function FirmIndexPage() {
   return (
     <div className="wrap">
       <div className="page-head">
-        <h1>Firm</h1>
-        <p>Open a firm from a person page. This is the encyclopaedia view plus every raise already touching the fund.</p>
+        <div>
+          <h1>Firms</h1>
+          <p>
+            The fund, not the tracker row. Search for Lowercarbon, Project
+            A, and so on.
+          </p>
+        </div>
+      </div>
+      <div className="card" style={{ padding: 16 }}>
+        <p className="sub" style={{ padding: 0 }}>
+          Type a firm name. Partners at that firm show who you have already spoken to.
+        </p>
+        <DeskSearch />
       </div>
     </div>
   );

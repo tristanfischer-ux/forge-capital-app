@@ -52,8 +52,8 @@ export default async function CompanyPage({
         <div>
           <h1>{selected?.name ?? "Company"} — this raise</h1>
           <p>
-            One company at a time. Permission is a column, not a status.
-            Cross-raise chips show when the same person is live elsewhere.
+            Everyone on this raise. The four columns below are a sample;
+            the full list is the table. Hover a tile if the codes are unclear.
           </p>
         </div>
       </div>
@@ -97,19 +97,24 @@ export default async function CompanyPage({
       </div>
       <div className="kanban">
         <div className="col">
-          <h3>Pending</h3>
-          {pending.slice(0, 6).map((r) => (
+          <h3>Pending ({pending.length})</h3>
+          <p className="faint">Not emailed yet, or waiting for your draft (+0 / +1).</p>
+          {pending.slice(0, 8).map((r) => (
             <div key={r.id} className="chip-row">
               <Link href={r.partner_id ? `/person/${r.partner_id}` : "/company"}>
                 {r.partner_name ?? r.firm_name}
               </Link>
-              <div className="faint">{r.status_code} {r.firm_name}</div>
+              <div className="faint">{r.status_code} {labelFor(r.status_code)} · {r.firm_name}</div>
             </div>
           ))}
+          {pending.length > 8 ? (
+            <p className="faint">And {pending.length - 8} more in the table below.</p>
+          ) : null}
         </div>
         <div className="col">
-          <h3>In motion</h3>
-          {motion.slice(0, 6).map((r) => (
+          <h3>In motion ({motion.length})</h3>
+          <p className="faint">You have emailed or have a meeting. Waiting on them.</p>
+          {motion.slice(0, 8).map((r) => (
             <div key={r.id} className="chip-row">
               <Link href={r.partner_id ? `/person/${r.partner_id}` : "/company"}>
                 {r.partner_name ?? r.firm_name}
@@ -117,18 +122,30 @@ export default async function CompanyPage({
               <div className="faint">{r.status_code} {labelFor(r.status_code) ?? ""}</div>
             </div>
           ))}
+          {motion.length > 8 ? (
+            <p className="faint">And {motion.length - 8} more in the table below.</p>
+          ) : null}
         </div>
         <div className="col">
-          <h3>Committed family</h3>
-          {committed.slice(0, 6).map((r) => (
-            <div key={r.id} className="chip-row">{r.firm_name} {r.status_code}</div>
-          ))}
+          <h3>In diligence ({committed.length})</h3>
+          <p className="faint">NDA, term sheet, or committed (+10 / +11 / +12). Rare.</p>
+          {committed.length === 0 ? (
+            <p className="faint">Nobody this far yet on this raise.</p>
+          ) : (
+            committed.slice(0, 8).map((r) => (
+              <div key={r.id} className="chip-row">{r.firm_name} {r.status_code}</div>
+            ))
+          )}
         </div>
         <div className="col">
-          <h3>Dead</h3>
-          {dead.slice(0, 6).map((r) => (
+          <h3>Closed ({dead.length})</h3>
+          <p className="faint">Declined, bounced, or disqualified.</p>
+          {dead.slice(0, 8).map((r) => (
             <div key={r.id} className="chip-row">{r.firm_name} {r.status_code}</div>
           ))}
+          {dead.length > 8 ? (
+            <p className="faint">And {dead.length - 8} more in the table below.</p>
+          ) : null}
         </div>
       </div>
       <div className="card">
