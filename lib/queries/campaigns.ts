@@ -38,6 +38,25 @@ export interface CampaignSummary {
  * RLS enforces Tristan-only read access in V1 (see `007_rls.sql`); this
  * query will return an empty array if the caller is unauthenticated.
  */
+async function fetchAllCampaignIds(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+): Promise<string[]> {
+  const pageSize = 1000;
+  const ids: string[] = [];
+  for (let from = 0; from < 50_000; from += pageSize) {
+    const { data, error } = await supabase
+      .from("campaign_partners")
+      .select("campaign_id")
+      .range(from, from + pageSize - 1);
+    if (error || !data) break;
+    for (const row of data as { campaign_id: string }[]) {
+      if (row.campaign_id) ids.push(row.campaign_id);
+    }
+    if (data.length < pageSize) break;
+  }
+  return ids;
+}
+
 export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
   const supabase = await createServerClient();
 
@@ -52,21 +71,16 @@ export async function listActiveCampaigns(): Promise<CampaignSummary[]> {
       )
       .neq("status", "archived")
       .order("name", { ascending: true }),
-    supabase.from("campaign_partners").select("campaign_id"),
+    fetchAllCampaignIds(supabase),
   ]);
 
   if (campaignsResult.error) {
     console.error("listActiveCampaigns failed:", campaignsResult.error.message);
     return [];
   }
-  if (partnersResult.error) {
-    console.error("listActiveCampaigns partner count failed:", partnersResult.error.message);
-    // Continue with zero counts — the page still renders usefully.
-  }
 
   const counts = new Map<string, number>();
-  for (const row of partnersResult.data ?? []) {
-    const id = (row as { campaign_id: string }).campaign_id;
+  for (const id of partnersResult) {
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
 

@@ -80,4 +80,37 @@ export function excelDateToIso(value: unknown): string | null {
   return null;
 }
 
+export function skipRaiseName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return name.startsWith("AUDIT") || name.includes("Wren Aerospace");
+}
+
+export function badgeClassFor(code: string | null | undefined): string {
+  if (!code) return "b-pending";
+  const family = STATUS_BY_CODE[code]?.family;
+  if (family === "dead" || code.startsWith("-")) return "b-dead";
+  if (family === "pending") return "b-pending";
+  if (family === "committed") return "b-ok";
+  return "b-progress";
+}
+
+export function permissionLabel(
+  status: string | null | undefined,
+  blocked?: boolean,
+): string {
+  if (blocked) return "blocked";
+  if (!status || status === "not_required") return "not required";
+  return status.replaceAll("_", " ");
+}
+
+export function permissionBadgeClass(
+  status: string | null | undefined,
+  blocked?: boolean,
+): string {
+  if (blocked) return "b-dead";
+  if (status === "pending_approval") return "b-pending";
+  if (status === "denied") return "b-dead";
+  return "b-ok";
+}
+
 export { labelFor };

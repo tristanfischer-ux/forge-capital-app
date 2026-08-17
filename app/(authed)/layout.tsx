@@ -11,7 +11,7 @@ import { WalkTourStrip } from "./WalkTourStrip";
 import { EmailHuntModal } from "./match/EmailHuntModal";
 import { Breadcrumbs, BreadcrumbsProvider } from "./Breadcrumbs";
 import { OpusChatBar } from "./OpusChatBar";
-import { AuthedChromeSwitch, RaiseDeskChrome } from "./RaiseDeskChrome";
+import { RaiseDeskChrome } from "./RaiseDeskChrome";
 
 
 /**

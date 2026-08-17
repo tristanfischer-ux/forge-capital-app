@@ -1,3 +1,4 @@
+import { skipRaiseName } from "@/lib/desk/status-map";
 import { createServerClient } from "@/lib/supabase/server";
 
 export interface DeskMeeting {
@@ -27,13 +28,22 @@ export interface DeskReply {
 
 export interface DeskStuck {
   campaign_partner_id: string;
+  campaign_id: string | null;
   partner_id: number | null;
   partner_name: string | null;
   firm_name: string | null;
   campaign_name: string | null;
   status_code: string | null;
   last_contact_at: string | null;
-  days: number;
+  days: number | null;
+}
+
+export interface DeskStuckRaise {
+  campaign_id: string | null;
+  campaign_name: string | null;
+  count: number;
+  oldestDays: number | null;
+  oldestName: string | null;
 }
 
 export interface DeskDoubleAsk {
@@ -58,9 +68,34 @@ export interface DeskToday {
   meetings: DeskMeeting[];
   replies: DeskReply[];
   stuck: DeskStuck[];
+  stuckByRaise: DeskStuckRaise[];
+  stuckCount: number;
   doubleAsks: DeskDoubleAsk[];
+  doubleAskCount: number;
   approvals: DeskApproval[];
+  approvalCount: number;
   blocks: { partner_id: number; partner_name: string | null; reason: string | null }[];
+}
+
+const CP_SELECT = `id, partner_id, status_code, permission_status, last_contact_at,
+         partners_mirror:partner_id ( id, name, investors_mirror:investor_id ( firm_name ) ),
+         campaigns:campaign_id ( id, name )`;
+
+async function fetchAllCampaignPartners(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+) {
+  const pageSize = 1000;
+  const rows: unknown[] = [];
+  for (let from = 0; from < 20000; from += pageSize) {
+    const { data, error } = await supabase
+      .from("campaign_partners")
+      .select(CP_SELECT)
+      .range(from, from + pageSize - 1);
+    if (error || !data) break;
+    rows.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return rows;
 }
 
 export async function getDeskToday(): Promise<DeskToday> {
@@ -69,7 +104,7 @@ export async function getDeskToday(): Promise<DeskToday> {
   const weekOut = new Date(now + 7 * 86400000).toISOString();
   const weekAgo = new Date(now - 7 * 86400000).toISOString();
 
-  const [meetingsRes, repliesRes, cpRes, policyRes] = await Promise.all([
+  const [meetingsRes, repliesRes, cpRows, policyRes] = await Promise.all([
     supabase
       .from("contact_events")
       .select(
@@ -99,29 +134,21 @@ export async function getDeskToday(): Promise<DeskToday> {
       .gte("event_at", weekAgo)
       .order("event_at", { ascending: false })
       .limit(40),
-    supabase
-      .from("campaign_partners")
-      .select(
-        `id, partner_id, status_code, permission_status, last_contact_at,
-         partners_mirror:partner_id ( id, name, investors_mirror:investor_id ( firm_name ) ),
-         campaigns:campaign_id ( name )`,
-      )
-      .limit(8000),
+    fetchAllCampaignPartners(supabase),
     supabase
       .from("contact_policy")
       .select("partner_id, reason, kind")
       .eq("kind", "block")
       .limit(200)
       .then((res) => {
-        if (res.error) return { data: [] as { partner_id: number | null; reason: string | null; kind: string }[], error: null };
+        if (res.error) {
+          return { data: [] as { partner_id: number | null; reason: string | null; kind: string }[] };
+        }
         return res;
       }),
   ]);
 
-  if (meetingsRes.error) console.error("desk-today meetings", meetingsRes.error.message);
-  if (repliesRes.error) console.error("desk-today replies", repliesRes.error.message);
-  if (cpRes.error) console.error("desk-today campaign_partners", cpRes.error.message);
-  console.error("desk-today cp_rows", (cpRes.data ?? []).length);
+  const cpData = cpRows;
 
   type Nested = {
     status_code: string | null;
@@ -134,10 +161,10 @@ export async function getDeskToday(): Promise<DeskToday> {
       name: string | null;
       investors_mirror: { firm_name: string | null } | null;
     } | null;
-    campaigns: { name: string | null } | null;
+    campaigns: { id: string; name: string | null } | null;
   };
 
-  const meetings: DeskMeeting[] = (meetingsRes.data ?? []).map((row) => {
+  const meetings: DeskMeeting[] = ((meetingsRes.data ?? []) as Record<string, unknown>[]).map((row) => {
     const cp = row.campaign_partners as unknown as Nested | null;
     return {
       id: row.id as string,
@@ -177,20 +204,19 @@ export async function getDeskToday(): Promise<DeskToday> {
       .filter((x): x is number => x != null),
   );
 
-  function skipCampaign(name: string | null): boolean {
-    if (!name) return false;
-    return name.startsWith("AUDIT") || name.includes("Wren Aerospace");
-  }
-
-  for (const raw of cpRes.data ?? []) {
+  for (const raw of cpData) {
     const row = raw as unknown as Nested & { id: string };
-    if (skipCampaign(row.campaigns?.name ?? null)) continue;
-    const last = row.last_contact_at ? new Date(row.last_contact_at).getTime() : 0;
-    const days = last ? Math.floor((now - last) / 86400000) : 999;
-    const live = ["+0", "+3", "+5"].includes(row.status_code ?? "");
-    if (live && days >= 7) {
+    if (skipRaiseName(row.campaigns?.name ?? null)) continue;
+    const lastMs = row.last_contact_at ? new Date(row.last_contact_at).getTime() : 0;
+    const days = lastMs ? Math.floor((now - lastMs) / 86400000) : null;
+    const code = row.status_code ?? "";
+    const sentAndClockBroken = (code === "+3" || code === "+5") && days == null;
+    const clockExpired =
+      days != null && days >= 7 && (code === "+0" || code === "+3" || code === "+5");
+    if (sentAndClockBroken || clockExpired) {
       stuck.push({
         campaign_partner_id: row.id,
+        campaign_id: row.campaigns?.id ?? null,
         partner_id: row.partner_id,
         partner_name: row.partners_mirror?.name ?? null,
         firm_name: row.partners_mirror?.investors_mirror?.firm_name ?? null,
@@ -226,15 +252,31 @@ export async function getDeskToday(): Promise<DeskToday> {
     }
   }
 
-  stuck.sort((a, b) => b.days - a.days);
+  stuck.sort((a, b) => (b.days ?? 10_000) - (a.days ?? 10_000));
+
+  const stuckByRaiseMap = new Map<string, DeskStuckRaise>();
+  for (const s of stuck) {
+    const key = s.campaign_id ?? s.campaign_name ?? "—";
+    const cur = stuckByRaiseMap.get(key) ?? {
+      campaign_id: s.campaign_id,
+      campaign_name: s.campaign_name,
+      count: 0,
+      oldestDays: null,
+      oldestName: null,
+    };
+    cur.count += 1;
+    if (s.days != null && (cur.oldestDays == null || s.days > cur.oldestDays)) {
+      cur.oldestDays = s.days;
+      cur.oldestName = s.partner_name ?? s.firm_name;
+    } else if (cur.oldestName == null) {
+      cur.oldestName = s.partner_name ?? s.firm_name;
+    }
+    stuckByRaiseMap.set(key, cur);
+  }
+  const stuckByRaise = [...stuckByRaiseMap.values()].sort((a, b) => b.count - a.count);
 
   const doubleAsks: DeskDoubleAsk[] = [];
   for (const [pid, v] of byPartner) {
-    const liveRaises = v.raises.filter((r) => {
-      const c = r.status_code ?? "";
-      return c.startsWith("+") && c !== "+0" === false ? true : !["-1", "-2", "-3"].includes(c);
-    });
-    // two or more raises that are not dead
     const open = v.raises.filter((r) => !["-1", "-2", "-3"].includes(r.status_code ?? ""));
     if (open.length >= 2) {
       doubleAsks.push({
@@ -253,8 +295,12 @@ export async function getDeskToday(): Promise<DeskToday> {
     meetings,
     replies,
     stuck: stuck.slice(0, 40),
+    stuckByRaise,
+    stuckCount: stuck.length,
     doubleAsks: doubleAsks.slice(0, 30),
+    doubleAskCount: doubleAsks.length,
     approvals: approvals.slice(0, 40),
+    approvalCount: approvals.length,
     blocks: (policyRes.data ?? [])
       .filter((p) => p.partner_id)
       .map((p) => ({

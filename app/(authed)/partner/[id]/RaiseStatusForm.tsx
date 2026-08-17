@@ -51,7 +51,7 @@ export function RaiseStatusForm({
         placeholder="Note (optional)"
         style={{ fontSize: 12, padding: "4px 6px" }}
       />
-      <button type="submit" className="btn-gmail" disabled={pending} style={{ fontSize: 12 }}>
+      <button type="submit" className="btn btn-primary" disabled={pending} style={{ fontSize: 12 }}>
         {pending ? "Saving…" : "Save status"}
       </button>
       {msg ? <div className="side-sub">{msg}</div> : null}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { skipRaiseName } from "@/lib/desk/status-map";
 import { getInvestorProfile } from "@/lib/queries/investor-profile";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +26,11 @@ export default async function DeskFirmPage({
           </p>
         </div>
       </div>
-      {firm.campaign_links.length > 0 ? (
+      {firm.campaign_links.filter((l) => !skipRaiseName(l.campaign_name)).length > 0 ? (
         <div className="warn-banner">
           <strong>Already contacted here.</strong>{" "}
           {firm.campaign_links
+            .filter((l) => !skipRaiseName(l.campaign_name))
             .map((l) => `${l.campaign_name} ${l.status_code ?? ""}`)
             .join(" · ")}
         </div>

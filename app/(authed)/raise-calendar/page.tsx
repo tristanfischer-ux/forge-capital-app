@@ -15,6 +15,14 @@ export default async function RaiseCalendarPage() {
     return d;
   });
 
+  function ymdLocal(value: Date | string): string {
+    const d = typeof value === "string" ? new Date(value) : value;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   return (
     <div className="wrap">
       <div className="page-head">
@@ -32,8 +40,8 @@ export default async function RaiseCalendarPage() {
         ))}
         <div className="hour">09–18</div>
         {days.map((d) => {
-          const key = d.toISOString().slice(0, 10);
-          const events = data.meetings.filter((m) => m.event_at.slice(0, 10) === key);
+          const key = ymdLocal(d);
+          const events = data.meetings.filter((m) => ymdLocal(m.event_at) === key);
           return (
             <div key={key}>
               {events.map((m) => (

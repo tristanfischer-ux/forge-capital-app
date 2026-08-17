@@ -44,6 +44,7 @@ export interface TrackerRow {
   id: string;
   status_code: string | null;
   status_label: string | null;
+  permission_status: string | null;
   email_tier: EmailTier;
   days_since_last_contact: number | null;
   firm_name: string | null;
@@ -83,6 +84,7 @@ interface TrackerJoinRow {
   id: string;
   status_code: string | null;
   status_label: string | null;
+  permission_status: string | null;
   last_contact_at: string | null;
   partners_mirror: {
     id: number | null;
@@ -383,38 +385,47 @@ export async function getTrackerRows(
 ): Promise<TrackerRow[]> {
   const supabase = await createServerClient();
 
-  const { data, error } = await supabase
-    .from("campaign_partners")
-    .select(
-      `
-      id,
-      status_code,
-      status_label,
-      last_contact_at,
-      partners_mirror:partner_id (
+  const pageSize = 1000;
+  const collected: TrackerJoinRow[] = [];
+  for (let from = 0; from < 20_000; from += pageSize) {
+    const { data, error } = await supabase
+      .from("campaign_partners")
+      .select(
+        `
         id,
-        name,
-        title,
-        email_tier,
-        investors_mirror:investor_id (
-          firm_name,
-          thesis_summary,
-          synthesis_data,
-          investment_pattern,
-          connection_brief,
-          team_expertise
+        status_code,
+        status_label,
+        permission_status,
+        last_contact_at,
+        partners_mirror:partner_id (
+          id,
+          name,
+          title,
+          email_tier,
+          investors_mirror:investor_id (
+            firm_name,
+            thesis_summary,
+            synthesis_data,
+            investment_pattern,
+            connection_brief,
+            team_expertise
+          )
         )
+        `,
       )
-      `,
-    )
-    .eq("campaign_id", campaignId);
+      .eq("campaign_id", campaignId)
+      .range(from, from + pageSize - 1);
 
-  if (error) {
-    // Server component will render the empty-state copy; an error here
-    // generally means RLS denied access (unauthenticated request) or
-    // the mirror tables have not been populated yet.
-    console.error("getTrackerRows failed:", error.message);
-    return [];
+    if (error) {
+      // Server component will render the empty-state copy; an error here
+      // generally means RLS denied access (unauthenticated request) or
+      // the mirror tables have not been populated yet.
+      console.error("getTrackerRows failed:", error.message);
+      return [];
+    }
+    const page = (data ?? []) as unknown as TrackerJoinRow[];
+    collected.push(...page);
+    if (page.length < pageSize) break;
   }
 
   const now = Date.now();
@@ -422,7 +433,7 @@ export async function getTrackerRows(
 
   // Supabase's generated types model embedded relations as arrays even
   // for to-one relations, so we normalise via an intermediate cast.
-  const allRows = (data ?? []) as unknown as TrackerJoinRow[];
+  const allRows = collected;
 
   // Tier filter — applied post-fetch because the partners_mirror join
   // is embedded rather than joined at SQL level. NULL email_tier folds
@@ -500,6 +511,7 @@ export async function getTrackerRows(
       id: row.id,
       status_code: row.status_code,
       status_label: row.status_label,
+      permission_status: row.permission_status ?? null,
       email_tier: (partner?.email_tier ?? null) as EmailTier,
       days_since_last_contact: daysSince,
       firm_name: investor?.firm_name ?? null,

@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { isRaiseDeskPath } from "@/lib/desk/paths";
-
 const PILLS = [
   { href: "/today", label: "Today", match: (p: string) => p === "/today" },
   { href: "/company", label: "Company", match: (p: string) => p.startsWith("/company") },

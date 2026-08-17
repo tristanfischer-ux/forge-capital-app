@@ -13,30 +13,35 @@ export async function GET() {
     return NextResponse.json({ error: "not signed in" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from("campaign_partners")
-    .select(
-      `id, status_code, status_label, status_raw, permission_status, last_contact_at, import_needs_review,
-       partners_mirror:partner_id ( name, email, investors_mirror:investor_id ( firm_name, website ) ),
-       campaigns:campaign_id ( name )`,
-    )
-    .order("last_contact_at", { ascending: false })
-    .limit(20000);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  // status_raw / import_needs_review land with migration 036. Until that
+  // is applied, select only columns that already exist.
+  const pageSize = 1000;
+  const collected: unknown[] = [];
+  for (let from = 0; from < 20_000; from += pageSize) {
+    const { data, error } = await supabase
+      .from("campaign_partners")
+      .select(
+        `id, status_code, status_label, permission_status, last_contact_at,
+         partners_mirror:partner_id ( name, email, investors_mirror:investor_id ( firm_name, website ) ),
+         campaigns:campaign_id ( name )`,
+      )
+      .order("last_contact_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    collected.push(...(data ?? []));
+    if (!data || data.length < pageSize) break;
   }
 
   const generated = new Date().toISOString();
-  const longRows = (data ?? []).map((raw) => {
+  const longRows = collected.map((raw) => {
     const row = raw as unknown as {
       id: string;
       status_code: string | null;
       status_label: string | null;
-      status_raw: string | null;
       permission_status: string | null;
       last_contact_at: string | null;
-      import_needs_review: boolean | null;
       partners_mirror: {
         name: string | null;
         email?: string | null;
@@ -56,8 +61,6 @@ export async function GET() {
       status_label: row.status_label ?? "",
       permission_status: row.permission_status ?? "",
       last_contact_at: row.last_contact_at ?? "",
-      status_raw: row.status_raw ?? "",
-      import_needs_review: row.import_needs_review ? "yes" : "",
       campaign_partner_id: row.id,
     };
   });

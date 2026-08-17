@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  badgeClassFor,
+  permissionBadgeClass,
+  permissionLabel,
+} from "@/lib/desk/status-map";
 import { getDeskToday } from "@/lib/queries/desk-today";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +19,6 @@ function when(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function badgeFor(code: string | null): string {
-  if (!code) return "b-hold";
-  if (code.startsWith("-")) return "b-dead";
-  if (code === "+0" || code === "+1" || code === "+2") return "b-pending";
-  return "b-progress";
 }
 
 export default async function TodayPage() {
@@ -63,17 +61,17 @@ export default async function TodayPage() {
         </div>
         <div className="tile warn">
           <div className="k">Stuck &gt; 7 days</div>
-          <div className="n">{data.stuck.length}</div>
-          <div className="s">+0 / +3 / +5 with no recent touch</div>
+          <div className="n">{data.stuckCount}</div>
+          <div className="s">+0 / +3 / +5 with a dated last touch</div>
         </div>
         <div className="tile bad">
           <div className="k">Double-ask</div>
-          <div className="n">{data.doubleAsks.length}</div>
+          <div className="n">{data.doubleAskCount}</div>
           <div className="s">same person, two live raises</div>
         </div>
         <div className="tile">
           <div className="k">Ready to draft</div>
-          <div className="n">{data.approvals.length}</div>
+          <div className="n">{data.approvalCount}</div>
           <div className="s">+1 / +2 — queue, not send</div>
         </div>
       </div>
@@ -93,7 +91,7 @@ export default async function TodayPage() {
             {firstDouble.partner_name ?? firstDouble.firm_name}
           </Link>{" "}
           is on {firstDouble.raises.map((r) => `${r.campaign_name} ${r.status_code ?? ""}`).join(" · ")}.
-          Open the person before you queue a send. {data.doubleAsks.length} people in this state.
+          Open the person before you queue a send. {data.doubleAskCount} people in this state.
         </div>
       ) : null}
 
@@ -146,10 +144,10 @@ export default async function TodayPage() {
                       ) : "—"}
                     </td>
                     <td>{a.campaign_name}</td>
-                    <td><span className={`badge ${badgeFor(a.status_code)}`}>{a.status_code}</span></td>
+                    <td><span className={`badge ${badgeClassFor(a.status_code)}`}>{a.status_code}</span></td>
                     <td>
-                      <span className={`badge ${a.blocked ? "b-dead" : "b-ok"}`}>
-                        {a.blocked ? "blocked" : a.permission_status}
+                      <span className={`badge ${permissionBadgeClass(a.permission_status, a.blocked)}`}>
+                        {permissionLabel(a.permission_status, a.blocked)}
                       </span>
                     </td>
                   </tr>
@@ -162,27 +160,34 @@ export default async function TodayPage() {
 
       <div className="card" style={{ marginTop: 16 }}>
         <h2>Stuck more than 7 days</h2>
-        <p className="sub">Status +0 or +3 or +5, no recent touch. Sorted oldest first by raise.</p>
-        <table>
-          <thead>
-            <tr><th>Raise</th><th>Person</th><th>Status</th><th>Days</th><th></th></tr>
-          </thead>
-          <tbody>
-            {data.stuck.slice(0, 20).map((s) => (
-              <tr key={s.campaign_partner_id}>
-                <td><Link href={`/company?c=${encodeURIComponent(s.campaign_name ?? "")}`}>{s.campaign_name}</Link></td>
-                <td>
-                  {s.partner_id ? (
-                    <Link href={`/person/${s.partner_id}`}>{s.partner_name ?? s.firm_name}</Link>
-                  ) : s.firm_name}
-                </td>
-                <td><span className={`badge ${badgeFor(s.status_code)}`}>{s.status_code}</span></td>
-                <td>{s.days}d</td>
-                <td><Link href={`/company?c=${encodeURIComponent(s.campaign_name ?? "")}`}>Open raise</Link></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <p className="sub">Status +0 or +3 or +5 with a last-touch date. Grouped by raise so a wave is visible as a wave.</p>
+        {data.stuckByRaise.length === 0 ? (
+          <p className="sub">No dated +0 / +3 / +5 rows older than 7 days.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr><th>Raise</th><th>Stuck</th><th>Oldest</th><th></th></tr>
+            </thead>
+            <tbody>
+              {data.stuckByRaise.map((g) => {
+                const href = g.campaign_id
+                  ? `/company?c=${g.campaign_id}`
+                  : `/company?c=${encodeURIComponent(g.campaign_name ?? "")}`;
+                return (
+                  <tr key={g.campaign_id ?? g.campaign_name ?? "raise"}>
+                    <td><Link href={href}>{g.campaign_name}</Link></td>
+                    <td>{g.count}</td>
+                    <td>
+                      {g.oldestDays == null ? "no date" : `${g.oldestDays} days`}
+                      {g.oldestName ? ` · ${g.oldestName}` : ""}
+                    </td>
+                    <td><Link href={href}>Open raise</Link></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  badgeClassFor,
+  labelFor,
+  skipRaiseName,
+} from "@/lib/desk/status-map";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
 import { RaiseStatusForm } from "../../partner/[id]/RaiseStatusForm";
 
@@ -15,7 +20,10 @@ export default async function DeskPersonPage({
   const partner = await getPartnerProfile(id);
   if (!partner) notFound();
 
-  const raiseCount = partner.campaign_links.length;
+  const raiseLinks = partner.campaign_links.filter(
+    (l) => !skipRaiseName(l.campaign_name),
+  );
+  const raiseCount = raiseLinks.length;
 
   return (
     <div className="wrap">
@@ -34,18 +42,19 @@ export default async function DeskPersonPage({
       </div>
 
       <div className="raise-cards">
-        {partner.campaign_links.length === 0 ? (
+        {raiseLinks.length === 0 ? (
           <div className="raise-card">
             <h3>No raise yet</h3>
             <p className="faint">Add them from Company or Find a Match.</p>
           </div>
         ) : (
-          partner.campaign_links.map((l) => (
+          raiseLinks.map((l) => (
             <div key={l.campaign_partner_id} className="raise-card">
               <h3>{l.campaign_name ?? "Raise"}</h3>
               <div>
-                <span className="badge b-progress">
-                  {l.status_code ?? "no status"} {l.status_label ?? ""}
+                <span className={`badge ${badgeClassFor(l.status_code)}`}>
+                  {l.status_code ?? "no status"}{" "}
+                  {labelFor(l.status_code) ?? l.status_label ?? ""}
                 </span>
               </div>
               <p className="faint" style={{ marginTop: 8 }}>
