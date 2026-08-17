@@ -22,7 +22,10 @@ export function DeskCrumbs() {
     parts.push({ href: "/raise-calendar", label: "Calendar" });
   } else if (pathname.startsWith("/meeting")) {
     parts.push({ href: "/raise-calendar", label: "Calendar" });
-    parts.push({ href: pathname, label: "This meeting" });
+    const bits = pathname.split("/").filter(Boolean);
+    const meetingHref = bits[0] === "meeting" && bits[1] ? `/meeting/${bits[1]}` : pathname;
+    parts.push({ href: meetingHref, label: "This meeting" });
+    if (bits.includes("mail")) parts.push({ href: pathname, label: "This letter" });
   } else if (pathname.startsWith("/raise-excel")) {
     parts.push({ href: "/raise-excel", label: "Excel snapshot" });
   } else if (pathname.startsWith("/desk-review")) {

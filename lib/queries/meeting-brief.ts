@@ -31,6 +31,22 @@ export interface MeetingBriefFile {
   generated_at: string;
 }
 
+export function correspondenceTime(m: MeetingCorrespondence): number {
+  const t = Date.parse(m.date);
+  return Number.isFinite(t) ? t : 0;
+}
+
+export function sortCorrespondenceNewestFirst(
+  mail: MeetingCorrespondence[],
+): MeetingCorrespondence[] {
+  return [...mail].sort((a, b) => correspondenceTime(b) - correspondenceTime(a));
+}
+
+export function gmailOpenHref(mail: MeetingCorrespondence): string {
+  const thread = mail.threadId || mail.id;
+  return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(thread)}`;
+}
+
 export function loadMeetingBriefs(): Record<string, MeetingBriefFile> {
   const file = join(process.cwd(), "data/meeting-briefs.json");
   if (!existsSync(file)) return {};

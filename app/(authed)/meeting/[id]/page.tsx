@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { skipRaiseName } from "@/lib/desk/status-map";
 import { readDeskWeekCache } from "@/lib/queries/desk-calendar";
 import {
+  decodeMailText,
   loadMeetingBriefs,
   loadMeetingNotes,
+  sortCorrespondenceNewestFirst,
 } from "@/lib/queries/meeting-brief";
 import { getPartnerProfile } from "@/lib/queries/partner-profile";
 import { inferMandatesForMeeting } from "@/lib/desk/mandate-state";
@@ -47,7 +49,7 @@ export default async function MeetingPage({
   );
   const notes = loadMeetingNotes()[meeting.id]?.text ?? "";
   const brief = filed?.brief ?? {};
-  const mail = filed?.correspondence ?? [];
+  const mail = sortCorrespondenceNewestFirst(filed?.correspondence ?? []);
 
   const firmName = partner?.firm?.firm_name ?? filed?.firm_name ?? meeting.firm_name;
   const firmId = partner?.firm?.id ?? filed?.firm_id ?? null;
@@ -200,7 +202,9 @@ export default async function MeetingPage({
       <div className="card" style={{ marginTop: 16 }}>
         <h2>Correspondence</h2>
         <p className="sub">
-          Mail to or from their address, skipping Calendly noise.
+          Newest first. Click a row to read the letter — the full text
+          if Gmail is connected, otherwise the opening we have, plus a
+          link into Gmail.
           {mail.length === 0
             ? " None found — this looks like a Calendly inbound with no prior thread."
             : ` ${mail.length} message${mail.length === 1 ? "" : "s"}.`}
@@ -215,19 +219,32 @@ export default async function MeetingPage({
               </tr>
             </thead>
             <tbody>
-              {mail.map((m) => (
-                <tr key={m.id}>
-                  <td>{m.date ? new Date(m.date).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
-                  <td>
-                    <div>{m.from}</div>
-                    <div className="faint">to {m.to}</div>
-                  </td>
-                  <td>
-                    <div>{m.subject}</div>
-                    <div className="faint">{m.snippet}</div>
-                  </td>
-                </tr>
-              ))}
+              {mail.map((m) => {
+                const href = `/meeting/${encodeURIComponent(meeting.id)}/mail/${encodeURIComponent(m.id)}`;
+                return (
+                  <tr key={m.id} className="clickable">
+                    <td>
+                      <Link href={href}>
+                        {m.date
+                          ? new Date(m.date).toLocaleString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </Link>
+                    </td>
+                    <td>
+                      <Link href={href}>{m.from}</Link>
+                      <div className="faint">to {m.to}</div>
+                    </td>
+                    <td>
+                      <Link href={href}>{m.subject}</Link>
+                      <div className="faint">{decodeMailText(m.snippet)}</div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ) : null}

@@ -304,6 +304,19 @@
 
 .raise-desk .opus-wrap { border-bottom: 1px solid var(--border-soft); background: #fff; }
 
+.raise-desk .mail-body {
+  margin: 0 16px 16px;
+  padding: 14px 16px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
 .raise-desk .meet-list {
   padding: 0 16px 16px;
   display: flex;

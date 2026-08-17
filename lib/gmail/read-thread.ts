@@ -169,3 +169,38 @@ export async function getGmailThread(threadId: string): Promise<GmailThreadResul
 
   return { threadId, messages, userEmail };
 }
+
+export async function getGmailMessage(messageId: string): Promise<GmailThreadMessage> {
+  const { accessToken, userEmail } = await getAccessTokenAndEmail();
+  const res = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!res.ok) {
+    throw new Error(`Gmail message read failed ${res.status}: ${await res.text()}`);
+  }
+  const m = (await res.json()) as {
+    id: string;
+    threadId: string;
+    internalDate?: string;
+    snippet?: string;
+    payload?: {
+      headers?: Array<{ name: string; value: string }>;
+    } & GmailPayloadPart;
+  };
+  const headers = m.payload?.headers ?? [];
+  const hdr = (name: string) =>
+    headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? null;
+  const from = hdr("From");
+  return {
+    id: m.id,
+    threadId: m.threadId,
+    internalDate: Number.parseInt(m.internalDate ?? "0", 10),
+    from,
+    to: hdr("To"),
+    subject: hdr("Subject"),
+    snippet: m.snippet ?? null,
+    body: extractPlainText(m.payload),
+    isFromUser: !!(userEmail && from && from.toLowerCase().includes(userEmail.toLowerCase())),
+  };
+}
