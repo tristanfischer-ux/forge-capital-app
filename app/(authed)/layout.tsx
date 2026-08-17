@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { isRaiseDeskPath } from "@/lib/desk/paths";
 import Link from "next/link";
 import {
   listActiveCampaigns,
@@ -10,6 +11,7 @@ import { WalkTourStrip } from "./WalkTourStrip";
 import { EmailHuntModal } from "./match/EmailHuntModal";
 import { Breadcrumbs, BreadcrumbsProvider } from "./Breadcrumbs";
 import { OpusChatBar } from "./OpusChatBar";
+import { AuthedChromeSwitch, RaiseDeskChrome } from "./RaiseDeskChrome";
 
 
 /**
@@ -49,43 +51,35 @@ export default async function AuthedLayout({
   const activeCampaignName =
     campaigns.find((c) => c.id === activeCampaignId)?.name ?? null;
 
-  return (
-    <BreadcrumbsProvider>
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const onDesk = isRaiseDeskPath(pathname);
+
+  const legacy = (
+    <>
       <TopBar
         campaigns={campaigns}
         activeCampaignId={activeCampaignId}
         totalActive={totalActive}
       />
       <OpusChatBar activeCampaignName={activeCampaignName} />
-      {/* Sidebar deleted 2026-04-22: Tristan flagged the four panels
-          (Drafts ready / Pipeline health / Rhythm / Tracker health) as
-          wasted space and demo-data-leaky (Stephan references). Content
-          now fills full width. The sidebarCampaign resolver stays
-          because Sidebar.tsx may return in a different shape later. */}
-      <div
-        className="layout"
-        style={{ gridTemplateColumns: "minmax(0, 1fr)" }}
-      >
+      <div className="layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         <main className="main">
-          {/* Breadcrumb strip — auto-derived from pathname via
-              lib/ui/breadcrumb-schema. Sits above the walk-tour callout
-              so the hierarchy reads: topbar · breadcrumbs · tour ·
-              content. Pages with dynamic segments (/investor/[id],
-              /tracker/[id]/draft) can render <BreadcrumbsOverride
-              label="..." /> inside their body to swap the final crumb
-              for a human-readable string. */}
           <Breadcrumbs />
           <WalkTourStrip />
           {children}
         </main>
       </div>
-      {/* Shell-level EmailHuntModal (lifted 2026-04-22 from FindAMatch).
-          Subscribes to the global `fc:resolve-email` custom event so any
-          surface — find-a-match result cards, verification-gate "Resolve
-          email" button, future places — can open the modal by dispatching
-          `new CustomEvent("fc:resolve-email", { detail: { investorId } })`.
-          Always-mounted, native <dialog> handles focus + Escape. */}
       <EmailHuntModal />
+    </>
+  );
+
+  return (
+    <BreadcrumbsProvider>
+      {onDesk ? (
+        <RaiseDeskChrome>{children}</RaiseDeskChrome>
+      ) : (
+        legacy
+      )}
     </BreadcrumbsProvider>
   );
 }

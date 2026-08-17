@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createServerClient } from "@/lib/supabase/server";
-import { StageBanner } from "../StageBanner";
+
 
 export const dynamic = "force-dynamic";
 
@@ -40,15 +40,14 @@ export default async function DeskReviewPage() {
 
   return (
     <>
-      <StageBanner number={0} title="Review queue" />
-      <section className="section" style={{ marginTop: 0 }}>
-        <div className="section-head">
+      <div className="wrap">
+        <div className="page-head">
           <div>
-            <div className="section-title">Review queue</div>
-            <div className="section-sub">
+            <h1>Review queue</h1>
+            <p>
               Unmatched or unmapped rows from the master tracker import.
               Unresolved ticked cells stay here. Nothing here is auto-sent.
-            </div>
+            </p>
           </div>
         </div>
         <div className="side-sub" style={{ marginBottom: 12 }}>Source: {source}</div>
@@ -64,8 +63,8 @@ export default async function DeskReviewPage() {
             ticked cell found a unique person.
           </div>
         ) : (
-          <div className="approval-col">
-            <table className="sheet" style={{ width: "100%" }}>
+          <div className="card">
+            <table>
               <thead>
                 <tr>
                   <th>Raise</th>
@@ -92,7 +91,7 @@ export default async function DeskReviewPage() {
             </table>
           </div>
         )}
-      </section>
+      </div>
     </>
   );
 }

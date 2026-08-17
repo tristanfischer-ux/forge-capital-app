@@ -1,6 +1,7 @@
 /* CSS @import must precede all other rules. V4's class names + tokens load
    first, then Tailwind's base layer, then utility classes. */
 @import "./v4-mockup.css";
+@import "./raise-desk.css";
 
 @tailwind base;
 @tailwind components;

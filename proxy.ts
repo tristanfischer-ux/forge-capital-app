@@ -44,10 +44,18 @@ const GATED_PREFIXES = [
   "/investors",
   "/today",
   "/desk-review",
+  "/company",
+  "/person",
+  "/firm",
+  "/raise-inbox",
+  "/raise-calendar",
+  "/raise-excel",
 ];
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -59,7 +67,7 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: requestHeaders } });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );

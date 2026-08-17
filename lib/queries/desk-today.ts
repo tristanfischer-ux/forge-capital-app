@@ -177,8 +177,14 @@ export async function getDeskToday(): Promise<DeskToday> {
       .filter((x): x is number => x != null),
   );
 
+  function skipCampaign(name: string | null): boolean {
+    if (!name) return false;
+    return name.startsWith("AUDIT") || name.includes("Wren Aerospace");
+  }
+
   for (const raw of cpRes.data ?? []) {
     const row = raw as unknown as Nested & { id: string };
+    if (skipCampaign(row.campaigns?.name ?? null)) continue;
     const last = row.last_contact_at ? new Date(row.last_contact_at).getTime() : 0;
     const days = last ? Math.floor((now - last) / 86400000) : 999;
     const live = ["+0", "+3", "+5"].includes(row.status_code ?? "");
