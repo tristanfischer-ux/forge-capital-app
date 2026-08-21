@@ -36,7 +36,24 @@ function parsePyAliases() {
   const text = readFileSync(file, "utf8");
   const start = text.indexOf("ALIASES = {");
   if (start < 0) return [];
-  const slice = text.slice(start + "ALIASES = ".length);
+  // Walk braces to the end of the ALIASES dict. Slicing to end-of-file instead
+  // drags in unrelated dicts further down (MISSING, THIN and two empty keys),
+  // which would seed junk aliases once the matching firms exist.
+  const open = text.indexOf("{", start);
+  let depth = 0;
+  let end = -1;
+  for (let i = open; i < text.length; i += 1) {
+    if (text[i] === "{") depth += 1;
+    else if (text[i] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return [];
+  const slice = text.slice(open, end + 1);
   const pairs = [...slice.matchAll(/"([^"]+)"\s*:\s*"([^"]+)"/g)];
   return pairs.map((m) => ({ alias: m[1], canonical: m[2] }));
 }
@@ -67,15 +84,25 @@ console.log("aliases_loaded", aliases.length, "live", LIVE);
 let inserted = 0;
 let skipped = 0;
 let unmatched = 0;
+const unmatchedNames = [];
 for (const { alias, canonical } of aliases) {
-  const { data: hit, error } = await core.rpc("match_firm", { name: canonical });
+  // The function signature is match_firm(p_name text), not {name}.
+  const { data: hit, error } = await core.rpc("match_firm", { p_name: canonical });
   if (error) {
     console.error("match_firm", canonical, error.message);
     unmatched += 1;
     continue;
   }
-  const firmId = Array.isArray(hit) ? hit[0]?.firm_id : hit?.firm_id;
+  // match_firm returns candidates (alias 0.95, fuzzy 0.60, ...) — take the best,
+  // and only trust exact/alias. A fuzzy hit must not silently mint an alias.
+  const rows = Array.isArray(hit) ? hit : hit ? [hit] : [];
+  const best = rows
+    .slice()
+    .sort((a, b) => Number(b.confidence) - Number(a.confidence))
+    .find((r) => r.match_type === "exact" || r.match_type === "alias");
+  const firmId = best?.firm_id;
   if (!firmId) {
+    unmatchedNames.push(canonical);
     unmatched += 1;
     continue;
   }
@@ -94,3 +121,5 @@ for (const { alias, canonical } of aliases) {
 }
 
 console.log({ inserted, skipped, unmatched, would: !LIVE });
+if (unmatchedNames.length)
+  console.log("unmatched canonicals (no exact/alias firm yet):", [...new Set(unmatchedNames)].sort().join(", "));

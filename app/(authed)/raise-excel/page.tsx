@@ -8,9 +8,9 @@ export default function RaiseExcelPage() {
         <div>
           <h1>Excel is a download</h1>
           <p>
-            The live book is this desk. The spreadsheet is a backup you
-            can open in Excel. You do not type into it. The filename never
-            says CANONICAL.
+            The live book is the shared database. Excel is only a backup.
+            Do not type in the 17 Aug file — it is an archive. A new
+            dated workbook is generated from the database.
           </p>
         </div>
       </div>
@@ -22,9 +22,8 @@ export default function RaiseExcelPage() {
         <div className="card">
           <h2>Download the backup</h2>
           <p className="sub">
-            Sheets: by raise, NED conversations, this week’s meetings,
-            and the review queue. Still a snapshot — edit in the desk.
-            Filename never says CANONICAL.
+            Generated from the shared book. The 17 Aug original is
+            untouched. Use the new dated file only as a backup.
           </p>
           <div className="btn-row">
             <a className="btn btn-primary" href="/api/export-master">

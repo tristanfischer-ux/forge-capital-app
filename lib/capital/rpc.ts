@@ -32,7 +32,7 @@ export async function matchFirm(name: string): Promise<{
     return { match: null, error: "shared book is not configured" };
   }
   const core = createCoreClient();
-  const { data, error } = await core.rpc("match_firm", { name });
+  const { data, error } = await core.rpc("match_firm", { p_name: name });
   if (error) return { match: null, error: error.message };
   return { match: asMatch(data), error: null };
 }
@@ -64,15 +64,15 @@ export async function logActivity(
   }
   const engage = createEngageClient();
   const payload = {
-    firm_name: input.firm_name,
-    mandate_code: input.mandate_code ?? null,
-    occurred_at: input.occurred_at ?? new Date().toISOString(),
-    channel: input.channel,
-    subject: input.subject ?? null,
-    snippet: input.snippet ?? null,
-    source_id: input.source_id ?? null,
-    allow_create_firm: input.allow_create_firm ?? false,
-    actor: capitalActor(),
+    p_firm_name: input.firm_name,
+    p_mandate_code: input.mandate_code ?? null,
+    p_occurred_at: input.occurred_at ?? new Date().toISOString(),
+    p_channel: input.channel,
+    p_subject: input.subject ?? null,
+    p_snippet: input.snippet ?? null,
+    p_source_id: input.source_id ?? null,
+    p_allow_create_firm: input.allow_create_firm ?? false,
+    p_created_by: capitalActor(),
   };
   const { data, error } = await engage.rpc("log_activity", payload);
   if (error) {

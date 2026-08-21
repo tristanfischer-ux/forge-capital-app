@@ -1,10 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { ReviewActions } from "../ReviewActions";
-import { ensureRowIds, type ReviewRow } from "@/lib/desk/review-queue";
+import { listPendingQuarantine } from "@/lib/queries/capital-book";
 import { normalizeFirmName } from "@/lib/desk/identity";
-import { createServerClient } from "@/lib/supabase/server";
 
 
 export const dynamic = "force-dynamic";
@@ -20,25 +16,27 @@ type QueueRow = {
 };
 
 async function loadQueue(): Promise<{ rows: QueueRow[]; source: string }> {
-  const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("import_review_queue")
-    .select("id, campaign_name, firm_name, contact_name, email, status_raw, reason, disposition")
-    .eq("disposition", "unresolved")
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (!error && data) return { rows: data as QueueRow[], source: "database" };
-
-  const file = join(process.cwd(), "data/import-review-queue.json");
-  if (existsSync(file)) {
-    const arr = JSON.parse(await readFile(file, "utf8")) as QueueRow[];
-    const withIds = ensureRowIds(arr as ReviewRow[]);
-    return {
-      rows: withIds.filter((r) => !r.disposition || r.disposition === "unresolved").slice(0, 200),
-      source: "local file",
+  const pending = await listPendingQuarantine(200);
+  const rows: QueueRow[] = pending.map((q) => {
+    const raw = (q.raw_payload ?? {}) as {
+      firm?: string | null;
+      contact?: string | null;
+      email?: string | null;
     };
-  }
-  return { rows: [], source: error ? `table not live (${error.message})` : "empty" };
+    const sug = q.suggested_match as { canonical_name?: string; match_type?: string } | null;
+    return {
+      id: q.id,
+      campaign_name: q.source ?? "tracker",
+      firm_name: raw.firm ?? null,
+      contact_name: raw.contact ?? null,
+      email: raw.email ?? null,
+      status_raw: sug?.match_type ?? q.status,
+      reason: sug?.canonical_name
+        ? `looks like ${sug.canonical_name}`
+        : "pending match",
+    };
+  });
+  return { rows, source: "shared book import_quarantine" };
 }
 
 export default async function DeskReviewPage() {

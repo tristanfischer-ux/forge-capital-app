@@ -55,7 +55,7 @@ for (const row of rows) {
     tally.none += 1;
     continue;
   }
-  const { data: hit, error: mErr } = await core.rpc("match_firm", { name: firm });
+  const { data: hit, error: mErr } = await core.rpc("match_firm", { p_name: firm });
   if (mErr) {
     tally.error += 1;
     console.error("match_firm", firm, mErr.message);
