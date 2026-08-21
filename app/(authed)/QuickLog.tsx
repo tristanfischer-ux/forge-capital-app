@@ -2,62 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-const DB = "raise-desk-log";
-const STORE = "queue";
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE, { keyPath: "id" });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function queueLocal(row: Record<string, string>) {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(row);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function pending(): Promise<Record<string, string>[]> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readonly");
-    const req = tx.objectStore(STORE).getAll();
-    req.onsuccess = () => resolve((req.result ?? []) as Record<string, string>[]);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function drop(id: string) {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function flush() {
-  const rows = await pending();
-  for (const row of rows) {
-    const res = await fetch("/api/desk-touch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row),
-    });
-    if (res.ok) await drop(row.id);
-  }
-}
-
 export function QuickLog() {
   const [who, setWho] = useState("");
   const [channel, setChannel] = useState("whatsapp");
@@ -67,14 +11,10 @@ export function QuickLog() {
 
   useEffect(() => {
     setOnline(navigator.onLine);
-    const on = () => {
-      setOnline(true);
-      flush().catch(() => undefined);
-    };
+    const on = () => setOnline(true);
     const off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-    if (navigator.onLine) flush().catch(() => undefined);
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
@@ -82,28 +22,37 @@ export function QuickLog() {
   }, []);
 
   async function save() {
+    if (!navigator.onLine) {
+      setMsg("Not connected — not saved. Log it again when you have signal.");
+      return;
+    }
     const row = {
-      id: `q-${Date.now()}`,
       who,
       channel,
       note,
       queued_at: new Date().toISOString(),
     };
-    if (!navigator.onLine) {
-      await queueLocal(row);
-      setMsg("Saved on this phone. It will flush when you have signal.");
-      setNote("");
+    let res: Response;
+    try {
+      res = await fetch("/api/desk-touch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(row),
+      });
+    } catch {
+      setMsg("Not connected — not saved. Log it again when you have signal.");
       return;
     }
-    const res = await fetch("/api/desk-touch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row),
-    });
-    const body = (await res.json()) as { ok?: boolean; error?: string };
+    const body = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      suggestions?: unknown;
+    };
     if (!body.ok) {
-      await queueLocal(row);
-      setMsg(body.error ?? "Could not reach the desk — queued on the phone.");
+      const extra = body.suggestions
+        ? ` Suggestions: ${JSON.stringify(body.suggestions)}`
+        : "";
+      setMsg((body.error ?? "Not connected — not saved.") + extra);
       return;
     }
     setMsg("Logged. Nothing sent.");
@@ -112,7 +61,11 @@ export function QuickLog() {
 
   return (
     <div>
-      <p className="faint">{online ? "Online" : "Offline — will queue on this phone"}</p>
+      <p className="faint">
+        {online
+          ? "Online — a save writes to the shared book."
+          : "Not connected — not saved."}
+      </p>
       <label className="faint">Who</label>
       <input
         value={who}

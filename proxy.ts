@@ -1,66 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { isAllowedSignInEmail } from "@/lib/auth-allowlist";
 import { getDevSession, isDevAuthBypassEnabled } from "@/lib/dev-auth";
 
 /**
- * Session-aware proxy. Two jobs:
+ * Session-aware proxy. Default-deny: anything not explicitly public
+ * requires a session for tristan.fischer@gmail.com.
  *
- *  1. Refresh the Supabase session cookie on every request (needed by SSR
- *     — see @supabase/ssr middleware guide). Without this, tokens expire
- *     mid-browse and server components lose the user.
+ *  1. Refresh the Supabase session cookie on every request.
+ *  2. Gate every non-public route. Unauthenticated users bounce to /
+ *     with ?next=<original path>.
  *
- *  2. Gate the authed surfaces. Any route under /(authed)/* resolves to
- *     paths the Next.js router doesn't expose — but the route group is
- *     transparent to URLs, so we gate by URL prefix instead. The tracker
- *     grid and draft preview both live under /tracker, so we gate there.
- *     Unauthenticated users bounce to / with ?next=<original path> so the
- *     magic-link callback can return them to where they were headed.
+ *  Public: landing page, magic-link callback, Gmail OAuth return,
+ *  Vercel cron (secret-checked in the route), tracking pixels, PWA bits.
  *
- *  The / landing page + /auth/callback route stay public so sign-in works.
- *
- *  ─── Dev-only auth bypass ────────────────────────────────────────────
- *  When BOTH `NODE_ENV !== "production"` AND `DEV_SKIP_AUTH === "1"` are
- *  set, the middleware mints a real Supabase session for the dev test
- *  user and writes the session cookies on the response. Sub-agents doing
- *  parity screenshots can then hit authed surfaces without going through
- *  magic-link email. See `lib/dev-auth.ts` for the mechanism. The two
- *  env-var check is belt-and-braces — production accidentally setting
- *  DEV_SKIP_AUTH=1 is still inert because NODE_ENV === "production".
+ *  Production never honours fc_auth_bypass. DEV_SKIP_AUTH is inert
+ *  when NODE_ENV === "production".
  */
 
-const GATED_PREFIXES = [
-  "/home",
-  "/tracker",
-  "/match",
-  "/pipeline",
-  "/review",
-  "/templates",
-  "/drafts",
-  "/verification",
-  "/approval",
-  "/weekly",
-  "/import",
-  "/send",
-  "/investors",
-  "/today",
-  "/desk-review",
-  "/meeting",
-  "/api/desk-search",
-  "/api/desk-week",
-  "/api/meeting-notes",
-  "/api/desk-review",
-  "/api/desk-mail",
-  "/api/n2a",
-  "/api/desk-wave",
-  "/api/desk-touch",
-  "/company",
-  "/person",
-  "/firm",
-  "/raise-inbox",
-  "/raise-calendar",
-  "/raise-excel",
-  "/log",
-];
+function isPublicPath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (pathname.startsWith("/auth/callback")) return true;
+  if (pathname.startsWith("/api/auth/gmail/callback")) return true;
+  if (pathname.startsWith("/api/cron/")) return true;
+  if (pathname.startsWith("/api/track/")) return true;
+  if (pathname === "/manifest.webmanifest") return true;
+  if (pathname === "/sw.js") return true;
+  return false;
+}
 
 export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
@@ -86,34 +53,23 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Emergency auth bypass — when fc_auth_bypass cookie is set,
-  // skip the auth gate entirely. GoTrue is down. Check this BEFORE
-  // calling getUser() to avoid the 4s timeout on every request.
-  const hasBypass = request.cookies.get("fc_auth_bypass")?.value === "1";
+  const pathname = request.nextUrl.pathname;
+  const publicPath = isPublicPath(pathname);
 
-  if (hasBypass) {
-    // Set a fake user so downstream code sees someone logged in
-    const bypassUser = { id: "815369eb-84e2-42e6-b729-241f264b180b" } as any;
-
-    const pathname = request.nextUrl.pathname;
-    const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-
-    if (isGated) {
-      // Already have a bypass user — let the request through
-    }
-
+  // Production: ignore the emergency bypass cookie. The /bypass routes
+  // themselves now 404; this stops a leftover cookie from opening the desk.
+  const bypassHonoured =
+    process.env.NODE_ENV !== "production" &&
+    request.cookies.get("fc_auth_bypass")?.value === "1";
+  if (bypassHonoured && !publicPath) {
     return response;
   }
 
-  // IMPORTANT: getUser() must be called to refresh the token.
   let {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-  const isGated = GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-
-  if (isGated && !user && isDevAuthBypassEnabled()) {
+  if (!user && !publicPath && isDevAuthBypassEnabled()) {
     const session = await getDevSession();
     const { error } = await supabase.auth.setSession({
       access_token: session.access_token,
@@ -124,7 +80,14 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (isGated && !user) {
+  if (user && !isAllowedSignInEmail(user.email)) {
+    await supabase.auth.signOut();
+    const loginUrl = new URL("/", request.url);
+    loginUrl.searchParams.set("auth_error", "not_allowed");
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (!publicPath && !user) {
     const loginUrl = new URL("/", request.url);
     loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
@@ -134,6 +97,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Skip statics, Next internals, and favicons. Everything else runs through.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

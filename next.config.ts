@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Must stay 0 so Vercel does not serve a stale CRM page as if it were live.
+  expireTime: 0,
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+    },
+  },
   // officeparser lazy-loads `file-type` via dynamic import. Next's
   // server bundler can't statically trace it, so on Vercel the function
   // boots and then explodes on PDF/PPTX parse with

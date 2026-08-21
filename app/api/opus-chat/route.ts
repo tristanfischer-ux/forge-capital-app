@@ -1,3 +1,4 @@
+import { isAllowedSignInEmail } from "@/lib/auth-allowlist";
 import { createServerClient } from "@/lib/supabase/server";
 import { CHAT_TOOLS, dispatchTool } from "./tools";
 
@@ -70,6 +71,9 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response("Not signed in", { status: 401 });
+  if (!isAllowedSignInEmail(user.email)) {
+    return new Response("Not allowed", { status: 403 });
+  }
 
   let body: ChatRequest;
   try {

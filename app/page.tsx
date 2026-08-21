@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isAllowedSignInEmail } from "@/lib/auth-allowlist";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 /**
@@ -86,6 +87,10 @@ export default function HomePage() {
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email) return;
+    if (!isAllowedSignInEmail(email)) {
+      setStatus({ kind: "error", message: "This desk is not open to that address." });
+      return;
+    }
     setStatus({ kind: "sending" });
     try {
       const supabase = createBrowserClient();
@@ -262,6 +267,9 @@ function humaniseError(raw: string): string {
   }
   if (lower.includes("access_denied")) {
     return "Sign-in was denied — the link was invalid, expired, or already used.";
+  }
+  if (lower.includes("not_allowed")) {
+    return "This desk is not open to that address.";
   }
   return raw;
 }

@@ -41,7 +41,19 @@ const engage = createClient(url, key, {
 });
 
 const { count: firms, error: e1 } = await core.from("firms").select("*", { count: "exact", head: true });
-const { data: mandates, error: e2 } = await engage.from("mandates").select("code, name, status");
+let mandates = null;
+let e2 = null;
+{
+  const first = await engage.from("mandates").select("code, company_name, status");
+  if (first.error && /company_name/.test(first.error.message)) {
+    const second = await engage.from("mandates").select("code, status");
+    mandates = second.data;
+    e2 = second.error;
+  } else {
+    mandates = first.data;
+    e2 = first.error;
+  }
+}
 const { data: gore, error: e3 } = await core.rpc("match_firm", { name: "Gore Street" });
 
 console.log("firms", e1?.message ?? firms);

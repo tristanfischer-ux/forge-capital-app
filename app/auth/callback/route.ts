@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isAllowedSignInEmail } from "@/lib/auth-allowlist";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
@@ -44,6 +45,16 @@ export async function GET(request: NextRequest) {
   if (error) {
     return NextResponse.redirect(
       new URL(`/?auth_error=${encodeURIComponent(error.message)}`, request.url),
+    );
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!isAllowedSignInEmail(user?.email)) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(
+      new URL("/?auth_error=not_allowed", request.url),
     );
   }
 

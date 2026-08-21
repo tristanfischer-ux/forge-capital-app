@@ -10,7 +10,8 @@ export default function LogPage() {
           <h1>Quick log</h1>
           <p>
             WhatsApp, iMessage or a call while you are on the train.
-            Works offline — it flushes when you have signal. Nothing sends.
+            If the phone is offline the log is not saved — better a
+            known miss than a touch that never reached the book. Nothing sends.
           </p>
         </div>
       </div>

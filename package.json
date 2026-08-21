@@ -5,7 +5,8 @@
   "description": "Fractional Forge — investor/customer outreach tracker. Replaces Tristan's Excel trackers. Reader/writer over a central Supabase DB that the local Forge Capital pipeline pushes into nightly.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/check-client-secrets.mjs",
+    "check:secrets": "node scripts/check-client-secrets.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

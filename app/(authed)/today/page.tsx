@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getCapitalHeartbeat } from "@/lib/queries/capital-heartbeat";
 import { getDeskToday, type DeskMeeting, type DeskReply } from "@/lib/queries/desk-today";
 import {
   briefForMeetingId,
@@ -84,7 +85,10 @@ export default async function TodayPage({
   searchParams: Promise<{ gmail_connected?: string }>;
 }) {
   const { gmail_connected } = await searchParams;
-  const data = await getDeskToday();
+  const [data, heartbeat] = await Promise.all([
+    getDeskToday(),
+    getCapitalHeartbeat(),
+  ]);
   const briefs = loadMeetingBriefs();
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -131,6 +135,18 @@ export default async function TodayPage({
           Outreach pipeline.
         </div>
       ) : null}
+
+      <div className="note" style={{ marginBottom: 16 }}>
+        {heartbeat.configured ? (
+          heartbeat.staleFeeds.length > 0 ? (
+            <>Shared book heartbeat: stale — {heartbeat.staleFeeds.join(", ")} (over 24 hours).</>
+          ) : (
+            <>Shared book heartbeat: all feeds ok (gmail, calendar, export, neverbounce, cowork).</>
+          )
+        ) : (
+          <>Shared book is not wired yet — Corpus service-role is missing. Touches will not save.</>
+        )}
+      </div>
 
       <div className="job-box">
         <div className="k">What to do</div>
