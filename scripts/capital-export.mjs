@@ -76,7 +76,12 @@ for (const p of parts) {
   partsByFirm.get(p.firm_id).push(p);
 }
 
+const TEMPLATE = resolve(
+  homedir(),
+  "Developer/Forge-Capital/260817 Master Investor Tracker TF (CANONICAL).xlsx",
+);
 const CODES = ["SK", "FF", "PA", "SS", "CA", "US", "OD", "HO"];
+const LATEST_COLS = ["Q", "V", "AA", "AF", "AK", "AP", "AU", "AZ"]; // 1-based Excel letters for Latest in each block
 const header1 = [
   "LAST CONTACT", "CONTACTED?", null, null, null, null, null, null, null,
   "INVESTOR INFO", null, null, null, null, null,
@@ -124,27 +129,56 @@ for (const f of sorted) {
     row[1 + i] = "✓";
     row[base] = p.first_sent ? String(p.first_sent).slice(0, 10) : null;
     row[base + 1] = p.latest_touch ? String(p.latest_touch).slice(0, 10) : null;
-    row[base + 3] = p.stage;
+    row[base + 3] = p.status_note || p.stage;
     row[base + 4] = p.status_note;
   });
   aoa.push(row);
 }
 
-const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "Master Tracker");
-XLSX.utils.book_append_sheet(
-  wb,
-  XLSX.utils.aoa_to_sheet([
-    ["This file is a backup generated from the shared Forge Capital book."],
-    ["Do not type in it. The live book is Supabase core/engage."],
-    ["Generated", new Date().toISOString()],
-    ["Firms", firms.length],
-    ["People", people.length],
-    ["Participations", parts.length],
-    ["Source workbook 260817 was not modified."],
-  ]),
-  "README",
-);
+if (!existsSync(TEMPLATE)) {
+  console.error("template missing", TEMPLATE);
+  process.exit(2);
+}
+const template = XLSX.readFile(TEMPLATE, { cellDates: true, cellFormula: true });
+const master = XLSX.utils.aoa_to_sheet(aoa);
+const DAYS_COLS = ["R", "W", "AB", "AG", "AL", "AQ", "AV", "BA"];
+const lastRow = 2 + sorted.length;
+for (let r = 3; r <= lastRow; r += 1) {
+  const maxList = LATEST_COLS.map((c) => `${c}${r}`).join(",");
+  master[`A${r}`] = {
+    t: "n",
+    f: `IF(MAX(${maxList})=0,"",TODAY()-MAX(${maxList}))`,
+  };
+  DAYS_COLS.forEach((daysCol, i) => {
+    const latest = LATEST_COLS[i];
+    master[`${daysCol}${r}`] = {
+      t: "n",
+      f: `IF(${latest}${r}="","",TODAY()-${latest}${r})`,
+    };
+  });
+}
+if (master["!ref"]) {
+  master["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: lastRow - 1, c: 54 },
+  });
+}
+const wb = {
+  SheetNames: [...template.SheetNames],
+  Sheets: {},
+};
+for (const name of template.SheetNames) {
+  wb.Sheets[name] = name === "Master Tracker" ? master : template.Sheets[name];
+}
+if (!wb.SheetNames.includes("Generated")) wb.SheetNames.push("Generated");
+wb.Sheets.Generated = XLSX.utils.aoa_to_sheet([
+  ["Generated from the shared book (core/engage). Do not type in this file."],
+  ["The 17 Aug original was not modified."],
+  ["Generated", new Date().toISOString()],
+  ["Firms", firms.length],
+  ["People", people.length],
+  ["Participations", parts.length],
+]);
 
 const yymmdd = new Date().toISOString().slice(2, 10).replace(/-/g, "");
 const out = resolve(

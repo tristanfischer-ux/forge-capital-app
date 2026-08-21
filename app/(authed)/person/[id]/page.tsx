@@ -27,7 +27,12 @@ export default async function DeskPersonPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const id = Number.parseInt((await params).id, 10);
+  const raw = (await params).id;
+  if (/^[0-9a-f-]{36}$/i.test(raw)) {
+    const { CapitalPersonPage } = await import("../../CapitalEntityPages");
+    return <CapitalPersonPage id={raw} />;
+  }
+  const id = Number.parseInt(raw, 10);
   if (!Number.isFinite(id)) notFound();
   const partner = await getPartnerProfile(id);
   if (!partner) notFound();

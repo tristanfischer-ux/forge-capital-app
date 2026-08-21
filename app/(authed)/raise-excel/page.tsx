@@ -22,7 +22,8 @@ export default function RaiseExcelPage() {
         <div className="card">
           <h2>Download the backup</h2>
           <p className="sub">
-            Generated from the shared book. The 17 Aug original is
+            Generated from the shared book with the same tabs and
+            day-count formulas as the 17 Aug file. That original is
             untouched. Use the new dated file only as a backup.
           </p>
           <div className="btn-row">

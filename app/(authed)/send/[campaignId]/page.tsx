@@ -36,6 +36,11 @@ export default async function SendPage(props: {
   const { campaignId } = await props.params;
   if (!campaignId) notFound();
 
+  if (/^(SS|SK|FF|PA|OD|CA|US|HO)$/i.test(campaignId)) {
+    const { RaiseSend } = await import("../RaiseSend");
+    return <RaiseSend code={campaignId.toUpperCase()} />;
+  }
+
   const supabase = await createServerClient();
   const { data: campaign, error } = await supabase
     .from("campaigns")

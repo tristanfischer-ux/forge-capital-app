@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  loadBookPeopleByEmail,
+  markFeed,
+  recordBookActivity,
+} from "@/lib/capital/sync-mail";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { refreshAccessToken } from "@/lib/gmail/oauth";
 
@@ -6,9 +11,10 @@ import { refreshAccessToken } from "@/lib/gmail/oauth";
  * Vercel Cron — Gmail inbound sync.
  *
  * Replaces scripts/gmail-sync.mjs (launchd every 15 min).
- * Polls each connected user's Gmail for messages to/from any
- * campaign_partners email, upserts into contact_events keyed on
- * gmail_message_id.
+ * Polls each connected user's Gmail for messages to/from people in
+ * the shared book (core.people) and the old campaign_partners list.
+ * Writes engage.activities (source_id = gmail message id) and still
+ * upserts contact_events so existing inbox views do not go blank.
  *
  * Schedule: every 15 minutes
  */
@@ -173,8 +179,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "No gmail_tokens rows — nothing to do", users: 0 });
   }
 
-  // Load campaign partners with emails
+  const bookPeople = await loadBookPeopleByEmail();
+
+  // Load campaign partners with emails (legacy inbox) plus book people.
   const partnersByEmail = new Map<string, string[]>();
+  for (const [email] of bookPeople) {
+    if (!partnersByEmail.has(email)) partnersByEmail.set(email, []);
+  }
   const pageSize = 1000;
   let from = 0;
   while (true) {
@@ -330,7 +341,7 @@ export async function GET(request: NextRequest) {
           break;
         }
       }
-      if (!partnerEmail || !campaignPartnerIds?.length) {
+      if (!partnerEmail) {
         skipped++;
         continue;
       }
@@ -350,25 +361,45 @@ export async function GET(request: NextRequest) {
         if (!Number.isNaN(parsed)) eventAt = new Date(parsed);
       }
 
-      const campaignPartnerId = campaignPartnerIds[0];
-      const row = {
-        campaign_partner_id: campaignPartnerId,
-        direction: cls.direction,
-        channel: "gmail",
-        gmail_thread_id: (meta.threadId as string) || null,
-        gmail_message_id: meta.id as string,
-        event_type: cls.eventType,
-        event_at: eventAt.toISOString(),
-        summary: subject.slice(0, 500),
-      };
-
-      const { error } = await supabase
-        .from("contact_events")
-        .upsert(row, { onConflict: "gmail_message_id", ignoreDuplicates: true });
-      if (error) {
+      const channel =
+        cls.direction === "inbound" || cls.direction === "bounce"
+          ? "email_in"
+          : "email_out";
+      try {
+        const book = await recordBookActivity({
+          sourceId: `gmail:${meta.id as string}`,
+          occurredAt: eventAt.toISOString(),
+          channel,
+          subject,
+          snippet: subject,
+          fromToBlob: `${from} ${to}`,
+          peopleByEmail: bookPeople,
+        });
+        if (book === "inserted") inserted++;
+        else if (book === "unmatched" && !campaignPartnerIds?.length) skipped++;
+      } catch {
         errored++;
-      } else {
-        inserted++;
+      }
+
+      if (campaignPartnerIds?.length) {
+        const campaignPartnerId = campaignPartnerIds[0];
+        const row = {
+          campaign_partner_id: campaignPartnerId,
+          direction: cls.direction,
+          channel: "gmail",
+          gmail_thread_id: (meta.threadId as string) || null,
+          gmail_message_id: meta.id as string,
+          event_type: cls.eventType,
+          event_at: eventAt.toISOString(),
+          summary: subject.slice(0, 500),
+        };
+
+        const { error } = await supabase
+          .from("contact_events")
+          .upsert(row, { onConflict: "gmail_message_id", ignoreDuplicates: true });
+        if (error) {
+          errored++;
+        }
       }
     }
 
@@ -397,10 +428,13 @@ export async function GET(request: NextRequest) {
   }
 
   const dt = ((Date.now() - t0) / 1000).toFixed(1);
+  const failed = results.some((r) => r.errored && Number(r.errored) > 0);
+  await markFeed("gmail", failed ? "partial errors" : undefined);
   return NextResponse.json({
     message: `gmail-sync completed in ${dt}s`,
     users: tokens.length,
     partners: partnersByEmail.size,
+    book_people: bookPeople.size,
     results,
   });
 }

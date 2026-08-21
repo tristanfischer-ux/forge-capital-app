@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Hit = {
   kind: "person" | "firm";
-  id: number;
+  id: number | string;
   label: string;
   sub: string | null;
 };
