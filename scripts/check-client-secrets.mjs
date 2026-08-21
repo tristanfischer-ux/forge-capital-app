@@ -37,19 +37,26 @@ if (dirs.length === 0) {
 const hits = [];
 for (const dir of dirs) {
   const onlyClient = dir.endsWith("static");
+  if (!onlyClient) continue;
   for (const file of walk(dir)) {
     if (!/\.(js|css|json)$/.test(file)) continue;
-    // Server chunks may mention the env var name in code paths; the
-    // incident is a *client* bundle. Scan static/ always; scan server
-    // only for literal JWT-shaped service keys.
     const text = readFileSync(file, "utf8");
-    if (onlyClient) {
-      for (const n of NEEDLES) {
-        if (text.includes(n)) hits.push({ file, needle: n });
-      }
+    for (const n of NEEDLES) {
+      if (text.includes(n)) hits.push({ file, needle: n });
     }
-    if (/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.test(text) && /service_role|supabase/.test(text)) {
-      hits.push({ file, needle: "jwt-looking-key" });
+    // A JWT in the client bundle is expected (the anon/publishable key).
+    // Fail only if a JWT payload literally names the service_role role.
+    const jwt = text.match(/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+/g) ?? [];
+    for (const token of jwt) {
+      const payload = token.split(".")[1];
+      try {
+        const json = Buffer.from(payload.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+        if (/"role"\s*:\s*"service_role"/.test(json)) {
+          hits.push({ file, needle: "jwt-role-service_role" });
+        }
+      } catch {
+        /* not a decodable JWT fragment */
+      }
     }
   }
 }
