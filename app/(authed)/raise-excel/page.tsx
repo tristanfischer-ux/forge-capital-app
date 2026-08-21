@@ -27,8 +27,8 @@ export default function RaiseExcelPage() {
             untouched. Use the new dated file only as a backup.
           </p>
           <div className="btn-row">
-            <a className="btn btn-primary" href="/api/export-master">
-              Download snapshot
+            <a className="btn btn-primary" href="/api/export-canonical">
+              Download backup from the book
             </a>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/capital/cron-auth";
 import {
-  loadBookPeopleByEmail,
+  loadBookIndex,
   markFeed,
   recordBookActivity,
 } from "@/lib/capital/sync-mail";
@@ -154,12 +155,7 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 
 // ---------- Main handler ----------
 
-export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function runGmailBookSync(): Promise<Record<string, unknown>> {
   const t0 = Date.now();
   const supabase = createAdminClient();
 
@@ -170,16 +166,14 @@ export async function GET(request: NextRequest) {
       "user_id, email, access_token, refresh_token, expires_at, scope, last_gmail_sync_at",
     );
   if (tokenErr) {
-    return NextResponse.json(
-      { error: `gmail_tokens read failed: ${tokenErr.message}` },
-      { status: 500 },
-    );
+    return { error: `gmail_tokens read failed: ${tokenErr.message}` };
   }
   if (!tokens || tokens.length === 0) {
-    return NextResponse.json({ message: "No gmail_tokens rows — nothing to do", users: 0 });
+    return { message: "No gmail_tokens rows — nothing to do", users: 0 };
   }
 
-  const bookPeople = await loadBookPeopleByEmail();
+  const book = await loadBookIndex();
+  const bookPeople = book.byEmail;
 
   // Load campaign partners with emails (legacy inbox) plus book people.
   const partnersByEmail = new Map<string, string[]>();
@@ -195,10 +189,7 @@ export async function GET(request: NextRequest) {
       .not("partners_mirror.email", "is", null)
       .range(from, from + pageSize - 1);
     if (error) {
-      return NextResponse.json(
-        { error: `campaign_partners read: ${error.message}` },
-        { status: 500 },
-      );
+      return { error: `campaign_partners read: ${error.message}` };
     }
     if (!data || data.length === 0) break;
     for (const row of data) {
@@ -330,6 +321,8 @@ export async function GET(request: NextRequest) {
     let inserted = 0;
     let skipped = 0;
     let errored = 0;
+    let noise = 0;
+    let cancelled = 0;
 
     for (const messageId of messageIdList) {
       let meta: Record<string, unknown>;
@@ -382,7 +375,7 @@ export async function GET(request: NextRequest) {
           ? "email_in"
           : "email_out";
       try {
-        const book = await recordBookActivity({
+        const bookResult = await recordBookActivity({
           sourceId: `gmail:${meta.id as string}`,
           occurredAt: eventAt.toISOString(),
           channel,
@@ -390,9 +383,12 @@ export async function GET(request: NextRequest) {
           snippet: subject,
           fromToBlob: `${from} ${to}`,
           peopleByEmail: bookPeople,
+          peopleByName: book.byName,
         });
-        if (book === "inserted") inserted++;
-        else if (book === "unmatched" && !campaignPartnerIds?.length) skipped++;
+        if (bookResult === "inserted") inserted++;
+        else if (bookResult === "noise") noise++;
+        else if (bookResult === "cancelled") cancelled++;
+        else if (bookResult === "unmatched" && !campaignPartnerIds?.length) skipped++;
       } catch {
         errored++;
       }
@@ -439,6 +435,8 @@ export async function GET(request: NextRequest) {
       listed: seenMessageIds.size,
       inserted,
       skipped,
+      noise,
+      cancelled,
       errored,
     });
   }
@@ -446,11 +444,19 @@ export async function GET(request: NextRequest) {
   const dt = ((Date.now() - t0) / 1000).toFixed(1);
   const failed = results.some((r) => r.errored && Number(r.errored) > 0);
   await markFeed("gmail", failed ? "partial errors" : undefined);
-  return NextResponse.json({
+  return {
     message: `gmail-sync completed in ${dt}s`,
     users: tokens.length,
     partners: partnersByEmail.size,
     book_people: bookPeople.size,
     results,
-  });
+  };
+}
+
+export async function GET(request: NextRequest) {
+  if (!cronAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const body = await runGmailBookSync();
+  return NextResponse.json(body);
 }

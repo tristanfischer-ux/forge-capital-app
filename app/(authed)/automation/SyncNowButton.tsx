@@ -10,12 +10,7 @@ export function SyncNowButton() {
   async function handleSync() {
     setStatus("syncing");
     try {
-      const res = await fetch("/api/cron/gmail-sync", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? ""}`,
-        },
-      });
+      const res = await fetch("/api/desk-sync", { method: "POST" });
       if (!res.ok) {
         setStatus("error");
         setTimeout(() => setStatus("idle"), 3000);
@@ -36,7 +31,7 @@ export function SyncNowButton() {
       onClick={handleSync}
       disabled={status === "syncing"}
       style={{ fontSize: 11, marginLeft: 8 }}
-      title="Trigger an immediate Gmail sync (same as the every-15-minute cron)."
+      title="Pull Gmail and Calendar into the shared book. Nothing sends."
     >
       {status === "syncing"
         ? "Syncing…"

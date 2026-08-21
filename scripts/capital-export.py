@@ -57,7 +57,10 @@ if not ORIG.exists():
 
 stamp_before = ORIG.stat().st_mtime
 firms = rest_all(url, key, "core", "firms", "id,canonical_name,website_domain,sectors,dnc,notes")
-people = rest_all(url, key, "core", "people", "id,firm_id,full_name,email,email_state,dnc")
+people = rest_all(
+    url, key, "core", "people",
+    "id,firm_id,full_name,email,email_state,dnc,linkedin_url,role_title,provenance",
+)
 parts = rest_all(
     url, key, "engage", "participations",
     "firm_id,person_id,mandate_id,stage,status_note,first_sent,latest_touch",
@@ -133,6 +136,198 @@ for i, f in enumerate(sorted_firms):
         ws.cell(r, comm_col, p.get("status_note"))
     mx = ",".join(max_bits)
     ws.cell(r, 1, f'=IF(MAX({mx})=0,"",TODAY()-MAX({mx}))')
+
+def clear_sheet(ws, header_rows: int) -> None:
+    if ws.max_row > header_rows:
+        ws.delete_rows(header_rows + 1, ws.max_row - header_rows)
+
+
+def write_rows(ws, start_row: int, rows: list[list]) -> None:
+    for i, row in enumerate(rows):
+        for c, val in enumerate(row, 1):
+            ws.cell(start_row + i, c, val)
+
+
+firms_by = {f["id"]: f for f in firms}
+people_by_id = {p["id"]: p for p in people}
+od_id = next((m["id"] for m in mandates if m.get("code") == "OD"), None)
+us_id = next((m["id"] for m in mandates if m.get("code") == "US"), None)
+od_parts = [p for p in parts if p.get("mandate_id") == od_id]
+us_parts = [p for p in parts if p.get("mandate_id") == us_id]
+
+
+def firm_name(fid):
+    f = firms_by.get(fid) or {}
+    return f.get("canonical_name")
+
+
+def firm_web(fid):
+    f = firms_by.get(fid) or {}
+    return f.get("website_domain")
+
+
+def person_name(pid):
+    p = people_by_id.get(pid) or {}
+    return p.get("full_name")
+
+
+def person_email(pid):
+    p = people_by_id.get(pid) or {}
+    return p.get("email")
+
+
+def od_row(p):
+    return [
+        firm_name(p.get("firm_id")),
+        firm_web(p.get("firm_id")),
+        p.get("stage"),
+        (p.get("latest_touch") or p.get("first_sent") or "")[:10] or None,
+        p.get("status_note"),
+        person_name(p.get("person_id")),
+        person_email(p.get("person_id")),
+        p.get("status_note"),
+    ]
+
+
+if "Dashboard" in wb.sheetnames:
+    d = wb["Dashboard"]
+    d["A1"] = "Shared-book backup — generated from Corpus"
+    d["A2"] = datetime.now(timezone.utc).isoformat()
+    d["A3"] = f"Firms {len(firms)} · people {len(people)} · participations {len(parts)}"
+    d["A4"] = "The 17 Aug original was not modified."
+
+if "README" in wb.sheetnames:
+    r = wb["README"]
+    r["A1"] = "Generated from the shared book. Excel is a download only."
+    r["A2"] = "Do not type in the 17 Aug CANONICAL file."
+
+if "US Exploration (Forge)" in wb.sheetnames:
+    us = wb["US Exploration (Forge)"]
+    clear_sheet(us, 2)
+    write_rows(
+        us,
+        3,
+        [
+            [
+                firm_name(p.get("firm_id")),
+                person_name(p.get("person_id")),
+                person_email(p.get("person_id")),
+                "book",
+                p.get("stage"),
+                "",
+                p.get("status_note"),
+            ]
+            for p in us_parts
+        ],
+    )
+
+if "Odysseus — Jordan full" in wb.sheetnames:
+    j = wb["Odysseus — Jordan full"]
+    clear_sheet(j, 1)
+    write_rows(
+        j,
+        2,
+        [
+            [
+                firm_name(p.get("firm_id")),
+                firm_web(p.get("firm_id")),
+                "",
+                p.get("stage"),
+                p.get("status_note"),
+                firm_name(p.get("firm_id")),
+                "book",
+                person_name(p.get("person_id")),
+                person_email(p.get("person_id")),
+                "",
+                "",
+                p.get("status_note"),
+            ]
+            for p in od_parts
+        ],
+    )
+
+do_not = [
+    p for p in od_parts
+    if (p.get("stage") in ("disqualified", "blocked", "closed_lost"))
+    or "do not" in (p.get("status_note") or "").lower()
+    or "cautious" in (p.get("status_note") or "").lower()
+    and "leave" in (p.get("status_note") or "").lower()
+]
+low = [p for p in od_parts if "cautious" in (p.get("status_note") or "").lower()]
+cands = [p for p in od_parts if (p.get("stage") or "") in ("research", "awaiting_signoff")]
+
+if "Odysseus — DO NOT outreach" in wb.sheetnames:
+    ws = wb["Odysseus — DO NOT outreach"]
+    clear_sheet(ws, 1)
+    write_rows(ws, 2, [od_row(p) for p in do_not])
+
+if "Odysseus — Low priority OK" in wb.sheetnames:
+    ws = wb["Odysseus — Low priority OK"]
+    clear_sheet(ws, 1)
+    write_rows(ws, 2, [od_row(p) for p in low])
+
+if "Odysseus — Candidates approval" in wb.sheetnames:
+    ws = wb["Odysseus — Candidates approval"]
+    clear_sheet(ws, 1)
+    write_rows(
+        ws,
+        2,
+        [
+            [
+                firm_name(p.get("firm_id")),
+                firm_web(p.get("firm_id")),
+                person_name(p.get("person_id")),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                p.get("status_note"),
+            ]
+            for p in cands
+        ],
+    )
+
+if "Odysseus — Jordan DO-NOT-APPROA" in wb.sheetnames:
+    ws = wb["Odysseus — Jordan DO-NOT-APPROA"]
+    clear_sheet(ws, 1)
+    write_rows(
+        ws,
+        2,
+        [
+            [
+                firm_name(p.get("firm_id")),
+                firm_web(p.get("firm_id")),
+                person_name(p.get("person_id")),
+                person_email(p.get("person_id")),
+                p.get("stage"),
+                firm_web(p.get("firm_id")),
+            ]
+            for p in do_not
+        ],
+    )
+
+li = [p for p in people if (p.get("provenance") or "").lower() == "linkedin"]
+if "LinkedIn Connections" in wb.sheetnames:
+    ws = wb["LinkedIn Connections"]
+    clear_sheet(ws, 1)
+    write_rows(
+        ws,
+        2,
+        [
+            [
+                p.get("full_name"),
+                firm_name(p.get("firm_id")),
+                p.get("role_title"),
+                p.get("linkedin_url"),
+                "",
+                p.get("email"),
+                "yes" if p.get("firm_id") in parts_by else "no",
+            ]
+            for p in li
+        ],
+    )
 
 if "Generated" not in wb.sheetnames:
     g = wb.create_sheet("Generated")

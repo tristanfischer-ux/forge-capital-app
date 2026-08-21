@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/capital/cron-auth";
 import {
-  loadBookPeopleByEmail,
+  loadBookIndex,
   markFeed,
   recordBookActivity,
 } from "@/lib/capital/sync-mail";
@@ -20,7 +21,8 @@ async function fetchEvents(accessToken: string, fromIso: string) {
   );
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
-  url.searchParams.set("maxResults", "100");
+  url.searchParams.set("showDeleted", "true");
+  url.searchParams.set("maxResults", "250");
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -31,21 +33,17 @@ async function fetchEvents(accessToken: string, fromIso: string) {
   return body.items ?? [];
 }
 
-export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function runCalendarBookSync(): Promise<Record<string, unknown>> {
   const supabase = createAdminClient();
-  const bookPeople = await loadBookPeopleByEmail();
+  const book = await loadBookIndex();
+  const bookPeople = book.byEmail;
   const { data: tokens, error: tokenErr } = await supabase
     .from("gmail_tokens")
     .select(
       "user_id, email, access_token, refresh_token, expires_at, scope, calendar_cursor",
     );
   if (tokenErr) {
-    return NextResponse.json({ error: tokenErr.message }, { status: 500 });
+    return { error: tokenErr.message };
   }
 
   const results: Record<string, unknown>[] = [];
@@ -117,25 +115,32 @@ export async function GET(request: NextRequest) {
 
     let inserted = 0;
     let unmatched = 0;
+    let cancelled = 0;
     for (const event of events) {
       const start = event.start as { dateTime?: string; date?: string } | undefined;
       const startIso = start?.dateTime ?? start?.date;
       if (!startIso || !event.id) continue;
-      const attendees = (event.attendees as { email?: string }[] | undefined) ?? [];
-      const blob = attendees.map((a) => a.email ?? "").join(" ");
+      const attendees = (event.attendees as { email?: string; displayName?: string }[] | undefined) ?? [];
+      const blob = attendees
+        .map((a) => `${a.displayName ?? ""} <${a.email ?? ""}>`)
+        .join(" ");
+      const cancelledEvent =
+        event.status === "cancelled" || /cancel+ed|cancelled/i.test(String(event.summary ?? ""));
       const summary = String(event.summary ?? "(untitled)");
       try {
-        const book = await recordBookActivity({
+        const bookResult = await recordBookActivity({
           sourceId: `cal:${event.id as string}`,
           occurredAt: new Date(startIso).toISOString(),
-          channel: "calendar",
-          subject: summary,
+          channel: cancelledEvent ? "calendar_cancelled" : "calendar",
+          subject: cancelledEvent ? `[CANCELLED] ${summary}` : summary,
           snippet: String(event.description ?? summary).slice(0, 500),
           fromToBlob: blob,
           peopleByEmail: bookPeople,
+          peopleByName: book.byName,
         });
-        if (book === "inserted") inserted++;
-        if (book === "unmatched") unmatched++;
+        if (bookResult === "inserted") inserted++;
+        if (bookResult === "unmatched") unmatched++;
+        if (bookResult === "cancelled") cancelled++;
       } catch {
         /* keep going */
       }
@@ -151,13 +156,22 @@ export async function GET(request: NextRequest) {
       events: events.length,
       inserted,
       unmatched,
+      cancelled,
     });
   }
 
   await markFeed("calendar");
-  return NextResponse.json({
+  return {
     message: "calendar-sync to shared book",
     book_people: bookPeople.size,
     results,
-  });
+  };
+}
+
+export async function GET(request: NextRequest) {
+  if (!cronAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const body = await runCalendarBookSync();
+  return NextResponse.json(body);
 }

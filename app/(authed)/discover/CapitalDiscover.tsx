@@ -66,8 +66,8 @@ export function CapitalDiscover() {
         <div>
           <h1>Discover — the shared book</h1>
           <p>
-            Search the 2,800 firms already in the raise book. Add someone
-            to a raise. This is not the old encyclopaedia. Nothing sends.
+            Search the shared book — names, emails, near-miss spellings.
+            Add someone to a raise. Nothing sends.
           </p>
         </div>
       </div>

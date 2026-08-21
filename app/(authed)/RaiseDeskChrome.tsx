@@ -10,13 +10,13 @@ import { ServiceWorkerRegister } from "./ServiceWorkerRegister";
 
 const PILLS = [
   { href: "/today", label: "Today", match: (p: string) => p === "/today" },
-  { href: "/company", label: "Company", match: (p: string) => p.startsWith("/company") },
-  { href: "/person", label: "Person", match: (p: string) => p.startsWith("/person") },
-  { href: "/firm", label: "Firm", match: (p: string) => p.startsWith("/firm") },
+  { href: "/discover", label: "Discover", match: (p: string) => p.startsWith("/discover") || p.startsWith("/match") },
+  { href: "/send", label: "Send", match: (p: string) => p.startsWith("/send") },
+  { href: "/sign-off", label: "Sign-off", match: (p: string) => p.startsWith("/sign-off") },
+  { href: "/collisions", label: "Collisions", match: (p: string) => p.startsWith("/collisions") },
   { href: "/raise-inbox", label: "Inbox", match: (p: string) => p.startsWith("/raise-inbox") },
   { href: "/raise-calendar", label: "Calendar", match: (p: string) => p.startsWith("/raise-calendar") || p.startsWith("/meeting") },
   { href: "/raise-excel", label: "Excel", match: (p: string) => p.startsWith("/raise-excel") },
-  { href: "/desk-review", label: "Review", match: (p: string) => p.startsWith("/desk-review") },
   { href: "/log", label: "Log", match: (p: string) => p.startsWith("/log") },
 ];
 

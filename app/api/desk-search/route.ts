@@ -25,41 +25,20 @@ export async function GET(request: NextRequest) {
   const looksEmail = q.includes("@") || q.includes(".");
 
   try {
-    const { createCoreClient, capitalConfigured } = await import("@/lib/supabase/capital");
+    const { capitalConfigured } = await import("@/lib/supabase/capital");
     if (capitalConfigured()) {
-      const core = createCoreClient();
-      const [bookFirms, bookPeople] = await Promise.all([
-        core
-          .from("firms")
-          .select("id, canonical_name, website_domain")
-          .ilike("canonical_name", like)
-          .limit(8),
-        core
-          .from("people")
-          .select("id, full_name, email, firms:firm_id ( canonical_name )")
-          .or(`full_name.ilike.${like},email.ilike.${like}`)
-          .limit(8),
-      ]);
-      const hits: { kind: "person" | "firm"; id: string; label: string; sub: string | null }[] = [];
-      for (const f of bookFirms.data ?? []) {
-        hits.push({
-          kind: "firm",
-          id: f.id,
-          label: f.canonical_name,
-          sub: f.website_domain,
+      const { searchBook } = await import("@/lib/capital/search-book");
+      const bookHits = await searchBook(q);
+      if (bookHits.length) {
+        return NextResponse.json({
+          hits: bookHits.map((h) => ({
+            kind: h.kind,
+            id: h.id,
+            label: h.label,
+            sub: h.sub || null,
+          })),
         });
       }
-      for (const p of bookPeople.data ?? []) {
-        const firm = p.firms as { canonical_name?: string } | { canonical_name?: string }[] | null;
-        const firmName = Array.isArray(firm) ? firm[0]?.canonical_name : firm?.canonical_name;
-        hits.push({
-          kind: "person",
-          id: p.id,
-          label: p.full_name ?? "—",
-          sub: [firmName, p.email].filter(Boolean).join(" · ") || null,
-        });
-      }
-      if (hits.length) return NextResponse.json({ hits });
     }
   } catch {
     /* fall through to encyclopaedia */

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { badgeClassForEmailState, badgeForEmailState } from "@/lib/capital/neverbounce";
 import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
+import { VerifyEmailButton } from "./person/VerifyEmailButton";
 
 export async function CapitalFirmPage({ id }: { id: string }) {
   const core = createCoreClient();
@@ -55,7 +57,11 @@ export async function CapitalFirmPage({ id }: { id: string }) {
                     <Link href={`/person/${p.id}`}>{p.full_name}</Link>
                   </td>
                   <td>{p.email ?? "—"}</td>
-                  <td>{p.email_state}</td>
+                  <td>
+                    <span className={badgeClassForEmailState(p.email_state)}>
+                      {badgeForEmailState(p.email_state)}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -133,12 +139,20 @@ export async function CapitalPersonPage({ id }: { id: string }) {
             {person.email ? ` · ${person.email}` : ""}
             {person.dnc ? " · Do not contact" : ""}.
           </p>
+          <p>
+            <span className={badgeClassForEmailState(person.email_state)}>
+              {badgeForEmailState(person.email_state)}
+            </span>
+          </p>
         </div>
-        {person.firm_id ? (
-          <Link className="btn" href={`/firm/${person.firm_id}`}>
-            Firm
-          </Link>
-        ) : null}
+        <div className="btn-row" style={{ margin: 0 }}>
+          {person.email ? <VerifyEmailButton personId={person.id} /> : null}
+          {person.firm_id ? (
+            <Link className="btn" href={`/firm/${person.firm_id}`}>
+              Firm
+            </Link>
+          ) : null}
+        </div>
       </div>
       {person.dnc ? (
         <div className="warn-banner">
@@ -155,6 +169,7 @@ export async function CapitalPersonPage({ id }: { id: string }) {
               return (
                 <li key={p.id}>
                   {md?.company_name} · {p.stage}
+                  {p.status_note ? ` — ${p.status_note}` : ""}
                 </li>
               );
             })}

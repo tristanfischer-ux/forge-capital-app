@@ -69,6 +69,8 @@ export async function getBookMeetingsAndReplies(): Promise<{
     const person = link.person ? personById[link.person] : null;
     const firmId = link.firm ?? person?.firm_id ?? null;
     const firm = firmId ? firmById[firmId] : null;
+    if (a.channel === "calendar_cancelled") continue;
+    if (a.channel === "calendar" && /\[CANCELLED\]|cancel+ed|cancelled/i.test(a.subject ?? "")) continue;
     if (a.channel === "calendar") {
       meetings.push({
         id: a.source_id || a.id,
