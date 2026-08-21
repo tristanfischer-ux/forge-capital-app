@@ -72,7 +72,53 @@ export async function recordBookActivity(opts: {
       hits.push(person);
     }
   }
-  if (hits.length === 0) return "unmatched";
+  if (hits.length === 0) {
+    const core = createCoreClient();
+    const domains = [
+      ...new Set(
+        extractEmails(opts.fromToBlob)
+          .map((e) => e.split("@")[1])
+          .filter(Boolean),
+      ),
+    ];
+    for (const d of domains) {
+      if (["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "yahoo.com"].includes(d))
+        continue;
+      const { data: firm } = await core
+        .from("firms")
+        .select("id")
+        .eq("website_domain", d)
+        .maybeSingle();
+      if (firm?.id) {
+        const { data: activity, error } = await engage
+          .from("activities")
+          .insert({
+            occurred_at: opts.occurredAt,
+            channel: opts.channel,
+            subject: (opts.subject ?? "").slice(0, 500),
+            snippet: opts.snippet ?? null,
+            source_id: opts.sourceId,
+            match_confidence: 0.6,
+            created_by: capitalActor(),
+          })
+          .select("id")
+          .maybeSingle();
+        if (error) {
+          if (/unique|duplicate/i.test(error.message)) return "exists";
+          throw new Error(error.message);
+        }
+        if (!activity?.id) return "skipped";
+        await engage.from("activity_links").insert({
+          activity_id: activity.id,
+          entity_type: "firm",
+          entity_id: firm.id,
+          link_source: "auto",
+        });
+        return "inserted";
+      }
+    }
+    return "unmatched";
+  }
 
   const { data: activity, error } = await engage
     .from("activities")
