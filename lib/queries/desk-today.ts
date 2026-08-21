@@ -1,3 +1,4 @@
+import { getBookMeetingsAndReplies } from "@/lib/queries/capital-desk";
 import { lookupRegistry, roleLabel } from "@/lib/desk/identity";
 import { skipRaiseName } from "@/lib/desk/status-map";
 import {
@@ -15,7 +16,7 @@ export interface DeskMeeting {
   title: string | null;
   summary: string | null;
   notes?: string | null;
-  partner_id: number | null;
+  partner_id: number | string | null;
   partner_name: string | null;
   firm_name: string | null;
   campaign_name: string | null;
@@ -34,7 +35,7 @@ export interface DeskReply {
   summary: string | null;
   preview?: string | null;
   from?: string | null;
-  partner_id: number | null;
+  partner_id: number | string | null;
   partner_name: string | null;
   firm_name: string | null;
   campaign_name: string | null;
@@ -310,9 +311,13 @@ export async function getDeskToday(): Promise<DeskToday> {
   for (const [pid, v] of byPartner) blockNames.set(pid, v.name);
 
   const cache = await readDeskWeekCache();
-  const repliesMerged = mergeReplies(replies, cache.replies);
+  const book = await getBookMeetingsAndReplies();
+  const repliesMerged = mergeReplies(
+    mergeReplies(replies, book.replies),
+    cache.replies,
+  );
   const meetingsMerged = applyCancellations(
-    mergeMeetings(meetings, cache.meetings),
+    mergeMeetings(mergeMeetings(meetings, book.meetings), cache.meetings),
     repliesMerged,
   ).map((m) => {
     const role = lookupRegistry({

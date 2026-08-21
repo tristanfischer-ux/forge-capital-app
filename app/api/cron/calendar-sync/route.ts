@@ -83,11 +83,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const fromIso = tokenRow.calendar_cursor
+    let fromIso = tokenRow.calendar_cursor
       ? new Date(
           new Date(tokenRow.calendar_cursor as string).getTime() - 10 * 60_000,
         ).toISOString()
       : new Date(Date.now() - 48 * 3600_000).toISOString();
+    if (bookPeople.size > 0) {
+      const { capitalConfigured, createEngageClient } = await import(
+        "@/lib/supabase/capital"
+      );
+      if (capitalConfigured()) {
+        const engage = createEngageClient();
+        const { count } = await engage
+          .from("activities")
+          .select("*", { count: "exact", head: true })
+          .eq("channel", "calendar");
+        if (!count) {
+          fromIso = new Date(Date.now() - 14 * 86400000).toISOString();
+        }
+      }
+    }
 
     let events: Record<string, unknown>[] = [];
     try {

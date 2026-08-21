@@ -267,10 +267,26 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    // Cursor: previous sync timestamp, fallback to BACKFILL_DAYS ago
-    const cursorMs = tokenRow.last_gmail_sync_at
+    // Cursor: previous sync timestamp, fallback to BACKFILL_DAYS ago.
+    // If the shared book has no activities yet, ignore the old-project
+    // cursor and pull the backfill window so mail actually lands in Corpus.
+    let cursorMs = tokenRow.last_gmail_sync_at
       ? new Date(tokenRow.last_gmail_sync_at as string).getTime()
       : Date.now() - BACKFILL_DAYS * 24 * 60 * 60 * 1000;
+    if (bookPeople.size > 0) {
+      const { createEngageClient, capitalConfigured } = await import(
+        "@/lib/supabase/capital"
+      );
+      if (capitalConfigured()) {
+        const engage = createEngageClient();
+        const { count } = await engage
+          .from("activities")
+          .select("*", { count: "exact", head: true });
+        if (!count) {
+          cursorMs = Date.now() - BACKFILL_DAYS * 24 * 60 * 60 * 1000;
+        }
+      }
+    }
     const afterEpoch = Math.floor(cursorMs / 1000);
     const runStartedAt = new Date();
 

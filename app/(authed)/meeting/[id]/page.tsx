@@ -44,7 +44,8 @@ export default async function MeetingPage({
   const briefs = loadMeetingBriefs();
   const filed = briefs[meeting.id] ?? briefs[raw] ?? null;
   const partnerId = meeting.partner_id ?? filed?.partner_id ?? null;
-  const partner = partnerId ? await getPartnerProfile(partnerId) : null;
+  const partner =
+    typeof partnerId === "number" ? await getPartnerProfile(partnerId) : null;
   const raises = (partner?.campaign_links ?? []).filter(
     (l) => !skipRaiseName(l.campaign_name),
   );
