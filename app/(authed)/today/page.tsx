@@ -126,7 +126,9 @@ export default async function TodayPage({
           </p>
         </div>
         <div className="btn-row" style={{ margin: 0 }}>
-          <Link href="/desk-review" className="btn">Review queue</Link>
+          <Link href="/chasers?code=SS&days=10" className="btn">Chasers</Link>
+          <Link href="/notes" className="btn">Call notes</Link>
+          <Link href="/verify-book" className="btn">Verify</Link>
           <Link href="/raise-excel" className="btn">Excel snapshot</Link>
         </div>
       </div>

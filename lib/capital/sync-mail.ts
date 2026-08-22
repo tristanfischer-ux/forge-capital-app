@@ -221,6 +221,14 @@ export async function recordBookActivity(opts: {
   if (links.length) {
     await engage.from("activity_links").insert(links);
   }
+  if (opts.channel === "email_out" || opts.channel === "email_in") {
+    for (const p of hits) {
+      await engage
+        .from("participations")
+        .update({ latest_touch: opts.occurredAt })
+        .eq("person_id", p.id);
+    }
+  }
   return "inserted";
 }
 

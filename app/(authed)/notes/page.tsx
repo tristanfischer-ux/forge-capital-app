@@ -1,0 +1,31 @@
+import { listGeminiNotes } from "@/lib/capital/gemini-notes";
+import { NotesClient } from "./NotesClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function NotesPage() {
+  let files: { id: string; name: string; modified: string }[] = [];
+  let needsDriveScope = true;
+  try {
+    const peek = await listGeminiNotes();
+    files = peek.files;
+    needsDriveScope = peek.needsDriveScope;
+  } catch {
+    needsDriveScope = true;
+  }
+  return (
+    <div className="wrap">
+      <div className="page-head">
+        <div>
+          <h1>Call notes</h1>
+          <p>
+            Dump a transcript. Import Gemini Meet notes. The desk learns the
+            investor and the company, then suggests thank-you and follow-up
+            drafts. Nothing sends.
+          </p>
+        </div>
+      </div>
+      <NotesClient geminiFiles={files} needsDriveScope={needsDriveScope} />
+    </div>
+  );
+}

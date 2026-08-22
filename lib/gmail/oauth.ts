@@ -38,6 +38,8 @@ export const GMAIL_SCOPES = [
   // reconnect to upgrade their scope; the ingest script skips rows
   // where scope is insufficient.
   "https://www.googleapis.com/auth/calendar.readonly",
+  // Gemini Meet notes live as Google Docs. Read-only. Never write Drive.
+  "https://www.googleapis.com/auth/drive.readonly",
 ];
 export const GMAIL_SCOPE = GMAIL_SCOPES.join(" ");
 
