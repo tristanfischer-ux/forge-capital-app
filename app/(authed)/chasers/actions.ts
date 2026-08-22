@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireTristan } from "@/lib/capital/assert-user";
 import { listChasers } from "@/lib/capital/chasers";
 import { capitalActor, createCoreClient, createEngageClient } from "@/lib/supabase/capital";
-import type { MandateCode } from "@/lib/capital/mandates";
+import { mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
 import { composeChaserDraft } from "@/lib/capital/voice";
 import { createGmailDraft } from "@/lib/gmail/create-draft";
 
@@ -46,6 +46,7 @@ export async function createChaserDraft(input: {
       to: person.email,
       subject: composed.subject,
       body: composed.body,
+      cc: mandateDraftCc(input.mandateCode),
     });
     const { data: activity } = await engage
       .from("activities")

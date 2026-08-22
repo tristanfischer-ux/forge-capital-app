@@ -1,4 +1,4 @@
-import { MANDATE_LABEL, type MandateCode } from "@/lib/capital/mandates";
+import { MANDATE_LABEL, mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
 import { capitalActor, createCoreClient, createEngageClient } from "@/lib/supabase/capital";
 import { searchBook } from "@/lib/capital/search-book";
 import { composeCallFollowUpDraft, composeThankYouDraft } from "@/lib/capital/voice";
@@ -37,6 +37,9 @@ function detectMandates(blob: string): MandateCode[] {
   if (/\bcasper\b/i.test(blob)) hits.add("CA");
   if (/\barbitrage\b|\bnasdaq\b/i.test(blob)) hits.add("US");
   if (/\bhooley\b/i.test(blob)) hits.add("HO");
+  if (/\byuri\b|\byurigravity\b|\brandom positioning machine\b|\brpm\b/i.test(blob)) {
+    hits.add("YU");
+  }
   return [...hits];
 }
 
@@ -64,7 +67,7 @@ export async function extractCallInsights(
         {
           role: "system",
           content:
-            "Extract fundraising call notes as JSON. British spelling. Keys: summary (5-8 lines), personName, firmName, firmFacts (string[] investor thesis/preferences), investorFacts (string[] about the person), pitchNotes (object mandate code SS|OD|SK|FF|PA|CA|US|HO -> what to change in that company's pitch), nextSteps (string[]). Never invent emails. Empty arrays if unknown.",
+            "Extract call notes as JSON. British spelling. Keys: summary (5-8 lines), personName, firmName, firmFacts (string[] about the organisation), investorFacts (string[] about the person), pitchNotes (object mandate code SS|OD|SK|FF|PA|CA|US|HO|YU -> for YU: RPM product/customer learnings, not a raise pitch; for others: what to change in that company's pitch), nextSteps (string[]). Never invent emails. Empty arrays if unknown.",
         },
         { role: "user", content: `${title ?? ""}\n\n${blob.slice(0, 12000)}` },
       ],
@@ -106,7 +109,14 @@ export type NotesCommitResult = {
   activityId: string | null;
   personId: string | null;
   firmId: string | null;
-  drafts: { kind: "thank-you" | "follow-up"; mandate?: MandateCode; to: string; subject: string; body: string }[];
+  drafts: {
+    kind: "thank-you" | "follow-up";
+    mandate?: MandateCode;
+    to: string;
+    subject: string;
+    body: string;
+    cc?: string[];
+  }[];
 };
 
 export async function commitCallNotes(opts: {
@@ -247,7 +257,12 @@ export async function commitCallNotes(opts: {
       mandateCodes: insights.mandateCodes,
       callSummary: insights.summary,
     });
-    drafts.push({ kind: "thank-you", to: person.email, ...thank });
+    drafts.push({
+      kind: "thank-you",
+      to: person.email,
+      ...thank,
+      cc: insights.mandateCodes.includes("YU") ? mandateDraftCc("YU") : undefined,
+    });
     for (const code of insights.mandateCodes) {
       const follow = composeCallFollowUpDraft({
         personName: person.full_name ?? insights.personName ?? "",
@@ -255,7 +270,13 @@ export async function commitCallNotes(opts: {
         mandateCode: code,
         nextStep: insights.nextSteps[0] ?? insights.pitchNotes[code] ?? null,
       });
-      drafts.push({ kind: "follow-up", mandate: code, to: person.email, ...follow });
+      drafts.push({
+        kind: "follow-up",
+        mandate: code,
+        to: person.email,
+        ...follow,
+        cc: mandateDraftCc(code),
+      });
     }
   }
   return { activityId, personId, firmId, drafts };

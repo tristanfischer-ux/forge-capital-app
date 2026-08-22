@@ -20,8 +20,8 @@ export default async function NotesPage() {
           <h1>Call notes</h1>
           <p>
             Dump a transcript. Import Gemini Meet notes. The desk learns the
-            investor and the company, then suggests thank-you and follow-up
-            drafts. Nothing sends.
+            person and the company — investors and Yuri RPM customers — then
+            suggests thank-you and follow-up drafts. Nothing sends.
           </p>
         </div>
       </div>

@@ -34,7 +34,7 @@ export async function listChasers(opts: {
     .select("id, person_id, firm_id, stage, first_sent, latest_touch")
     .eq("mandate_id", mandate.id)
     .not("person_id", "is", null)
-    .in("stage", ["approved", "approached", "responded", "meeting"])
+    .in("stage", ["research", "approved", "approached", "responded", "meeting"])
     .limit(400);
   if (!parts?.length) return [];
 

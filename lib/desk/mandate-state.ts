@@ -11,12 +11,13 @@ export type MandateKey =
   | "fishfrom"
   | "hooley"
   | "panatere"
-  | "ned-mps";
+  | "ned-mps"
+  | "yuri";
 
 export interface MandateStanding {
   key: MandateKey;
   name: string;
-  kind: "raise" | "ned";
+  kind: "raise" | "ned" | "customer";
   ask: string;
   principal: string;
   doNotSay: string[];
@@ -33,7 +34,7 @@ export interface MandateUpdate {
 export interface MandateBrief {
   key: MandateKey;
   name: string;
-  kind: "raise" | "ned";
+  kind: "raise" | "ned" | "customer";
   namedByThem: boolean;
   ask: string;
   principal: string;
@@ -113,6 +114,19 @@ export const MANDATE_STANDING: MandateStanding[] = [
     doNotSay: ["Do not open a fundraise pitch"],
     liveQuestion: "What Gareth wants from a NED conversation, and whether a further meeting is useful.",
   },
+  {
+    key: "yuri",
+    name: "Yuri — RPM customers",
+    kind: "customer",
+    ask: "Voice-of-customer on the RPM — not a raise",
+    principal: "Maria Birlem",
+    doNotSay: [
+      "Do not pitch a fundraise to RPM labs",
+      "Do not invent a microgravity link",
+      "Do not contact the university that wanted to sue until Maria flags it",
+    ],
+    liveQuestion: "How they use the RPM, and where the science and the hardware should go next.",
+  },
 ];
 
 /** Dated facts we actually have (mail, calendar, principals). Overlay file may add more. */
@@ -159,6 +173,18 @@ const SEEDED_UPDATES: MandateUpdate[] = [
     fact: "Gareth offered Wednesday–Friday; you booked Wednesday 19 August 09:30 Teams.",
     source: "Gmail · 14 Aug 2026 · Gareth ↔ you",
   },
+  {
+    key: "yuri",
+    as_of: "2026-08-21",
+    fact: "Marcelo Vazquez (Canadian Nuclear Labs) — strong radiation×microgravity champion; non-metallic RPM parts so radiation fields are not distorted; rental/subscription to get labs onto the kit.",
+    source: "Gemini notes · 21 Aug 2026 · Yuri RPM / Marcelo Vazquez",
+  },
+  {
+    key: "yuri",
+    as_of: "2026-08-13",
+    fact: "Jamie Foster (University of Florida) — outstanding VoC; explaining the algorithm's value could ~5× the market; ~6-year user, needs a second unit. Intros to Angelini and Menezes sent the same day.",
+    source: "Gemini notes + Gmail · 13 Aug 2026",
+  },
 ];
 
 const HINTS: { key: MandateKey; re: RegExp }[] = [
@@ -169,6 +195,7 @@ const HINTS: { key: MandateKey; re: RegExp }[] = [
   { key: "hooley", re: /hooley|avealto|airship|e-band|steerable aperture/i },
   { key: "panatere", re: /panatere/i },
   { key: "ned-mps", re: /gareth stockman|pelaflex|aquamarine|marine power/i },
+  { key: "yuri", re: /\byuri\b|yurigravity|\brpm\b|random positioning|marcelo vazquez|jamie foster/i },
 ];
 
 function loadOverlayUpdates(): MandateUpdate[] {

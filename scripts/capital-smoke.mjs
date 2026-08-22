@@ -57,7 +57,7 @@ const { data: mandates, error: eMand } = await engage
   .from("mandates")
   .select("code, company_name, status");
 const codes = (mandates ?? []).map((m) => m.code).sort().join(" ");
-const EXPECTED = "CA FF HO OD PA SK SS US";
+const EXPECTED = "CA FF HO OD PA SK SS US YU";
 check("mandate codes", !eMand && codes === EXPECTED, eMand?.message ?? codes);
 
 // ---------- Gore Street resolves via alias, creates no firm ----------

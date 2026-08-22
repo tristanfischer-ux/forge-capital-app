@@ -55,6 +55,14 @@ export function lintDraft(opts: {
       message: "SkySails launch-from-ship photos are NDA — never store, never attach, never email.",
     });
   }
+  if (opts.mandateCode === "YU") {
+    if (/\b(its raise|with its raise|funds*its raise|funds*a raise)\b/i.test(blob) || /\bfundrais(e|ing)\b/i.test(blob)) {
+      issues.push({
+        severity: "block",
+        message: "Yuri is customer intelligence, not a raise. Do not pitch a fundraise to RPM labs.",
+      });
+    }
+  }
   if (opts.warmRequired && !opts.openerPresent) {
     issues.push({
       severity: "block",

@@ -103,6 +103,7 @@ export interface CreateDraftInput {
   to: string;
   subject: string;
   body: string;
+  cc?: string[];
   attachments?: EmailAttachment[];
   /** When provided, tracking pixel + click wrappers are injected into the
    *  email body. Must be the UUID of the campaign_partner row so open/click
@@ -163,6 +164,7 @@ function encodeRfc2822Message(
   body: string,
   attachments?: EmailAttachment[],
   campaignPartnerId?: string,
+  cc?: string[],
 ): string {
   const subjectHeader = /[^\x20-\x7e]/.test(subject)
     ? `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`
@@ -170,6 +172,7 @@ function encodeRfc2822Message(
 
   const headers = [
     `To: ${to}`,
+    ...(cc?.length ? [`Cc: ${cc.join(", ")}`] : []),
     `Subject: ${subjectHeader}`,
     `MIME-Version: 1.0`,
   ];
@@ -229,7 +232,14 @@ function encodeRfc2822Message(
 
 export async function createGmailDraft(input: CreateDraftInput): Promise<CreateDraftResult> {
   const accessToken = await getAccessTokenForCurrentUser();
-  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments, input.campaignPartnerId);
+  const raw = encodeRfc2822Message(
+    input.to,
+    input.subject,
+    input.body,
+    input.attachments,
+    input.campaignPartnerId,
+    input.cc,
+  );
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: {
@@ -282,7 +292,14 @@ export async function sendGmailMessage(
   }
 
   const accessToken = await getAccessTokenForCurrentUser();
-  const raw = encodeRfc2822Message(input.to, input.subject, input.body, input.attachments, input.campaignPartnerId);
+  const raw = encodeRfc2822Message(
+    input.to,
+    input.subject,
+    input.body,
+    input.attachments,
+    input.campaignPartnerId,
+    input.cc,
+  );
   const res = await fetch(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
     {

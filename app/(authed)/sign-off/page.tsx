@@ -22,7 +22,7 @@ export default async function SignOffPage({
   if (!mandate) {
     return (
       <div className="wrap">
-        <h1>Unknown raise</h1>
+        <h1>Unknown programme</h1>
       </div>
     );
   }

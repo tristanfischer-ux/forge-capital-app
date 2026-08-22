@@ -1,17 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-const MANDATES = [
-  { code: "SS", label: "Space Solar" },
-  { code: "SK", label: "SkySails" },
-  { code: "FF", label: "FishFrom" },
-  { code: "PA", label: "Panatere" },
-  { code: "OD", label: "Odysseus" },
-  { code: "CA", label: "Casper" },
-  { code: "US", label: "US Arbitrage" },
-  { code: "HO", label: "Hooley RF" },
-];
+import { MANDATE_OPTIONS } from "@/lib/capital/mandates";
 
 type Hit = {
   kind: "firm" | "person";
@@ -55,8 +45,8 @@ export function CapitalDiscover() {
     }
     setMsg(
       body.already
-        ? "Already on that raise."
-        : `On the raise.${body.notes ? " Constraint: " + body.notes.slice(0, 180) : ""}`,
+        ? "Already on that programme."
+        : `On the list.${body.notes ? " Constraint: " + body.notes.slice(0, 180) : ""}`,
     );
   }
 
@@ -67,7 +57,7 @@ export function CapitalDiscover() {
           <h1>Discover — the shared book</h1>
           <p>
             Search the shared book — names, emails, near-miss spellings.
-            Add someone to a raise. Nothing sends.
+            Add someone to a raise or a customer programme. Nothing sends.
           </p>
         </div>
       </div>
@@ -80,15 +70,16 @@ export function CapitalDiscover() {
           placeholder="Gore Street, Lowercarbon, josh.wolfe@"
           style={{ width: "100%", fontSize: 16, padding: 10, margin: "4px 0 10px" }}
         />
-        <label className="faint">Add to raise</label>
+        <label className="faint">Add to programme</label>
         <select
           value={mandate}
           onChange={(e) => setMandate(e.target.value)}
           style={{ width: "100%", fontSize: 16, padding: 10, margin: "4px 0 10px" }}
         >
-          {MANDATES.map((m) => (
+          {MANDATE_OPTIONS.map((m) => (
             <option key={m.code} value={m.code}>
               {m.label}
+              {m.kind === "customer" ? " (customers)" : ""}
             </option>
           ))}
         </select>

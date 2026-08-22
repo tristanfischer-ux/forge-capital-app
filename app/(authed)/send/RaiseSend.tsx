@@ -17,7 +17,7 @@ export async function RaiseSend({ code }: { code: string }) {
   if (!mandate) {
     return (
       <div className="wrap">
-        <h1>Unknown raise {code}</h1>
+        <h1>Unknown programme {code}</h1>
         <Link href="/send">Back</Link>
       </div>
     );

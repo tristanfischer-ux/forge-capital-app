@@ -23,8 +23,8 @@ export default async function SendIndexPage() {
         <div>
           <h1>Send — from the shared book</h1>
           <p>
-            Pick a raise. Drafts go to Gmail drafts. Nothing auto-sends.
-            The old encyclopaedia campaign flow is not used here.
+            Pick a raise or customer programme. Drafts go to Gmail drafts.
+            Nothing auto-sends. Yuri is RPM customer intelligence, not a fundraise.
           </p>
         </div>
       </div>

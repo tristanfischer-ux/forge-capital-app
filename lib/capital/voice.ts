@@ -1,6 +1,7 @@
 import {
   CALENDLY_URL,
   MANDATE_LABEL,
+  isCustomerMandate,
   TRISTAN_EMAIL,
   TRISTAN_LINKEDIN,
   TRISTAN_MOBILE,
@@ -28,6 +29,9 @@ export function composeOutreachDraft(opts: {
 }): { subject: string; body: string } {
   const first = firstName(opts.personName) || opts.personName;
   const company = MANDATE_LABEL[opts.mandateCode];
+  if (isCustomerMandate(opts.mandateCode)) {
+    return composeYuriOutreach(opts, first);
+  }
   const ask = (opts.askSummary ?? "").trim();
   const subject = opts.warm
     ? `${company} — following up`
@@ -84,7 +88,18 @@ export function composeOutreachDraft(opts: {
   return { subject, body };
 }
 
-function signOffBlock(): string {
+function signOffBlock(kind: "raise" | "yuri" = "raise"): string {
+  if (kind === "yuri") {
+    return [
+      "Best wishes,",
+      "Tristan",
+      "",
+      "Tristan Fischer · Strategic Advisor, Yuri",
+      TRISTAN_EMAIL,
+      TRISTAN_MOBILE,
+      TRISTAN_LINKEDIN,
+    ].join("\n");
+  }
   return [
     "Best regards,",
     "Tristan Fischer",
@@ -93,6 +108,44 @@ function signOffBlock(): string {
     TRISTAN_LINKEDIN,
     `Thought pieces: ${TRISTAN_THOUGHTS}`,
   ].join("\n");
+}
+
+type OutreachOpts = Parameters<typeof composeOutreachDraft>[0];
+
+/** Proven RPM VoC template. Never a raise pitch. */
+function composeYuriOutreach(opts: OutreachOpts, first: string): { subject: string; body: string } {
+  const lab = (opts.firmName || "your lab").trim();
+  const custom = (opts.opener ?? "").trim();
+  let opener: string;
+  if (opts.warm) {
+    opener =
+      custom ||
+      `Good to be back in touch after ${opts.lastOccurredAt ? opts.lastOccurredAt.slice(0, 10) : "our last exchange"}${
+        opts.lastSubject ? ` about ${opts.lastSubject.replace(/^re:\s*/i, "")}` : ""
+      }.`;
+  } else {
+    opener =
+      custom ||
+      `I'm Tristan Fischer, strategic advisor to the Yuri team, who supplied the RPM (Random Positioning Machine) ${lab} uses.`;
+  }
+  const subject = opts.warm
+    ? `Re: ${opts.lastSubject?.replace(/^re:\s*/i, "") || "Yuri & the RPM"}`
+    : "Yuri & the RPM — a short call?";
+  const body = [
+    `Dear ${first},`,
+    "",
+    opener,
+    "",
+    "I'm speaking with RPM groups to understand how they use the machine and where the science, and the hardware, could go next. Might we find 30 minutes for a call? I'll happily work around you.",
+    "",
+    `My calendar's here if it's easy to grab a slot: ${CALENDLY_URL} — or suggest a time and I'll send an invite.`,
+    "",
+    "I've copied Maria, Christian and Daniel at Yuri.",
+    "",
+    signOffBlock("yuri"),
+    "",
+  ].join("\n");
+  return { subject, body };
 }
 
 /** Short, polite chase of an earlier email. Never a second cold bio. */
@@ -105,6 +158,29 @@ export function composeChaserDraft(opts: {
 }): { subject: string; body: string } {
   const first = firstName(opts.personName) || opts.personName;
   const company = MANDATE_LABEL[opts.mandateCode];
+  if (isCustomerMandate(opts.mandateCode)) {
+    const when = opts.lastOccurredAt
+      ? new Date(opts.lastOccurredAt).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "long",
+        })
+      : "recently";
+    const subject = `Re: ${opts.lastSubject?.replace(/^re:\s*/i, "") || "Yuri & the RPM"}`;
+    const body = [
+      `Dear ${first},`,
+      "",
+      `I wrote on ${when} about Yuri's RPM. I know inboxes are busy — I wanted to reconnect briefly.`,
+      "",
+      "Might we still find 30 minutes for a call? I'll happily work around you.",
+      CALENDLY_URL,
+      "",
+      "I've copied Maria, Christian and Daniel at Yuri.",
+      "",
+      signOffBlock("yuri"),
+      "",
+    ].join("\n");
+    return { subject, body };
+  }
   const when = opts.lastOccurredAt
     ? new Date(opts.lastOccurredAt).toLocaleDateString("en-GB", {
         day: "numeric",
@@ -136,6 +212,20 @@ export function composeThankYouDraft(opts: {
   callSummary?: string | null;
 }): { subject: string; body: string } {
   const first = firstName(opts.personName) || opts.personName;
+  if (opts.mandateCodes.includes("YU")) {
+    const recap = (opts.callSummary ?? "").trim().slice(0, 400);
+    const body = [
+      `Dear ${first},`,
+      "",
+      "Thank you for the time today — that was a useful conversation on the RPM.",
+      recap ? `\n${recap}\n` : "",
+      "I've copied Maria, Christian and Daniel at Yuri.",
+      "",
+      signOffBlock("yuri"),
+      "",
+    ].join("\n");
+    return { subject: "Thank you — Yuri & the RPM", body };
+  }
   const raises = opts.mandateCodes.map((c) => MANDATE_LABEL[c]).join(" and ");
   const subject = `Thank you — ${opts.firmName}`;
   const recap = (opts.callSummary ?? "").trim().slice(0, 400);
@@ -161,6 +251,23 @@ export function composeCallFollowUpDraft(opts: {
 }): { subject: string; body: string } {
   const first = firstName(opts.personName) || opts.personName;
   const company = MANDATE_LABEL[opts.mandateCode];
+  if (isCustomerMandate(opts.mandateCode)) {
+    const step = (opts.nextStep ?? "").trim();
+    const body = [
+      `Dear ${first},`,
+      "",
+      "Thank you again for today. As discussed on the RPM:",
+      step ? `\n${step}\n` : "",
+      "Happy to pick this up whenever it is convenient.",
+      CALENDLY_URL,
+      "",
+      "I've copied Maria, Christian and Daniel at Yuri.",
+      "",
+      signOffBlock("yuri"),
+      "",
+    ].join("\n");
+    return { subject: "Yuri & the RPM — following our call", body };
+  }
   const step = (opts.nextStep ?? "").trim();
   const subject = `${company} — following our call`;
   const body = [

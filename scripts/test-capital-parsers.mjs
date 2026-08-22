@@ -12,12 +12,22 @@ function load(path) {
 const verdictSrc = load("lib/capital/verdict.ts");
 const ruleSrc = load("lib/capital/rulebook.ts");
 const nbSrc = load("lib/capital/neverbounce.ts");
+const voiceSrc = load("lib/capital/voice.ts");
+const mandateSrc = load("lib/capital/mandates.ts");
 assert.match(verdictSrc, /parseVerdictReply/);
 assert.match(ruleSrc, /\\bprimes\?\\b/);
 assert.match(nbSrc, /case "catchall":/);
 assert.match(nbSrc, /return "inferred"/);
 assert.match(nbSrc, /case "valid":/);
 assert.match(nbSrc, /return "verified"/);
+assert.match(mandateSrc, /YU: "Yuri"/);
+assert.match(mandateSrc, /YU: "customer"/);
+assert.match(voiceSrc, /Yuri & the RPM — a short call\?/);
+assert.match(voiceSrc, /I've copied Maria, Christian and Daniel at Yuri/);
+assert.match(ruleSrc, /Yuri is customer intelligence, not a raise/);
+const yuriFn = voiceSrc.indexOf("function composeYuriOutreach");
+assert.ok(yuriFn > 0);
+assert.doesNotMatch(voiceSrc.slice(yuriFn, yuriFn + 1600), /with its raise/);
 
 function parseVerdictReply(text, lineCount) {
   const LINE = /^\s*(\d+)\s*(?:[:=.)\-]\s*|\s+)(.*)$/;

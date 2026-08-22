@@ -25,13 +25,13 @@ export async function saveCallNotes(input: { text: string; title?: string }) {
 }
 
 export async function createSuggestedDrafts(
-  drafts: { to: string; subject: string; body: string }[],
+  drafts: { to: string; subject: string; body: string; cc?: string[] }[],
 ): Promise<{ ok: true; created: number } | { ok: false; error: string }> {
   await requireTristan();
   let created = 0;
   try {
     for (const d of drafts) {
-      await createGmailDraft({ to: d.to, subject: d.subject, body: d.body });
+      await createGmailDraft({ to: d.to, subject: d.subject, body: d.body, cc: d.cc });
       created++;
     }
     return { ok: true, created };

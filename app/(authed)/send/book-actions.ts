@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireTristan } from "@/lib/capital/assert-user";
 import { evaluateDraftGate } from "@/lib/capital/draft-gate";
 import { capitalActor, createCoreClient, createEngageClient } from "@/lib/supabase/capital";
-import type { MandateCode } from "@/lib/capital/mandates";
+import { mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
 import { verifyPersonEmail } from "@/lib/capital/neverbounce";
 import { composeOutreachDraft } from "@/lib/capital/voice";
 import { createGmailDraft } from "@/lib/gmail/create-draft";
@@ -83,6 +83,7 @@ export async function createBookDraft(input: {
       to: person.email,
       subject: composed.subject,
       body: composed.body,
+      cc: mandateDraftCc(code),
     });
     const gmailId = draft.id;
     const gmailUrl = `https://mail.google.com/mail/u/0/#drafts?compose=${encodeURIComponent(draft.message?.id ?? gmailId)}`;
