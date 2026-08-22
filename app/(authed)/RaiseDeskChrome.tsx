@@ -23,6 +23,7 @@ const PILLS = [
     match: (p: string) => p.startsWith("/call") || p.startsWith("/meeting"),
   },
   { href: "/chasers", label: "Chasers", match: (p: string) => p.startsWith("/chasers") },
+  { href: "/outreach", label: "Outreach", match: (p: string) => p.startsWith("/outreach") },
 ];
 
 export function RaiseDeskChrome({ children }: { children: ReactNode }) {

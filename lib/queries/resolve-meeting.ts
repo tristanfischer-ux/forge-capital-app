@@ -38,6 +38,7 @@ export type MeetingBook = {
   personEmailState: string | null;
   personDnc: boolean;
   personNotes: string | null;
+  linkedinUrl: string | null;
   firmId: string | null;
   firmName: string | null;
   firmDomain: string | null;
@@ -59,6 +60,7 @@ const EMPTY: MeetingBook = {
   personEmailState: null,
   personDnc: false,
   personNotes: null,
+  linkedinUrl: null,
   firmId: null,
   firmName: null,
   firmDomain: null,
@@ -81,6 +83,7 @@ type PersonRow = {
   role_title: string | null;
   firm_id: string | null;
   notes: string | null;
+  linkedin_url: string | null;
 };
 
 export function displayPersonName(name: string | null | undefined, email?: string | null): string {
@@ -132,7 +135,7 @@ export async function resolveMeetingBook(meeting: DeskMeeting): Promise<MeetingB
   for (const email of emails) {
     const { data } = await core
       .from("people")
-      .select("id, full_name, email, email_state, dnc, role_title, firm_id, notes")
+      .select("id, full_name, email, email_state, dnc, role_title, firm_id, notes, linkedin_url")
       .ilike("email", email)
       .maybeSingle();
     if (data?.id) {
@@ -149,7 +152,7 @@ export async function resolveMeetingBook(meeting: DeskMeeting): Promise<MeetingB
     if (top && top.score >= 60 && (!second || top.score - second.score >= 15)) {
       const { data } = await core
         .from("people")
-        .select("id, full_name, email, email_state, dnc, role_title, firm_id, notes")
+        .select("id, full_name, email, email_state, dnc, role_title, firm_id, notes, linkedin_url")
         .eq("id", top.id)
         .maybeSingle();
       if (data?.id) person = data as PersonRow;
@@ -240,6 +243,7 @@ export async function resolveMeetingBook(meeting: DeskMeeting): Promise<MeetingB
     personEmailState: person?.email_state ?? null,
     personDnc: Boolean(person?.dnc),
     personNotes: clip(person?.notes, 420),
+    linkedinUrl: person?.linkedin_url ?? null,
     firmId,
     firmName: firmName ?? firmHint,
     firmDomain,

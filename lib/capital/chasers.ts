@@ -164,7 +164,7 @@ export async function listNeverWritten(): Promise<ChaserRow[]> {
   return nested.flat().sort((a, b) => a.personName.localeCompare(b.personName));
 }
 
-async function listNeverWrittenOn(mandateCode: MandateCode): Promise<ChaserRow[]> {
+export async function listNeverWrittenOn(mandateCode: MandateCode): Promise<ChaserRow[]> {
   const engage = createEngageClient();
   const core = createCoreClient();
   const { data: mandate } = await engage.from("mandates").select("id").eq("code", mandateCode).maybeSingle();

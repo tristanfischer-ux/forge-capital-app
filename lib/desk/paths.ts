@@ -16,6 +16,7 @@ export const DESK_PREFIXES = [
   "/desk-review",
   "/meeting",
   "/call",
+  "/outreach",
   "/log",
 ] as const;
 

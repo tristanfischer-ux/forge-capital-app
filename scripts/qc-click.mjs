@@ -12,6 +12,7 @@ const SEEDS = [
   "/today",
   "/call",
   "/chasers",
+  "/outreach",
   "/chasers?days=10",
   "/send",
   "/send/FF",

@@ -13,6 +13,7 @@ import {
   personBlurb,
   resolveMeetingBook,
 } from "@/lib/queries/resolve-meeting";
+import { linkedInBlurb, linkedInBriefForPerson } from "@/lib/capital/person-linkedin";
 import { inferMandatesForMeeting } from "@/lib/desk/mandate-state";
 import { CallDrafts } from "../CallDrafts";
 import { MeetingNotes } from "../../MeetingNotes";
@@ -66,6 +67,16 @@ export default async function MeetingPage({
   }
 
   const book = await resolveMeetingBook(meeting);
+  const linkedIn = await linkedInBriefForPerson({
+    personId: book.personId,
+    name: displayPersonName(book.personName, book.personEmail) || book.personName,
+    email: book.personEmail,
+    firmName: book.firmName,
+    firmDomain: book.firmDomain,
+    roleTitle: book.personRole,
+    notes: book.personNotes,
+    linkedinUrl: book.linkedinUrl,
+  });
   const correspondence = await loadLiveCorrespondence({
     emails: [
       ...book.searchedEmails,
@@ -158,6 +169,17 @@ export default async function MeetingPage({
               )}
             </h2>
             <p>{firmBlurb(book)}</p>
+          </div>
+          <div className="blurb">
+            <h2>LinkedIn</h2>
+            <p>{linkedInBlurb(linkedIn)}</p>
+            {linkedIn.url ? (
+              <p className="sub" style={{ paddingLeft: 0, marginTop: 8 }}>
+                <a href={linkedIn.url} target="_blank" rel="noreferrer">
+                  Open profile
+                </a>
+              </p>
+            ) : null}
           </div>
           <div className="blurb">
             <h2>What we have said so far</h2>

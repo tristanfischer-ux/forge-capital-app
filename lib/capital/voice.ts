@@ -15,6 +15,9 @@ export function firstName(fullName: string | null | undefined): string {
   return n.split(/\s+/)[0] ?? "";
 }
 
+const COLD_BIO =
+  "My name is Tristan Fischer. I have spent twenty-five years building, financing and scaling capital-intensive businesses — from Citigroup's project finance team, where I worked on US$5 billion of infrastructure transactions, through Shell Technology Ventures, to founding Lumicity as a solar and wind developer and serving as Executive Chairman of C-Capture, a carbon capture business backed by IP Group, Drax and BP Ventures. Most recently I founded and ran Fischer Farms, one of the largest vertical farming businesses in the world, for a decade. Since stepping down as CEO earlier this year, I have been approached by a number of companies who have asked me to help them raise capital.";
+
 export function composeOutreachDraft(opts: {
   personName: string;
   firmName: string;
@@ -22,6 +25,8 @@ export function composeOutreachDraft(opts: {
   askSummary?: string | null;
   narrativeNotes?: string | null;
   thesisLine?: string | null;
+  subjectHook?: string | null;
+  instruction?: string | null;
   warm: boolean;
   lastSubject?: string | null;
   lastOccurredAt?: string | null;
@@ -33,28 +38,20 @@ export function composeOutreachDraft(opts: {
     return composeYuriOutreach(opts, first);
   }
   const ask = (opts.askSummary ?? "").trim();
+  const askBit = ask ? ` (${ask})` : "";
+  const hook = (opts.subjectHook ?? "").trim();
   const subject = opts.warm
     ? `${company} — following up`
-    : `${company}`;
+    : hook
+      ? `${company} — ${hook}${askBit}`
+      : `${company}${askBit}`;
 
-  const signOff = [
-    "Best regards,",
-    "Tristan Fischer",
-    TRISTAN_EMAIL,
-    TRISTAN_MOBILE,
-    TRISTAN_LINKEDIN,
-    `Thought pieces: ${TRISTAN_THOUGHTS}`,
-  ].join("\n");
-
-  const pitch = ask
+  const companyBlock = ask
     ? `I have been asked to help ${company} with its raise (${ask}).`
     : `I have been asked to help ${company} with its raise.`;
 
-  const thesis =
-    (opts.thesisLine ?? "").trim() ||
-    `My understanding is that ${opts.firmName} looks at businesses of this kind. If that is right, I would like to explain why ${company} may fit.`;
-
-  const askLine = `Would you have 20 minutes in the next few days?\n${CALENDLY_URL}`;
+  const thesis = (opts.thesisLine ?? "").trim();
+  const askLine = `Would you or a colleague have twenty minutes to discuss whether this is of interest?\n${CALENDLY_URL}`;
 
   let opener: string;
   if (opts.warm) {
@@ -67,24 +64,24 @@ export function composeOutreachDraft(opts: {
       opener = `Good to be back in touch after ${when}${about}.`;
     }
   } else {
-    opener = `My name is Tristan Fischer. For the past twenty-five years I have designed, financed and built capital-intensive industrial technology businesses. I have worked in Citigroup Project Finance, Shell Technology Ventures, Lumicity, C-Capture, Fischer Farms, Camco (AIM-listed), and have raised around £200 million.`;
+    opener = `I am reaching out because my understanding is that ${opts.firmName} looks at work of this kind — if that is right, the company below may fit.`;
   }
 
-  const body = [
-    `Dear ${first},`,
-    "",
-    opener,
-    "",
-    pitch,
-    "",
-    thesis,
-    "",
-    askLine,
-    "",
-    signOff,
-    "",
-  ].join("\n");
-
+  const blocks = [`Dear ${first},`, "", opener, "", companyBlock];
+  if (thesis) {
+    blocks.push("", thesis);
+  }
+  if (!opts.warm) {
+    blocks.push("", COLD_BIO);
+  }
+  blocks.push("", askLine, "", signOffBlock(), "");
+  let body = blocks.join("\n");
+  const extra = (opts.instruction ?? "").trim();
+  if (extra && /short|shorter|brief/i.test(extra) && !opts.warm) {
+    body = [`Dear ${first},`, "", opener, "", companyBlock, thesis ? `\n${thesis}\n` : "", askLine, "", signOffBlock(), ""].join(
+      "\n",
+    );
+  }
   return { subject, body };
 }
 
