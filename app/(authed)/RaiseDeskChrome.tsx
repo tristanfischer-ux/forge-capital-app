@@ -5,27 +5,39 @@ import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { DeskCrumbs } from "./DeskCrumbs";
 import { DeskSearch } from "./DeskSearch";
+import { DeskBodyClass } from "./DeskBodyClass";
+import { MoreMenu } from "./MoreMenu";
 import { OpusChatBar } from "./OpusChatBar";
+import { ProgrammeChip } from "./ProgrammeChip";
 import { ServiceWorkerRegister } from "./ServiceWorkerRegister";
+import type { MandateCode } from "@/lib/capital/mandates";
 
 const PILLS = [
   { href: "/today", label: "Today", match: (p: string) => p === "/today" },
-  { href: "/discover", label: "Discover", match: (p: string) => p.startsWith("/discover") || p.startsWith("/match") },
   { href: "/send", label: "Send", match: (p: string) => p.startsWith("/send") },
-  { href: "/sign-off", label: "Sign-off", match: (p: string) => p.startsWith("/sign-off") },
   { href: "/chasers", label: "Chasers", match: (p: string) => p.startsWith("/chasers") },
-  { href: "/notes", label: "Notes", match: (p: string) => p.startsWith("/notes") || p.startsWith("/verify-book") },
-  { href: "/collisions", label: "Collisions", match: (p: string) => p.startsWith("/collisions") },
+  { href: "/notes", label: "Notes", match: (p: string) => p.startsWith("/notes") },
   { href: "/raise-inbox", label: "Inbox", match: (p: string) => p.startsWith("/raise-inbox") },
-  { href: "/raise-calendar", label: "Calendar", match: (p: string) => p.startsWith("/raise-calendar") || p.startsWith("/meeting") },
-  { href: "/raise-excel", label: "Excel", match: (p: string) => p.startsWith("/raise-excel") },
-  { href: "/log", label: "Log", match: (p: string) => p.startsWith("/log") },
+  {
+    href: "/raise-calendar",
+    label: "Calendar",
+    match: (p: string) => p.startsWith("/raise-calendar") || p.startsWith("/meeting"),
+  },
 ];
 
-export function RaiseDeskChrome({ children }: { children: ReactNode }) {
+export function RaiseDeskChrome({
+  children,
+  programme,
+}: {
+  children: ReactNode;
+  programme: MandateCode;
+}) {
   const pathname = usePathname() ?? "";
+  const sendHref = `/send/${programme}`;
+  const chaserHref = `/chasers?code=${programme}`;
   return (
     <div className="raise-desk">
+      <DeskBodyClass kind="desk" />
       <ServiceWorkerRegister />
       <header className="topbar">
         <Link href="/today" className="brand">
@@ -33,22 +45,25 @@ export function RaiseDeskChrome({ children }: { children: ReactNode }) {
           Forge Capital <span className="sub">Raise desk</span>
         </Link>
         <nav className="topnav">
-          {PILLS.map((pill) => (
-            <Link
-              key={pill.href}
-              href={pill.href}
-              className={pill.match(pathname) ? "pill active" : "pill"}
-            >
-              {pill.label}
-            </Link>
-          ))}
+          {PILLS.map((pill) => {
+            const href =
+              pill.label === "Send" ? sendHref : pill.label === "Chasers" ? chaserHref : pill.href;
+            return (
+              <Link
+                key={pill.label}
+                href={href}
+                className={pill.match(pathname) ? "pill active" : "pill"}
+              >
+                {pill.label}
+              </Link>
+            );
+          })}
+          <MoreMenu />
         </nav>
+        <ProgrammeChip initial={programme} />
         <DeskSearch />
       </header>
-      <OpusChatBar />
-      <div className="live-banner">
-        Live desk · real tracker rows · Excel is a download · nothing auto-sends
-      </div>
+      <OpusChatBar docked />
       <Suspense fallback={null}>
         <DeskCrumbs />
       </Suspense>

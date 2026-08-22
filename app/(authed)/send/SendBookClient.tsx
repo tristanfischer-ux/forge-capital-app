@@ -34,6 +34,17 @@ export function SendBookClient({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [openers, setOpeners] = useState<Record<string, string>>({});
+  const [filter, setFilter] = useState<"all" | "unverified" | "draftable" | "warm" | "collision">(
+    "all",
+  );
+
+  const visible = rows.filter((row) => {
+    if (filter === "unverified") return row.emailState !== "verified" && Boolean(row.email);
+    if (filter === "draftable") return row.allowed;
+    if (filter === "warm") return row.warm;
+    if (filter === "collision") return Boolean(row.collision);
+    return true;
+  });
 
   async function verify(row: SendRow) {
     if (!row.personId) return;
@@ -66,9 +77,50 @@ export function SendBookClient({
     window.open(result.gmailUrl, "_blank", "noopener,noreferrer");
   }
 
+  async function verifyVisible() {
+    const targets = visible.filter((r) => r.personId && r.email && r.emailState !== "verified").slice(0, 8);
+    if (!targets.length) {
+      setMsg("Nothing unverified in this filter.");
+      return;
+    }
+    setBusy("bulk");
+    setMsg(null);
+    let ok = 0;
+    for (const row of targets) {
+      const result = await verifyBookPerson(row.personId as string);
+      if (result.ok) ok += 1;
+    }
+    setBusy(null);
+    setMsg(`Verified ${ok} of ${targets.length} — Gmail drafts still need a named, valid address.`);
+    router.refresh();
+  }
+
   return (
     <div className="card">
       {msg ? <p className="note">{msg}</p> : null}
+      <div className="btn-row" style={{ padding: "12px 16px 0" }}>
+        {(
+          [
+            ["all", "All"],
+            ["draftable", "Draftable"],
+            ["unverified", "Unverified"],
+            ["warm", "Warm"],
+            ["collision", "Collision"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={filter === key ? "btn btn-primary" : "btn"}
+            onClick={() => setFilter(key)}
+          >
+            {label}
+          </button>
+        ))}
+        <button type="button" className="btn" disabled={busy !== null} onClick={verifyVisible}>
+          Verify visible
+        </button>
+      </div>
       <table>
         <thead>
           <tr>
@@ -82,7 +134,7 @@ export function SendBookClient({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {visible.map((row) => (
             <tr key={row.participationId}>
               <td>{row.firmName}</td>
               <td>
@@ -102,15 +154,32 @@ export function SendBookClient({
               <td>{row.allowed ? "Yes — Gmail draft only" : row.why}</td>
               <td>
                 {row.warm ? (
-                  <textarea
-                    value={openers[row.participationId] ?? ""}
-                    onChange={(e) =>
-                      setOpeners((s) => ({ ...s, [row.participationId]: e.target.value }))
-                    }
-                    placeholder="Reference the prior thread…"
-                    rows={2}
-                    style={{ width: 220, fontSize: 13, padding: 6, marginBottom: 6, display: "block" }}
-                  />
+                  <>
+                    <textarea
+                      value={openers[row.participationId] ?? ""}
+                      onChange={(e) =>
+                        setOpeners((s) => ({ ...s, [row.participationId]: e.target.value }))
+                      }
+                      placeholder="Reference the prior thread…"
+                      rows={2}
+                      style={{ width: 220, fontSize: 13, padding: 6, marginBottom: 6, display: "block" }}
+                    />
+                    {row.lastSubject ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ marginBottom: 6 }}
+                        onClick={() =>
+                          setOpeners((s) => ({
+                            ...s,
+                            [row.participationId]: `Good to be back in touch about ${row.lastSubject?.replace(/^re:\s*/i, "")}.`,
+                          }))
+                        }
+                      >
+                        Suggest opener
+                      </button>
+                    ) : null}
+                  </>
                 ) : null}
                 {row.personId && row.emailState !== "verified" ? (
                   <button

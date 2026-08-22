@@ -9,10 +9,10 @@ export default async function RaiseCalendarPage() {
     <div className="wrap">
       <div className="page-head">
         <div>
-          <h1>Calendar — this week</h1>
+          <h1>Calendar — the week ahead</h1>
           <p>
-            Your real Google Calendar. Click a block to open the briefing —
-            who it is, what the invite says, and which raise it belongs to.
+            The shape of the week from Google Calendar. Click a block for the
+            briefing — who it is, the mail, and which programme it belongs to.
           </p>
         </div>
       </div>

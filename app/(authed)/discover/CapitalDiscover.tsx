@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MANDATE_OPTIONS } from "@/lib/capital/mandates";
 
 type Hit = {
@@ -11,11 +11,27 @@ type Hit = {
   sub: string;
 };
 
-export function CapitalDiscover() {
-  const [q, setQ] = useState("");
+export function CapitalDiscover({
+  initialQ = "",
+  initialMandate = "SS",
+}: {
+  initialQ?: string;
+  initialMandate?: string;
+}) {
+  const [q, setQ] = useState(initialQ);
   const [hits, setHits] = useState<Hit[]>([]);
-  const [mandate, setMandate] = useState("SS");
+  const [mandate, setMandate] = useState(initialMandate);
   const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialQ.trim().length >= 2) {
+      void (async () => {
+        const res = await fetch(`/api/capital-search?q=${encodeURIComponent(initialQ)}`);
+        const body = (await res.json()) as { hits?: Hit[] };
+        setHits(body.hits ?? []);
+      })();
+    }
+  }, [initialQ]);
 
   async function search() {
     const res = await fetch(`/api/capital-search?q=${encodeURIComponent(q)}`);

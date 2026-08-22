@@ -95,16 +95,19 @@ export async function RaiseSend({ code }: { code: string }) {
             Send — {mandate.company_name} ({mandate.code})
           </h1>
           <p>
-            {mandate.ask_summary}. Drafts go to Gmail drafts. Nothing auto-sends.
-            {mandate.status === "paused" ? " This raise is paused." : ""}
+            {mandate.ask_summary ?? "Drafts go to Gmail drafts. Nothing auto-sends."}
+            {mandate.code === "YU" ? " Yuri is RPM customer intelligence, not a fundraise." : ""}
+            {mandate.status === "paused" ? " This programme is paused." : ""}
           </p>
         </div>
         <div className="btn-row" style={{ margin: 0 }}>
-          <Link className="btn" href={`/sign-off?code=${mandate.code}`}>
-            Sign-off
-          </Link>
-          <Link className="btn" href="/send">
-            All raises
+          {mandate.code !== "YU" ? (
+            <Link className="btn" href={`/sign-off?code=${mandate.code}`}>
+              Sign-off
+            </Link>
+          ) : null}
+          <Link className="btn" href={`/chasers?code=${mandate.code}`}>
+            Chasers
           </Link>
         </div>
       </div>

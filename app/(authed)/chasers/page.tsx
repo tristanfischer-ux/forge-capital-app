@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { listChasers } from "@/lib/capital/chasers";
 import { MANDATE_OPTIONS, type MandateCode } from "@/lib/capital/mandates";
+import { parseProgramme } from "@/lib/desk/programme";
 import { ChaserClient } from "./ChaserClient";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,8 @@ export default async function ChasersPage({
   searchParams: Promise<{ code?: string; days?: string }>;
 }) {
   const sp = await searchParams;
-  const code = ((sp.code ?? "SS").toUpperCase() as MandateCode) || "SS";
+  const cookieStore = await cookies();
+  const code = parseProgramme(sp.code ?? cookieStore.get("fc_programme")?.value);
   const days = Math.min(90, Math.max(3, Number(sp.days ?? 10) || 10));
   const rows = await listChasers({ mandateCode: code, quietDays: days });
   return (
@@ -21,7 +24,8 @@ export default async function ChasersPage({
           <h1>Chasers</h1>
           <p>
             People you wrote to who have not replied in {days} days. A chaser
-            is a Gmail draft with a calendar link. Nothing sends.
+            is a Gmail draft with a calendar link. Nothing sends. The list stays
+            empty until an address is verified and an outbound touch exists.
           </p>
         </div>
       </div>

@@ -3,7 +3,12 @@ import { NotesClient } from "./NotesClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotesPage() {
+export default async function NotesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ title?: string }>;
+}) {
+  const title = (await searchParams).title ?? "";
   let files: { id: string; name: string; modified: string }[] = [];
   let needsDriveScope = true;
   try {
@@ -25,7 +30,11 @@ export default async function NotesPage() {
           </p>
         </div>
       </div>
-      <NotesClient geminiFiles={files} needsDriveScope={needsDriveScope} />
+      <NotesClient
+        geminiFiles={files}
+        needsDriveScope={needsDriveScope}
+        initialTitle={title}
+      />
     </div>
   );
 }

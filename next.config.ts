@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
   // Mark the whole package external so Vercel installs it to node_modules
   // and lets officeparser resolve its peer at runtime.
   serverExternalPackages: ["officeparser"],
+  async redirects() {
+    return [
+      { source: "/inbox", destination: "/raise-inbox", permanent: false },
+      { source: "/follow-ups", destination: "/chasers", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

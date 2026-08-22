@@ -75,7 +75,20 @@ export default async function MeetingPage({
             <Link href={`/person/${partnerId}`} className="btn btn-primary">
               Open person
             </Link>
-          ) : null}
+          ) : (
+            <Link
+              className="btn btn-primary"
+              href={`/discover?q=${encodeURIComponent(meeting.partner_name ?? meeting.title ?? "")}`}
+            >
+              File onto the book
+            </Link>
+          )}
+          <Link
+            href={`/notes?title=${encodeURIComponent(meeting.partner_name ?? meeting.title ?? "Call")}`}
+            className="btn"
+          >
+            Log this call
+          </Link>
           <Link href="/today" className="btn">Today</Link>
         </div>
       </div>

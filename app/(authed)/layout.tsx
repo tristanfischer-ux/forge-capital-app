@@ -12,6 +12,9 @@ import { EmailHuntModal } from "./match/EmailHuntModal";
 import { Breadcrumbs, BreadcrumbsProvider } from "./Breadcrumbs";
 import { OpusChatBar } from "./OpusChatBar";
 import { RaiseDeskChrome } from "./RaiseDeskChrome";
+import { DeskBodyClass } from "./DeskBodyClass";
+import { LegacyBanner } from "./LegacyBanner";
+import { parseProgramme } from "@/lib/desk/programme";
 
 
 /**
@@ -54,8 +57,12 @@ export default async function AuthedLayout({
   const pathname = (await headers()).get("x-pathname") ?? "";
   const onDesk = isRaiseDeskPath(pathname);
 
+  const programme = parseProgramme(cookieStore.get("fc_programme")?.value);
+
   const legacy = (
-    <>
+    <div className="legacy-shell">
+      <DeskBodyClass kind="legacy" />
+      <LegacyBanner />
       <TopBar
         campaigns={campaigns}
         activeCampaignId={activeCampaignId}
@@ -70,13 +77,13 @@ export default async function AuthedLayout({
         </main>
       </div>
       <EmailHuntModal />
-    </>
+    </div>
   );
 
   return (
     <BreadcrumbsProvider>
       {onDesk ? (
-        <RaiseDeskChrome>{children}</RaiseDeskChrome>
+        <RaiseDeskChrome programme={programme}>{children}</RaiseDeskChrome>
       ) : (
         legacy
       )}

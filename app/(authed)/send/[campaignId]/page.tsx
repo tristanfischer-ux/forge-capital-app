@@ -36,7 +36,7 @@ export default async function SendPage(props: {
   const { campaignId } = await props.params;
   if (!campaignId) notFound();
 
-  if (/^(SS|SK|FF|PA|OD|CA|US|HO)$/i.test(campaignId)) {
+  if (/^(SS|SK|FF|PA|OD|CA|US|HO|YU)$/i.test(campaignId)) {
     const { RaiseSend } = await import("../RaiseSend");
     return <RaiseSend code={campaignId.toUpperCase()} />;
   }
@@ -76,16 +76,20 @@ export default async function SendPage(props: {
     getCampaignMonitor(campaignId),
   ]);
 
+  const { LegacyBanner } = await import("../../LegacyBanner");
   return (
-    <SendFlow
-      campaignId={campaign.id}
-      campaignName={campaign.display_name ?? campaign.name ?? "this campaign"}
-      initialBrief={campaign.company_description ?? ""}
-      initialCriteria={campaign.hunting_criteria ?? ""}
-      initialTemplate={campaign.customer_template ?? ""}
-      customerPartners={customerPartners}
-      counterpartEmail={counterpartEmail}
-      monitor={monitor}
-    />
+    <>
+      <LegacyBanner />
+      <SendFlow
+        campaignId={campaign.id}
+        campaignName={campaign.display_name ?? campaign.name ?? "this campaign"}
+        initialBrief={campaign.company_description ?? ""}
+        initialCriteria={campaign.hunting_criteria ?? ""}
+        initialTemplate={campaign.customer_template ?? ""}
+        customerPartners={customerPartners}
+        counterpartEmail={counterpartEmail}
+        monitor={monitor}
+      />
+    </>
   );
 }

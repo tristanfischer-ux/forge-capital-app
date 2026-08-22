@@ -36,7 +36,10 @@ interface ChatMessage {
   tools?: ToolChip[];
 }
 
-export function OpusChatBar(props: { activeCampaignName?: string | null }) {
+export function OpusChatBar(props: {
+  activeCampaignName?: string | null;
+  docked?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -188,16 +191,34 @@ export function OpusChatBar(props: { activeCampaignName?: string | null }) {
     }
   }
 
+  if (props.docked && !expanded) {
+    return (
+      <button
+        type="button"
+        className="opus-fab"
+        aria-label="Ask Grok"
+        onClick={() => setExpanded(true)}
+      >
+        Ask
+      </button>
+    );
+  }
+
   return (
     <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        background: "var(--surface)",
-        borderBottom: "1px solid var(--border)",
-        boxShadow: "var(--shadow)",
-      }}
+      className={props.docked ? "opus-dock" : undefined}
+      style={
+        props.docked
+          ? undefined
+          : {
+              position: "sticky",
+              top: 0,
+              zIndex: 100,
+              background: "var(--surface)",
+              borderBottom: "1px solid var(--border)",
+              boxShadow: "var(--shadow)",
+            }
+      }
     >
       <div
         style={{

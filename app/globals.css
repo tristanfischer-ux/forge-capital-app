@@ -3,6 +3,10 @@
 @import "./v4-mockup.css";
 @import "./raise-desk.css";
 
+/* Desk chrome owns the header. Hide V4 numbered pills if they leak. */
+body.desk .pill-num { display: none !important; }
+body.desk .live-banner { display: none; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

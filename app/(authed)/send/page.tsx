@@ -1,5 +1,7 @@
-import Link from "next/link";
-import { capitalConfigured, createEngageClient } from "@/lib/supabase/capital";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { parseProgramme } from "@/lib/desk/programme";
+import { capitalConfigured } from "@/lib/supabase/capital";
 
 export const dynamic = "force-dynamic";
 
@@ -12,50 +14,6 @@ export default async function SendIndexPage() {
       </div>
     );
   }
-  const engage = createEngageClient();
-  const { data: mandates } = await engage
-    .from("mandates")
-    .select("code, company_name, status, narrative_notes, ask_summary")
-    .order("code");
-  return (
-    <div className="wrap">
-      <div className="page-head">
-        <div>
-          <h1>Send — from the shared book</h1>
-          <p>
-            Pick a raise or customer programme. Drafts go to Gmail drafts.
-            Nothing auto-sends. Yuri is RPM customer intelligence, not a fundraise.
-          </p>
-        </div>
-      </div>
-      <div className="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Company</th>
-              <th>Status</th>
-              <th>Ask</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(mandates ?? []).map((m) => (
-              <tr key={m.code}>
-                <td>{m.code}</td>
-                <td>{m.company_name}</td>
-                <td>{m.status}</td>
-                <td>{m.ask_summary}</td>
-                <td>
-                  <Link className="btn btn-primary" href={`/send/${m.code}`}>
-                    Open
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  const cookieStore = await cookies();
+  redirect(`/send/${parseProgramme(cookieStore.get("fc_programme")?.value)}`);
 }

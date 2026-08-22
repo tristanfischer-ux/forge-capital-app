@@ -11,9 +11,11 @@ import type { NotesCommitResult } from "@/lib/capital/notes-book";
 export function NotesClient({
   geminiFiles,
   needsDriveScope,
+  initialTitle = "",
 }: {
   geminiFiles: { id: string; name: string; modified: string }[];
   needsDriveScope: boolean;
+  initialTitle?: string;
 }) {
   const [text, setText] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function NotesClient({
   async function save() {
     setBusy(true);
     setMsg(null);
-    const res = await saveCallNotes({ text });
+    const res = await saveCallNotes({ text, title: initialTitle || undefined });
     setBusy(false);
     setSaved(res.result);
     setMsg(
@@ -63,15 +65,19 @@ export function NotesClient({
         <h2>Dump call notes</h2>
         <p className="sub">
           Paste a Meet transcript, Gemini notes, or your own bullets. The book
-          stores facts on the investor and the company so the pitch improves.
-          All eight raises are scanned.
+          stores facts on the person and the company so the next letter is better.
+          Every programme is scanned, including Yuri.
         </p>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={12}
           style={{ width: "100%", fontSize: 14, padding: 10 }}
-          placeholder="Paste the transcript or notes…"
+          placeholder={
+            initialTitle
+              ? `Notes for ${initialTitle} — paste the transcript…`
+              : "Paste the transcript or notes…"
+          }
         />
         <div className="btn-row">
           <button type="button" className="btn btn-primary" disabled={busy || text.length < 40} onClick={save}>
