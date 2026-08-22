@@ -52,6 +52,15 @@ export function firmHintFromTitle(title: string | null | undefined): string | nu
   return null;
 }
 
+export function emailsFromBlob(...blobs: (string | null | undefined)[]): string[] {
+  const found: string[] = [];
+  for (const blob of blobs) {
+    const hits = String(blob ?? "").match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g) ?? [];
+    found.push(...hits);
+  }
+  return guestEmails(found);
+}
+
 export function guestEmails(
   emails: string[] | null | undefined,
   extraSelf: string[] = [],

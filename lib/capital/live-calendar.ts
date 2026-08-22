@@ -3,6 +3,7 @@ import {
   type CalendarProgramme,
   type LiveCalendarEvent,
 } from "@/lib/capital/calendar-colour";
+import { emailsFromBlob } from "@/lib/desk/calendar-name";
 import { getGoogleAccessToken, getGoogleAccessTokenAdmin } from "@/lib/gmail/user-token";
 
 export type { CalendarProgramme, LiveCalendarEvent };
@@ -106,9 +107,10 @@ export async function listWeekAheadCalendar(): Promise<{
     if (!startRaw) continue;
     const endRaw = item.end?.dateTime ?? item.end?.date ?? null;
     const canceled = item.status === "cancelled" || /^(canceled|cancelled):/i.test(item.summary ?? "");
-    const emails = (item.attendees ?? [])
-      .map((a) => (a.email ?? "").toLowerCase())
-      .filter(Boolean);
+    const emails = [
+      ...(item.attendees ?? []).map((a) => (a.email ?? "").toLowerCase()).filter(Boolean),
+      ...emailsFromBlob(item.summary, item.description, item.location),
+    ];
     const blob = [
       item.summary ?? "",
       item.description ?? "",
@@ -134,7 +136,7 @@ export async function listWeekAheadCalendar(): Promise<{
       canceled,
       programmes,
       colour: canceled ? "personal" : colour,
-      attendee_emails: emails,
+      attendee_emails: [...new Set(emails)],
     });
   }
   return {

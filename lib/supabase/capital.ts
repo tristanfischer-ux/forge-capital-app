@@ -26,16 +26,20 @@ export function capitalConfigured(): boolean {
 }
 
 export function createCoreClient() {
+  const schema = "core";
   return createClient(url(), serviceRole(), {
     auth: { persistSession: false, autoRefreshToken: false },
-    db: { schema: "core" },
+    db: { schema },
+    global: { headers: { "Accept-Profile": schema, "Content-Profile": schema } },
   });
 }
 
 export function createEngageClient() {
+  const schema = "engage";
   return createClient(url(), serviceRole(), {
     auth: { persistSession: false, autoRefreshToken: false },
-    db: { schema: "engage" },
+    db: { schema },
+    global: { headers: { "Accept-Profile": schema, "Content-Profile": schema } },
   });
 }
 

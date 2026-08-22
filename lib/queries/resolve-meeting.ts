@@ -1,5 +1,6 @@
 import {
   counterpartFromTitle,
+  emailsFromBlob,
   firmHintFromTitle,
   guestEmails,
 } from "@/lib/desk/calendar-name";
@@ -118,12 +119,16 @@ export async function resolveMeetingBook(meeting: DeskMeeting): Promise<MeetingB
     };
   }
 
-  const emails = guestEmails(meeting.attendee_emails);
-  const nameHint =
+  const emails = guestEmails([
+    ...(meeting.attendee_emails ?? []),
+    ...emailsFromBlob(meeting.title, meeting.partner_name, meeting.notes, meeting.summary, meeting.firm_name),
+  ]);
+  const rawName =
     counterpartFromTitle(meeting.title) ??
     (typeof meeting.partner_name === "string" && meeting.partner_name.trim()
       ? meeting.partner_name.trim()
       : null);
+  const nameHint = displayPersonName(rawName, emails[0] ?? null) || rawName;
   const firmHint =
     firmHintFromTitle(meeting.title) ??
     (meeting.firm_name && meeting.firm_name.trim() ? meeting.firm_name.trim() : null);
@@ -131,13 +136,11 @@ export async function resolveMeetingBook(meeting: DeskMeeting): Promise<MeetingB
   const core = createCoreClient();
   let person: PersonRow | null = null;
   const candidates: MeetingCandidate[] = [];
+  const personCols =
+    "id, full_name, email, email_state, dnc, role_title, firm_id, notes, linkedin_url";
 
   for (const email of emails) {
-    const { data } = await core
-      .from("people")
-      .select("id, full_name, email, email_state, dnc, role_title, firm_id, notes, linkedin_url")
-      .ilike("email", email)
-      .maybeSingle();
+    const { data } = await core.from("people").select(personCols).ilike("email", email).maybeSingle();
     if (data?.id) {
       person = data as PersonRow;
       break;
@@ -145,16 +148,40 @@ export async function resolveMeetingBook(meeting: DeskMeeting): Promise<MeetingB
   }
 
   if (!person && nameHint) {
+    const { data: named } = await core
+      .from("people")
+      .select(personCols)
+      .ilike("full_name", `%${nameHint}%`)
+      .limit(8);
+    const rows = (named ?? []) as PersonRow[];
+    const exact = rows.filter((p) => {
+      const n = displayPersonName(p.full_name, p.email).toLowerCase();
+      return n === nameHint.toLowerCase() || n.startsWith(nameHint.toLowerCase() + " ");
+    });
+    if (exact.length === 1) {
+      person = exact[0];
+    } else if (rows.length === 1) {
+      person = rows[0];
+    } else if (exact.length > 1) {
+      for (const p of exact.slice(0, 5)) {
+        candidates.push({
+          personId: p.id,
+          personName: p.full_name ?? nameHint,
+          email: p.email,
+          firmName: null,
+          score: 80,
+        });
+      }
+    }
+  }
+
+  if (!person && nameHint && candidates.length === 0) {
     const hits = await searchBook(nameHint);
     const people = hits.filter((h) => h.kind === "person");
     const top = people[0];
     const second = people[1];
-    if (top && top.score >= 60 && (!second || top.score - second.score >= 15)) {
-      const { data } = await core
-        .from("people")
-        .select("id, full_name, email, email_state, dnc, role_title, firm_id, notes, linkedin_url")
-        .eq("id", top.id)
-        .maybeSingle();
+    if (top && (!second || top.score - second.score >= 10)) {
+      const { data } = await core.from("people").select(personCols).eq("id", top.id).maybeSingle();
       if (data?.id) person = data as PersonRow;
     } else {
       for (const h of people.slice(0, 5)) {
@@ -264,7 +291,7 @@ export function personBlurb(book: MeetingBook): string {
       return `More than one person on the book matches this name. Pick the right row rather than guessing.`;
     }
     if (book.personName) {
-      return `${book.personName} is not a unique person on the book yet. File them before drafting.`;
+      return `${book.personName} is on your calendar. The book did not return a unique row for that name${book.searchedEmails.length ? ` or ${book.searchedEmails.join(", ")}` : ""}.`;
     }
     return "No named person on this slot yet.";
   }
@@ -293,7 +320,7 @@ export function personBlurb(book: MeetingBook): string {
 export function firmBlurb(book: MeetingBook): string {
   if (!book.firmId) {
     if (book.firmName) {
-      return `${book.firmName} is not a unique firm on the book yet.`;
+      return `${book.firmName} is named on the invite. The book did not return a unique firm row.`;
     }
     return "No firm on this slot yet.";
   }

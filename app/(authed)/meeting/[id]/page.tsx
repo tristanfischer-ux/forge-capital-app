@@ -101,7 +101,7 @@ export default async function MeetingPage({
     : book.personDnc
       ? "Do not contact."
       : !book.personId
-        ? "File the person onto the book before drafting."
+        ? "The calendar name did not match a unique book row, so drafts stay blocked."
         : !book.personEmail
           ? "No email on this person."
           : `Email is ${book.personEmailState ?? "unknown"} — verify first.`;
