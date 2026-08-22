@@ -314,20 +314,23 @@ export function proposeTodayJob(input: {
     .sort((a, b) => new Date(a.event_at).getTime() - new Date(b.event_at).getTime());
   const next = upcoming[0];
   if (next) {
-    const mins = Math.round((new Date(next.event_at).getTime() - now.getTime()) / 60_000);
-    if (mins <= 120) {
-      const who = next.partner_name ?? next.title ?? "the next meeting";
-      return {
-        kind: "prep",
-        title: `Prep ${who}`,
-        body:
-          mins <= 0
-            ? "This slot is now. Open the cheat sheet — who they are, the mail, and where the companies stand."
-            : `In about ${mins} minutes. Open the cheat sheet before you join.`,
-        href: `/meeting/${encodeURIComponent(next.id)}`,
-        cta: "Open the briefing",
-      };
-    }
+    const when = new Date(next.event_at);
+    const who = (next.partner_name ?? next.title ?? "the next meeting").trim();
+    const clock = when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const sameDay = when.toDateString() === now.toDateString();
+    const mins = Math.round((when.getTime() - now.getTime()) / 60_000);
+    const whenLine = mins <= 0
+      ? "This slot is now."
+      : sameDay
+        ? `Today at ${clock}.`
+        : `${when.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${clock}.`;
+    return {
+      kind: "prep",
+      title: `${who} · ${clock}`,
+      body: `${whenLine} Open the briefing for who they are, the firm, the mail, and your notes.`,
+      href: `/meeting/${encodeURIComponent(next.id)}`,
+      cta: "Open the briefing",
+    };
   }
 
   const toReschedule = input.canceledMeetings[0];
@@ -355,23 +358,29 @@ export function proposeTodayJob(input: {
   if (input.stuckCount > 0) {
     return {
       kind: "quiet",
-      title: `Refresh ${input.stuckCount} quiet rows`,
-      body: "People at +0 / +3 / +5 with no dated touch for more than a week. This is a wave on Company, not twenty names from here. Nothing sends until you approve the drafts.",
-      href: "/company",
-      cta: "Open Company and pick a raise",
+      title: `${input.stuckCount.toLocaleString("en-GB")} people have gone quiet`,
+      body: "You wrote, they have not replied for ten days or more. Chasers parks Gmail drafts. Nothing sends.",
+      href: "/chasers",
+      cta: "Open Chasers",
+    };
+  }
+
+  if (input.approvalCount > 0) {
+    return {
+      kind: "letters",
+      title: `${input.approvalCount.toLocaleString("en-GB")} approved, not yet written`,
+      body: "Principal said yes. Outreach writes the first letters as Gmail drafts.",
+      href: "/outreach",
+      cta: "Open Outreach",
     };
   }
 
   return {
     kind: "letters",
-    title: input.approvalCount
-      ? `${input.approvalCount} letters waiting`
-      : "No forced job this morning",
-    body: input.approvalCount
-      ? "+1 is approved with no letter; +2 is a letter that exists. Work one raise as a wave. This is not a send button."
-      : "Meetings, cancels and quiet rows are clear. Use Company if you want a new wave.",
-    href: "/company",
-    cta: "Open Company",
+    title: "Nothing timed this morning",
+    body: "Meetings and replies are below. Find new names on Outreach, or follow up quiet threads on Chasers.",
+    href: "/outreach",
+    cta: "Open Outreach",
   };
 }
 
@@ -405,14 +414,7 @@ export function todayDigest(input: {
     (r) => !/calendly|accepted:|canceled|cancelled/i.test(r.summary ?? ""),
   ).length;
   if (inbound) {
-    lines.push(
-      `${inbound} inbound from real people this week sit on Today — file or reply there, nothing auto-sends.`,
-    );
-  }
-  if (input.approvalCount) {
-    lines.push(
-      `${input.approvalCount} people are approved or already have a letter. That is a wave on Company, not a send list.`,
-    );
+    lines.push(`${inbound} inbound replies this week — listed further down this page.`);
   }
   return lines.slice(0, 3);
 }
