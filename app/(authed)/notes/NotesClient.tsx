@@ -98,14 +98,15 @@ export function NotesClient({
       <div className="card">
         <h2>Gemini call notes</h2>
         <p className="sub">
-          Notes by Gemini from Google Meet. Import writes them to the same
-          book as a paste, then you can draft the thank-you.
+          Gemini emails the summary to Gmail (<code>gemini-notes@google.com</code>).
+          Import pulls those emails into the book. The full transcript is the
+          linked Google Doc — reconnect Google if you want that pulled too.
         </p>
         {needsDriveScope ? (
-          <p className="warn-banner">
-            Google Drive is not on the current login.{" "}
-            <a href="/api/auth/gmail">Reconnect Google</a> so the desk can
-            read Meet notes. Until then, paste the transcript on the left.
+          <p className="note">
+            Summaries import from Gmail without Drive.{" "}
+            <a href="/api/auth/gmail">Reconnect Google</a> if you also want
+            the transcript from the Doc.
           </p>
         ) : (
           <>
