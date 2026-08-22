@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { getGmailMessage } from "@/lib/gmail/read-thread";
-import { readDeskWeekCache } from "@/lib/queries/desk-calendar";
+import { findDeskMeeting } from "@/lib/queries/find-meeting";
 import {
   decodeMailText,
   gmailOpenHref,
@@ -18,12 +17,17 @@ export default async function MeetingMailPage({
   const { id, messageId } = await params;
   const meetingId = decodeURIComponent(id);
   const mailId = decodeURIComponent(messageId);
-  const cache = await readDeskWeekCache();
-  const meeting =
-    cache.meetings.find(
-      (m) => m.id === meetingId || m.id === `gcal:${meetingId}` || meetingId.endsWith(m.id),
-    ) ?? null;
-  if (!meeting) notFound();
+  const meeting = await findDeskMeeting(meetingId);
+  if (!meeting) {
+    return (
+      <div className="wrap">
+        <h1>This letter is not on the briefing</h1>
+        <p>
+          <Link href="/today">Today</Link>
+        </p>
+      </div>
+    );
+  }
 
   const briefs = loadMeetingBriefs();
   const filed = briefs[meeting.id] ?? briefs[meetingId] ?? null;

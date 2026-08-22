@@ -27,6 +27,7 @@ export interface DeskMeeting {
   role_label?: string | null;
   attendee_emails?: string[];
   channel?: string | null;
+  htmlLink?: string | null;
 }
 
 export interface DeskReply {

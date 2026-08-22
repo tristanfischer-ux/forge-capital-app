@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { skipRaiseName } from "@/lib/desk/status-map";
-import { readDeskWeekCache } from "@/lib/queries/desk-calendar";
+import { findDeskMeeting } from "@/lib/queries/find-meeting";
 import {
   decodeMailText,
   loadMeetingBriefs,
@@ -35,11 +34,30 @@ export default async function MeetingPage({
   params: Promise<{ id: string }>;
 }) {
   const raw = decodeURIComponent((await params).id);
-  const cache = await readDeskWeekCache();
-  const meeting =
-    cache.meetings.find((m) => m.id === raw || m.id === `gcal:${raw}` || raw.endsWith(m.id)) ??
-    null;
-  if (!meeting) notFound();
+  const meeting = await findDeskMeeting(raw);
+  if (!meeting) {
+    return (
+      <div className="wrap">
+        <div className="page-head">
+          <div>
+            <h1>This slot is not on the book</h1>
+            <p>
+              Today and Calendar read live Google Calendar. This briefing id
+              was not in that week. Open Calendar and click the block again.
+            </p>
+          </div>
+          <div className="btn-row" style={{ margin: 0 }}>
+            <Link href="/raise-calendar" className="btn btn-primary">
+              Calendar
+            </Link>
+            <Link href="/today" className="btn">
+              Today
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const briefs = loadMeetingBriefs();
   const filed = briefs[meeting.id] ?? briefs[raw] ?? null;
@@ -89,6 +107,11 @@ export default async function MeetingPage({
           >
             Log this call
           </Link>
+          {meeting.htmlLink ? (
+            <a className="btn" href={meeting.htmlLink} target="_blank" rel="noreferrer">
+              Open in Google
+            </a>
+          ) : null}
           <Link href="/today" className="btn">Today</Link>
         </div>
       </div>
