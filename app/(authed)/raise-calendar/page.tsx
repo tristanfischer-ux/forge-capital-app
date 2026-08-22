@@ -11,9 +11,9 @@ export default async function RaiseCalendarPage() {
         <div>
           <h1>Calendar — the week ahead</h1>
           <p>
-            Everything on your Google Calendar for the next seven days,
-            including weekends. Blocks are coloured by programme when the
-            title or guests make that obvious.
+            Everything on your Google Calendar: yesterday, today, and seven
+            days ahead, including weekends. Blocks are coloured by programme
+            when the title or guests make that obvious.
           </p>
         </div>
       </div>

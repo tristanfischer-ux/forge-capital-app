@@ -197,11 +197,13 @@
 .raise-desk .chip-row { background: var(--surface-alt); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px; margin-bottom: 6px; font-size: 13px; }
 .raise-desk .cal { display: grid; grid-template-columns: 72px repeat(5, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .raise-desk .cal-days { grid-template-columns: repeat(5, 1fr); }
-.raise-desk .cal-week-ahead { grid-template-columns: repeat(7, minmax(120px, 1fr)); overflow-x: auto; }
+.raise-desk .cal-week-ahead { grid-template-columns: repeat(9, minmax(110px, 1fr)); overflow-x: auto; }
 .raise-desk .cal > div, .raise-desk .cal-day { background: var(--surface); min-height: 88px; padding: 8px; font-size: 12px; }
 .raise-desk .cal-day.today { background: #eef2ff; }
+.raise-desk .cal-day.yesterday { background: #f9fafb; }
 .raise-desk .cal .hd { background: var(--surface-alt); font-weight: 600; min-height: auto; margin: -8px -8px 8px; padding: 8px; }
 .raise-desk .cal-day.today .hd { background: var(--accent-light); color: var(--accent-dark); }
+.raise-desk .cal-day.yesterday .hd { color: var(--text-dim); }
 .raise-desk .cal .hour { background: var(--surface-alt); color: var(--text-dim); font-size: 11px; }
 .raise-desk .evt { background: var(--accent-light); color: var(--accent-dark); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-weight: 600; display: block; text-decoration: none; }
 .raise-desk .evt:hover { text-decoration: none; filter: brightness(0.97); }

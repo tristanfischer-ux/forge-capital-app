@@ -31,10 +31,11 @@ function dayKeyFromIso(iso: string, allDay: boolean): string {
 
 function weekWindow(): { timeMin: string; timeMax: string; days: string[] } {
   const today = ymdInLondon(new Date());
-  const days = Array.from({ length: 7 }, (_, i) => addDaysKey(today, i));
+  const start = addDaysKey(today, -1);
+  const days = Array.from({ length: 9 }, (_, i) => addDaysKey(start, i));
   return {
-    timeMin: `${today}T00:00:00.000Z`,
-    timeMax: `${addDaysKey(today, 7)}T00:00:00.000Z`,
+    timeMin: `${start}T00:00:00.000Z`,
+    timeMax: `${addDaysKey(today, 8)}T00:00:00.000Z`,
     days,
   };
 }

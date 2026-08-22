@@ -15,18 +15,30 @@ function timeLocal(iso: string, allDay: boolean): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-function heading(dayKey: string): string {
-  const [y, m, d] = dayKey.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  return dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
-}
-
-function isToday(dayKey: string): boolean {
+function localYmd(offset = 0): string {
   const now = new Date();
+  now.setDate(now.getDate() + offset);
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
-  return dayKey === `${y}-${m}-${d}`;
+  return `${y}-${m}-${d}`;
+}
+
+function heading(dayKey: string): string {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  const label = dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
+  if (dayKey === localYmd()) return `Today · ${label}`;
+  if (dayKey === localYmd(-1)) return `Yesterday · ${label}`;
+  return label;
+}
+
+function isToday(dayKey: string): boolean {
+  return dayKey === localYmd();
+}
+
+function isYesterday(dayKey: string): boolean {
+  return dayKey === localYmd(-1);
 }
 
 const LEGEND: { code: CalendarProgramme; label: string }[] = [
@@ -93,7 +105,7 @@ export function CalendarBoard({
   return (
     <>
       <p className="faint" style={{ marginBottom: 12 }}>
-        Next seven days from Google Calendar
+        Yesterday, today, and seven days ahead from Google Calendar
         {stamp
           ? ` · last pull ${new Date(stamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
           : ""}
@@ -126,7 +138,10 @@ export function CalendarBoard({
             .filter((m) => m.day_key === key)
             .sort((a, b) => a.event_at.localeCompare(b.event_at));
           return (
-            <div key={key} className={`cal-day${isToday(key) ? " today" : ""}`}>
+            <div
+              key={key}
+              className={`cal-day${isToday(key) ? " today" : ""}${isYesterday(key) ? " yesterday" : ""}`}
+            >
               <div className="hd">{heading(key)}</div>
               {dayEvents.length === 0 ? (
                 <div className="faint" style={{ padding: 8 }}>
