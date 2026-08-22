@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { listCustomerCampaignPartners } from "@/lib/queries/customer-partners";
 import { getCampaignMonitor } from "@/lib/queries/monitor";
@@ -37,8 +37,7 @@ export default async function SendPage(props: {
   if (!campaignId) notFound();
 
   if (/^(SS|SK|FF|PA|OD|CA|US|HO|YU)$/i.test(campaignId)) {
-    const { RaiseSend } = await import("../RaiseSend");
-    return <RaiseSend code={campaignId.toUpperCase()} />;
+    redirect("/chasers");
   }
 
   const supabase = await createServerClient();

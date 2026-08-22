@@ -4,11 +4,12 @@ import Link from "next/link";
 
 const ITEMS = [
   { href: "/discover", label: "Discover" },
-  { href: "/sign-off", label: "Sign-off" },
   { href: "/verify-book", label: "Verify emails" },
+  { href: "/sign-off", label: "Sign-off" },
   { href: "/collisions", label: "Collisions table" },
   { href: "/raise-excel", label: "Excel snapshot" },
   { href: "/log", label: "Quick log" },
+  { href: "/notes", label: "Dump a transcript" },
 ];
 
 export function MoreMenu() {

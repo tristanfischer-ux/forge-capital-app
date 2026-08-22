@@ -406,7 +406,7 @@ export function todayDigest(input: {
   ).length;
   if (inbound) {
     lines.push(
-      `${inbound} inbound from real people this week sit on Inbox — file or reply from there, nothing auto-sends.`,
+      `${inbound} inbound from real people this week sit on Today — file or reply there, nothing auto-sends.`,
     );
   }
   if (input.approvalCount) {

@@ -1,36 +1,62 @@
-import { cookies } from "next/headers";
-import { listChasers } from "@/lib/capital/chasers";
-import { MANDATE_LABEL } from "@/lib/capital/mandates";
-import { parseProgramme } from "@/lib/desk/programme";
+import { listNeverWritten, listQuietPeople } from "@/lib/capital/chasers";
+import { MANDATE_CODES, type MandateCode } from "@/lib/capital/mandates";
 import { ChaserClient } from "./ChaserClient";
 
 export const dynamic = "force-dynamic";
 
+function parseView(raw: string | undefined): "quiet" | "never" | "unverified" {
+  if (raw === "never" || raw === "unverified") return raw;
+  return "quiet";
+}
+
+function parseCode(raw: string | undefined): MandateCode | "ALL" {
+  const code = (raw ?? "").trim().toUpperCase();
+  return (MANDATE_CODES as readonly string[]).includes(code)
+    ? (code as MandateCode)
+    : "ALL";
+}
+
 export default async function ChasersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; days?: string }>;
+  searchParams: Promise<{ code?: string; days?: string; view?: string }>;
 }) {
   const sp = await searchParams;
-  const cookieStore = await cookies();
-  const code = parseProgramme(sp.code ?? cookieStore.get("fc_programme")?.value);
   const days = Math.min(90, Math.max(3, Number(sp.days ?? 10) || 10));
-  const rows = await listChasers({ mandateCode: code, quietDays: days });
+  const view = parseView(sp.view);
+  const code = parseCode(sp.code);
+  const quiet = await listQuietPeople({ quietDays: days });
+  const never = view === "never" || view === "unverified" ? await listNeverWritten() : [];
+  let rows =
+    view === "never" ? never : view === "unverified" ? [...quiet, ...never] : quiet;
+  if (code !== "ALL") rows = rows.filter((r) => r.mandateCode === code);
+  if (view === "unverified") {
+    rows = rows.filter((r) => r.emailState !== "verified");
+  }
+
+  const caption =
+    view === "never"
+      ? `${rows.length} never written`
+      : view === "unverified"
+        ? `${rows.length} unverified`
+        : `${rows.length} quiet for ${days} days`;
+
   return (
     <div className="wrap">
       <div className="page-head">
         <div>
           <h1>Chasers</h1>
           <p>
-            {MANDATE_LABEL[code]} — {rows.length} quiet for {days} days. A chaser
-            is a Gmail draft. Nothing sends. Use the programme chip in the header
-            to switch. Drafts still need a verified address.
+            Everyone you have written to and not heard back from, across every
+            programme. {caption}. A chaser is a Gmail draft. Nothing sends.
+            Verified addresses only.
           </p>
         </div>
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <form method="get" className="btn-row">
-          <input type="hidden" name="code" value={code} />
+          {code !== "ALL" ? <input type="hidden" name="code" value={code} /> : null}
+          <input type="hidden" name="view" value={view} />
           <label className="faint">
             Quiet days{" "}
             <input
@@ -47,7 +73,7 @@ export default async function ChasersPage({
           </button>
         </form>
       </div>
-      <ChaserClient code={code} days={days} rows={rows} />
+      <ChaserClient days={days} rows={rows} view={view} code={code} />
     </div>
   );
 }

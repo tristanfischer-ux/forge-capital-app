@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTristan } from "@/lib/capital/assert-user";
-import { listChasers } from "@/lib/capital/chasers";
 import { capitalActor, createCoreClient, createEngageClient } from "@/lib/supabase/capital";
 import { mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
 import { composeChaserDraft } from "@/lib/capital/voice";
@@ -11,6 +10,8 @@ import { createGmailDraft } from "@/lib/gmail/create-draft";
 export async function createChaserDraft(input: {
   participationId: string;
   mandateCode: MandateCode;
+  lastSubject?: string | null;
+  lastOccurredAt?: string | null;
 }): Promise<{ ok: true; gmailUrl: string } | { ok: false; error: string }> {
   await requireTristan();
   const engage = createEngageClient();
@@ -32,14 +33,15 @@ export async function createChaserDraft(input: {
   if (person.email_state !== "verified") {
     return { ok: false, error: `Email is ${person.email_state ?? "unknown"} — verify first.` };
   }
-  const rows = await listChasers({ mandateCode: input.mandateCode, quietDays: 0 });
-  const row = rows.find((r) => r.participationId === input.participationId);
+  if (input.mandateCode === "HO") {
+    return { ok: false, error: "Hooley is paused — listed, not draftable." };
+  }
   const composed = composeChaserDraft({
     personName: person.full_name ?? "",
     firmName: firm?.canonical_name ?? "",
     mandateCode: input.mandateCode,
-    lastSubject: row?.lastOutboundSubject,
-    lastOccurredAt: row?.lastOutboundAt,
+    lastSubject: input.lastSubject,
+    lastOccurredAt: input.lastOccurredAt,
   });
   try {
     const draft = await createGmailDraft({
@@ -92,4 +94,30 @@ export async function createChaserDraft(input: {
     if (message === "NOT_CONNECTED") return { ok: false, error: "Gmail is not connected." };
     return { ok: false, error: message };
   }
+}
+
+export async function createChaserDraftsBatch(input: {
+  items: {
+    participationId: string;
+    mandateCode: MandateCode;
+    lastSubject?: string | null;
+    lastOccurredAt?: string | null;
+  }[];
+}): Promise<{ created: number; skipped: number; errors: string[] }> {
+  await requireTristan();
+  const items = input.items.slice(0, 25);
+  let created = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  for (const item of items) {
+    const result = await createChaserDraft(item);
+    if (result.ok) {
+      created += 1;
+    } else {
+      skipped += 1;
+      if (errors.length < 8) errors.push(result.error);
+    }
+  }
+  revalidatePath("/chasers");
+  return { created, skipped, errors };
 }

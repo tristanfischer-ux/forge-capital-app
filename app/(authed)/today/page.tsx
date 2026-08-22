@@ -5,6 +5,7 @@ import { getDeskToday, type DeskMeeting, type DeskReply } from "@/lib/queries/de
 import {
   briefForMeetingId,
   correspondenceLooksCanceled,
+  decodeMailText,
   loadMeetingBriefs,
   mailDirection,
   pickCorrespondence,
@@ -19,6 +20,7 @@ import {
 import { openLoops } from "@/lib/desk/notes-to-action";
 import { getCorpusTodayStats } from "@/lib/queries/corpus-today";
 import { Hint } from "../Hint";
+import { ReplyBox } from "../ReplyBox";
 import { WhereWeAre } from "../WhereWeAre";
 
 export const dynamic = "force-dynamic";
@@ -127,8 +129,8 @@ export default async function TodayPage({
           </p>
         </div>
         <div className="btn-row" style={{ margin: 0 }}>
-          <Link href="/notes" className="btn">Log a call</Link>
-          <Link href="/log" className="btn">Quick log</Link>
+          <Link href="/call" className="btn btn-primary">Current Call</Link>
+          <Link href="/chasers" className="btn">Chasers</Link>
         </div>
       </div>
 
@@ -181,27 +183,27 @@ export default async function TodayPage({
       </div>
 
       <div className="tiles">
-        <Hint label="Meetings from your Google Calendar in the next week. Unmatched means the guest is not a unique email on the raise tracker yet — click the meeting to see who it is.">
-          <div className="tile">
-            <div className="k">Meetings</div>
+        <Hint label="Meetings from your Google Calendar in the next week. Unmatched means the guest is not a unique email on the book yet — click the meeting for the briefing.">
+          <a href="#meetings" className="tile" style={{ textDecoration: "none", color: "inherit" }}>
+            <div className="k">Meetings this week</div>
             <div className="n">{data.meetings.length}</div>
             <div className="s">
-              {unmatched} not yet on the tracker
+              {unmatched} not yet on the book
             </div>
-          </div>
+          </a>
         </Hint>
-        <Hint label="Inbound emails from the last week that look like real people, not newsletters. Click Inbox to read the first lines.">
-          <div className="tile">
-            <div className="k">Replies</div>
+        <Hint label="Inbound emails from the last week that look like real people, not newsletters.">
+          <a href="#replies" className="tile" style={{ textDecoration: "none", color: "inherit" }}>
+            <div className="k">Replies this week</div>
             <div className="n">{data.replies.length}</div>
-            <div className="s">inbound this week</div>
-          </div>
+            <div className="s">inbound, listed below</div>
+          </a>
         </Hint>
-        <Hint label="People on the shared book whose last dated touch is more than seven days ago. Open Chasers to draft a polite follow-up — nothing sends until the address is verified.">
+        <Hint label="People on the shared book whose last dated touch is more than ten days ago. Open Chasers to draft a polite follow-up — nothing sends until the address is verified.">
           <Link href="/chasers" className="tile warn" style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="k">Quiet &gt; 7 days</div>
+            <div className="k">Quiet ≥ 10 days</div>
             <div className="n">{corpus.quietCount}</div>
-            <div className="s">from the shared book</div>
+            <div className="s">all programmes · open Chasers</div>
           </Link>
         </Hint>
         <Hint label="Anyone approached on more than one programme in the last 21 days. The badge is the warning — open the row before you draft.">
@@ -229,7 +231,7 @@ export default async function TodayPage({
         </div>
       ) : null}
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card" id="meetings" style={{ marginBottom: 16 }}>
         <h2>Next meetings</h2>
         <p className="sub">
           What the slot is, then a little of the correspondence. Click a
@@ -312,13 +314,71 @@ export default async function TodayPage({
                   <div className="meet-more">
                     Open the briefing
                     {m.unmatched ? " · file onto the book" : ""}
-                    {" · "}
-                    <span>log the call from Notes</span>
                   </div>
                 </Link>
               );
             })}
           </div>
+        )}
+      </div>
+
+      <div className="card" id="replies" style={{ marginBottom: 16 }}>
+        <h2>Replies this week</h2>
+        <p className="sub">
+          Inbound from the last week. Reply parks a Gmail draft. Sending is
+          two clicks and never automatic.
+        </p>
+        {data.replies.length === 0 ? (
+          <p className="sub">No inbound rows in the last week.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>From</th>
+                <th>Programme</th>
+                <th>Subject and opening</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.replies.map((r) => {
+                const email = r.from?.match(/[\w.+-]+@[\w.-]+/)?.[0] ?? "";
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      {r.event_at
+                        ? new Date(r.event_at).toLocaleString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
+                    </td>
+                    <td>
+                      {r.partner_id ? (
+                        <Link href={`/person/${r.partner_id}`}>{r.partner_name}</Link>
+                      ) : (
+                        r.partner_name ?? r.from ?? "—"
+                      )}
+                    </td>
+                    <td>
+                      <span className="badge b-raise">{r.campaign_name ?? "—"}</span>
+                    </td>
+                    <td>
+                      <div>{r.summary}</div>
+                      {r.preview ? (
+                        <div className="faint">{decodeMailText(r.preview).slice(0, 180)}</div>
+                      ) : null}
+                      {email ? (
+                        <ReplyBox to={email} subject={r.summary ?? ""} />
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -348,7 +408,7 @@ export default async function TodayPage({
                     </td>
                     <td>{g.count}</td>
                     <td>
-                      <Link href={`/chasers?code=${g.code}`}>Open chasers</Link>
+                      <Link href={`/chasers?code=${g.code}`}>Filter {g.code}</Link>
                     </td>
                   </tr>
                 ))}
@@ -368,8 +428,8 @@ export default async function TodayPage({
             <Link href="/verify-book" className="btn btn-primary">
               Verify queue
             </Link>
-            <Link href="/send" className="btn">
-              Open Send
+            <Link href="/chasers?view=unverified" className="btn">
+              Unverified on Chasers
             </Link>
           </div>
         </div>

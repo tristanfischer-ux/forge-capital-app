@@ -29,6 +29,7 @@ export function MeetingNotes({
       }}
     >
       <textarea
+        data-meeting-notes={meetingId}
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={5}

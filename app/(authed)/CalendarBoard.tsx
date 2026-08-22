@@ -149,7 +149,7 @@ export function CalendarBoard({
                 </div>
               ) : (
                 dayEvents.map((m) => {
-                  const href = m.htmlLink ?? `/meeting/${encodeURIComponent(`gcal:${m.id}`)}`;
+                  const href = `/meeting/${encodeURIComponent(`gcal:${m.id}`)}`;
                   const klass = [
                     "evt",
                     `evt-${(m.canceled ? "canceled" : m.colour).toLowerCase()}`,
@@ -165,8 +165,6 @@ export function CalendarBoard({
                     <a
                       key={m.id}
                       href={href}
-                      target={m.htmlLink ? "_blank" : undefined}
-                      rel={m.htmlLink ? "noreferrer" : undefined}
                       className={klass}
                     >
                       <div className="faint">{timeLocal(m.event_at, m.allDay)}</div>
