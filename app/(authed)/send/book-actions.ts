@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireTristan } from "@/lib/capital/assert-user";
 import { evaluateDraftGate } from "@/lib/capital/draft-gate";
-import { capitalActor, createCoreClient, createEngageClient } from "@/lib/supabase/capital";
+import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
 import { mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
 import { verifyPersonEmail } from "@/lib/capital/neverbounce";
 import { composeOutreachDraft } from "@/lib/capital/voice";
+import { recordEmailDraft } from "@/lib/capital/email-drafts";
 import { createGmailDraft } from "@/lib/gmail/create-draft";
 
 export async function verifyBookPerson(personId: string) {
@@ -85,43 +86,16 @@ export async function createBookDraft(input: {
       body: composed.body,
       cc: mandateDraftCc(code),
     });
-    const gmailId = draft.id;
-    const gmailUrl = `https://mail.google.com/mail/u/0/#drafts?compose=${encodeURIComponent(draft.message?.id ?? gmailId)}`;
-    const { data: activity } = await engage
-      .from("activities")
-      .insert({
-        occurred_at: new Date().toISOString(),
-        channel: "draft",
-        subject: composed.subject,
-        snippet: `Gmail draft ${gmailId}`,
-        source_id: `gmail-draft:${gmailId}`,
-        match_confidence: 1,
-        created_by: capitalActor(),
-      })
-      .select("id")
-      .maybeSingle();
-    if (activity?.id) {
-      const links = [];
-      if (part.person_id) {
-        links.push({
-          activity_id: activity.id,
-          entity_type: "person",
-          entity_id: part.person_id,
-          link_source: "app",
-        });
-      }
-      if (part.firm_id) {
-        links.push({
-          activity_id: activity.id,
-          entity_type: "firm",
-          entity_id: part.firm_id,
-          link_source: "app",
-        });
-      }
-      if (links.length) await engage.from("activity_links").insert(links);
-    }
+    const recorded = await recordEmailDraft({
+      participationId: part.id,
+      gmailDraftId: draft.id,
+      gmailThreadId: draft.message?.threadId ?? draft.threadId,
+      kind: "first_touch",
+      subject: composed.subject,
+      body: composed.body,
+    });
     revalidatePath(`/send/${code}`);
-    return { ok: true, gmailDraftId: gmailId, gmailUrl };
+    return { ok: true, gmailDraftId: recorded.gmailDraftId, gmailUrl: recorded.gmailUrl };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === "NOT_CONNECTED") {

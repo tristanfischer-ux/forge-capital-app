@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTristan } from "@/lib/capital/assert-user";
+import { recordEmailDraft } from "@/lib/capital/email-drafts";
 import { mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
-import { capitalActor, createEngageClient } from "@/lib/supabase/capital";
+import { createEngageClient } from "@/lib/supabase/capital";
 import {
   composeCallFollowUpDraft,
   composeThankYouDraft,
@@ -56,46 +57,32 @@ export async function createCallDraft(input: {
       cc: mandateDraftCc(primary),
     });
     const engage = createEngageClient();
-    const { data: activity } = await engage
-      .from("activities")
-      .insert({
-        occurred_at: new Date().toISOString(),
-        channel: "draft",
-        subject: composed.subject,
-        snippet: input.kind === "thank-you" ? "Thank-you draft" : "Follow-up draft",
-        source_id: `gmail-draft:${draft.id}`,
-        match_confidence: 1,
-        created_by: capitalActor(),
-      })
+    const { data: mandate } = await engage
+      .from("mandates")
       .select("id")
+      .eq("code", primary)
       .maybeSingle();
-    if (activity?.id) {
-      const links: {
-        activity_id: string;
-        entity_type: "person" | "firm";
-        entity_id: string;
-        link_source: string;
-      }[] = [
-        {
-          activity_id: activity.id,
-          entity_type: "person",
-          entity_id: book.personId,
-          link_source: "app",
-        },
-      ];
-      if (book.firmId) {
-        links.push({
-          activity_id: activity.id,
-          entity_type: "firm",
-          entity_id: book.firmId,
-          link_source: "app",
-        });
-      }
-      await engage.from("activity_links").insert(links);
+    const { data: part } = mandate
+      ? await engage
+          .from("participations")
+          .select("id")
+          .eq("person_id", book.personId)
+          .eq("mandate_id", mandate.id)
+          .maybeSingle()
+      : { data: null };
+    if (!part?.id) {
+      return { ok: false, error: "No participation on the book for this person and programme." };
     }
+    const recorded = await recordEmailDraft({
+      participationId: part.id,
+      gmailDraftId: draft.id,
+      gmailThreadId: draft.message?.threadId ?? draft.threadId,
+      kind: input.kind === "thank-you" ? "thank_you" : "post_meeting",
+      subject: composed.subject,
+      body: composed.body,
+    });
     revalidatePath(`/meeting/${encodeURIComponent(input.meetingId)}`);
-    const gmailUrl = `https://mail.google.com/mail/u/0/#drafts?compose=${encodeURIComponent(draft.message?.id ?? draft.id)}`;
-    return { ok: true, gmailUrl };
+    return { ok: true, gmailUrl: recorded.gmailUrl };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === "NOT_CONNECTED") return { ok: false, error: "Gmail is not connected." };

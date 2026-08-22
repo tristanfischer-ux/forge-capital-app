@@ -107,7 +107,8 @@ export async function bumpSyncState(
   if (!capitalConfigured()) return;
   const engage = createEngageClient();
   const patch = errorMessage
-    ? { last_error: errorMessage }
-    : { last_ok_at: new Date().toISOString(), last_error: null };
-  await engage.from("sync_state").update(patch).eq("feed", feed);
+    ? { feed, last_error: errorMessage }
+    : { feed, last_ok_at: new Date().toISOString(), last_error: null };
+  const { error } = await engage.from("sync_state").upsert(patch, { onConflict: "feed" });
+  if (error) console.error("sync_state", feed, error.message);
 }

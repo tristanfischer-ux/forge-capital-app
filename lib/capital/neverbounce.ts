@@ -1,3 +1,4 @@
+import { writeAudit } from "@/lib/capital/audit";
 import { bumpSyncState } from "@/lib/capital/rpc";
 import { createCoreClient } from "@/lib/supabase/capital";
 
@@ -168,6 +169,11 @@ export async function verifyPersonEmail(personId: string): Promise<{
       .update({ email_state: "generic", email_verified_at: new Date().toISOString() })
       .eq("id", personId);
     await bumpSyncState("neverbounce");
+    await writeAudit({
+      action: "people.email_state",
+      entity: `people:${personId}`,
+      after: { email_state: "generic" },
+    });
     return { ok: true, email_state: "generic", badge: "Generic inbox" };
   }
   try {
@@ -180,6 +186,11 @@ export async function verifyPersonEmail(personId: string): Promise<{
       })
       .eq("id", personId);
     await bumpSyncState("neverbounce");
+    await writeAudit({
+      action: "people.email_state",
+      entity: `people:${personId}`,
+      after: { email_state: checked.email_state, result: checked.result },
+    });
     return {
       ok: true,
       email_state: checked.email_state,

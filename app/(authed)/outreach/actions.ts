@@ -13,7 +13,9 @@ import {
   type OutreachDraftRow,
 } from "@/lib/capital/outreach";
 import { MANDATE_CODES, mandateDraftCc, type MandateCode } from "@/lib/capital/mandates";
-import { capitalActor, createCoreClient, createEngageClient } from "@/lib/supabase/capital";
+import { recordEmailDraft } from "@/lib/capital/email-drafts";
+import { checkOutreachAllowed } from "@/lib/capital/outreach-gate";
+import { createCoreClient } from "@/lib/supabase/capital";
 import { createGmailDraft } from "@/lib/gmail/create-draft";
 import { evaluateDraftGate } from "@/lib/capital/draft-gate";
 import { composeOutreachDraft } from "@/lib/capital/voice";
@@ -74,12 +76,17 @@ export async function createOutreachDrafts(input: {
   let created = 0;
   let skipped = 0;
   const errors: string[] = [];
-  const engage = createEngageClient();
   const batch = input.rows.slice(0, 25);
   for (const row of batch) {
-    if (row.stage !== "approved") {
+    if (!/^[0-9a-f-]{36}$/i.test(row.participationId)) {
       skipped += 1;
-      if (errors.length < 8) errors.push(`${row.firmName}: not approved — principal packet, not a draft.`);
+      if (errors.length < 8) errors.push(`${row.personName}: no participation to hang a draft on.`);
+      continue;
+    }
+    const allowed = await checkOutreachAllowed(row.participationId);
+    if (!allowed.allowed) {
+      skipped += 1;
+      if (errors.length < 8) errors.push(allowed.reason);
       continue;
     }
     if (!row.body || !row.subject || !row.email) {
@@ -117,27 +124,14 @@ export async function createOutreachDrafts(input: {
         body: composed.body,
         cc: mandateDraftCc(mandate),
       });
-      const { data: activity } = await engage
-        .from("activities")
-        .insert({
-          occurred_at: new Date().toISOString(),
-          channel: "draft",
-          subject: composed.subject,
-          snippet: "Outreach wave draft",
-          source_id: `gmail-draft:${draft.id}`,
-          match_confidence: 1,
-          created_by: capitalActor(),
-        })
-        .select("id")
-        .maybeSingle();
-      if (activity?.id) {
-        await engage.from("activity_links").insert({
-          activity_id: activity.id,
-          entity_type: "person",
-          entity_id: row.personId,
-          link_source: "app",
-        });
-      }
+      await recordEmailDraft({
+        participationId: row.participationId,
+        gmailDraftId: draft.id,
+        gmailThreadId: draft.message?.threadId ?? draft.threadId,
+        kind: "first_touch",
+        subject: composed.subject,
+        body: composed.body,
+      });
       created += 1;
     } catch (err) {
       skipped += 1;
