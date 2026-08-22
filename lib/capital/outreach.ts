@@ -48,15 +48,28 @@ export async function workingSet(code: MandateCode): Promise<{
 }> {
   const engage = createEngageClient();
   const core = createCoreClient();
-  const { data: mandate } = await engage.from("mandates").select("id, ask_summary, narrative_notes, status").eq("code", code).maybeSingle();
-  if (!mandate) return { anchors: [], tokens: [], note: "That programme is not on the book." };
+  const { data: mandate, error } = await engage
+    .from("mandates")
+    .select("id, ask_summary, narrative_notes, status, company_name")
+    .eq("code", code)
+    .maybeSingle();
+  if (error) {
+    return { anchors: [], tokens: [], note: `Book query failed: ${error.message}` };
+  }
+  if (!mandate) {
+    return {
+      anchors: [],
+      tokens: [],
+      note: `No mandate row for ${MANDATE_LABEL[code]} (${code}) on the shared book.`,
+    };
+  }
   const { data: parts } = await engage
     .from("participations")
     .select("firm_id, stage")
     .eq("mandate_id", mandate.id)
-    .in("stage", ["responded", "meeting", "dataroom"])
+    .in("stage", ["committed", "meeting", "responded", "dataroom", "approved", "approached"])
     .not("firm_id", "is", null)
-    .limit(80);
+    .limit(200);
   const firmIds = [...new Set((parts ?? []).map((p) => p.firm_id).filter(Boolean))] as string[];
   const firms = firmIds.length
     ? await inChunks(firmIds, async (chunk) => {
@@ -83,11 +96,14 @@ export async function workingSet(code: MandateCode): Promise<{
       tokens.add(t);
     }
   }
+  for (const t of tokenise(`${mandate.ask_summary ?? ""} ${mandate.narrative_notes ?? ""} ${mandate.company_name ?? ""} ${MANDATE_LABEL[code]}`)) {
+    tokens.add(t);
+  }
   const note =
-    anchors.length < 3
-      ? `Only ${anchors.length} positive anchor${anchors.length === 1 ? "" : "s"} (replied or met). That is a thin seed — lookalikes will be weak until more replies land.`
-      : `${anchors.length} firms have replied or met on ${MANDATE_LABEL[code]}.`;
-  return { anchors, tokens: [...tokens].slice(0, 24), note };
+    anchors.length === 0
+      ? `No replied or approved firms to seed from yet. Using the ${MANDATE_LABEL[code]} mandate text to hunt lookalikes.`
+      : `${anchors.length} firms on ${MANDATE_LABEL[code]} at approved / approached / replied / met. That is the seed.`;
+  return { anchors, tokens: [...tokens].slice(0, 32), note };
 }
 
 export async function shapeSamples(
@@ -100,7 +116,11 @@ export async function shapeSamples(
     (r) => r.stage === "approved" && r.emailState === "verified" && !r.paused,
   );
   const pick = never.slice(0, 3);
-  return composeRows(code, pick, true, "Already approved, never written.", instruction);
+  if (pick.length > 0) {
+    return composeRows(code, pick, true, "Already approved, never written.", instruction);
+  }
+  const fallback = (await listNeverWrittenOn(code)).filter((r) => r.emailState === "verified" && !r.paused).slice(0, 3);
+  return composeRows(code, fallback, true, "Verified people on this raise, used as a shape sample.", instruction);
 }
 
 async function composeRows(
@@ -230,15 +250,8 @@ export async function lookalikeCandidates(
     .select("firm_id, person_id, id, stage")
     .eq("mandate_id", mandate.id)
     .limit(2000);
-  const approached = new Set(
-    (existing ?? [])
-      .filter((p) =>
-        ["approached", "responded", "meeting", "dataroom", "closed_lost", "disqualified", "blocked"].includes(
-          p.stage ?? "",
-        ),
-      )
-      .map((p) => p.firm_id)
-      .filter(Boolean) as string[],
+  const alreadyOn = new Set(
+    (existing ?? []).map((p) => p.firm_id).filter(Boolean) as string[],
   );
 
   const { data: firms } = await core
@@ -249,13 +262,13 @@ export async function lookalikeCandidates(
   const seed = new Set(anchors.map((a) => a.firmId));
   const scored: { id: string; name: string; score: number; sectors: string | null; notes: string | null }[] = [];
   for (const f of firms ?? []) {
-    if (seed.has(f.id) || approached.has(f.id)) continue;
+    if (seed.has(f.id) || alreadyOn.has(f.id)) continue;
     const hay = `${Array.isArray(f.sectors) ? f.sectors.join(" ") : ""} ${f.notes ?? ""} ${f.canonical_name ?? ""}`.toLowerCase();
     let score = 0;
     for (const t of tokens) {
       if (hay.includes(t)) score += 1;
     }
-    if (score < 2) continue;
+    if (score < 1) continue;
     scored.push({
       id: f.id,
       name: f.canonical_name ?? "—",
