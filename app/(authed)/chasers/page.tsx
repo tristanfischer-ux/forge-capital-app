@@ -34,12 +34,19 @@ export default async function ChasersPage({
     rows = rows.filter((r) => r.emailState !== "verified");
   }
 
+  const allQuiet = quiet.length;
+  const counts = Object.fromEntries(
+    MANDATE_CODES.map((c) => [c, quiet.filter((r) => r.mandateCode === c).length]),
+  ) as Record<string, number>;
+
   const caption =
     view === "never"
       ? `${rows.length} never written`
       : view === "unverified"
         ? `${rows.length} unverified`
-        : `${rows.length} quiet for ${days} days`;
+        : code === "ALL"
+          ? `${allQuiet.toLocaleString("en-GB")} quiet for ${days} days, all programmes`
+          : `${rows.length.toLocaleString("en-GB")} quiet on that programme · ${allQuiet.toLocaleString("en-GB")} across all`;
 
   return (
     <div className="wrap">
@@ -47,9 +54,8 @@ export default async function ChasersPage({
         <div>
           <h1>Chasers</h1>
           <p>
-            Everyone you have written to and not heard back from, across every
-            programme. {caption}. A chaser is a Gmail draft. Nothing sends.
-            Verified addresses only.
+            Everyone you have written to and not heard back from. {caption}.
+            A chaser is a Gmail draft. Nothing sends. Verified addresses only.
           </p>
         </div>
       </div>
@@ -73,7 +79,14 @@ export default async function ChasersPage({
           </button>
         </form>
       </div>
-      <ChaserClient days={days} rows={rows} view={view} code={code} />
+      <ChaserClient
+        days={days}
+        rows={rows}
+        view={view}
+        code={code}
+        allQuiet={allQuiet}
+        counts={counts}
+      />
     </div>
   );
 }

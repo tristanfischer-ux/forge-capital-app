@@ -2,6 +2,13 @@ import { MANDATE_CODES, MANDATE_LABEL, type MandateCode } from "@/lib/capital/ma
 import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
 import { inChunks } from "@/lib/supabase/in-chunks";
 
+function displayName(fullName: string | null | undefined, email?: string | null): string {
+  let n = (fullName ?? "").replace(/\s+/g, " ").trim();
+  if (email) n = n.replace(email, "").replace(/\s+/g, " ").trim();
+  n = n.replace(/[\w.+-]+@[\w.-]+/g, "").replace(/\s+/g, " ").trim();
+  return n || (fullName ?? "").trim() || "—";
+}
+
 function isAutoReply(subject: string | null): boolean {
   return /^(auto[- ]?reply|automatic reply|out of office|abwesen|ooo\b|vacation|undeliverable|delivery status)/i.test(
     subject ?? "",
@@ -41,11 +48,11 @@ export async function listChasers(opts: {
 
   const { data: parts } = await engage
     .from("participations")
-    .select("id, person_id, firm_id, stage, first_sent, latest_touch")
+    .select("id, person_id, firm_id, stage, first_sent, latest_touch, updated_at")
     .eq("mandate_id", mandate.id)
     .not("person_id", "is", null)
     .in("stage", ["research", "approved", "approached", "responded", "meeting"])
-    .limit(400);
+    .limit(800);
   if (!parts?.length) return [];
 
   const personIds = [...new Set(parts.map((p) => p.person_id).filter(Boolean))] as string[];
@@ -123,18 +130,27 @@ export async function listChasers(opts: {
       history.find((h) => h.channel === "email_out" || h.channel === "draft") ?? null;
     const lastIn =
       history.find((h) => h.channel === "email_in" && !isAutoReply(h.subject)) ?? null;
+    const approached = ["approached", "responded", "meeting"].includes(p.stage ?? "");
     const outAt =
       lastOut?.occurred_at ?? p.latest_touch ?? p.first_sent ?? null;
-    if (!outAt) continue;
     const inAt = lastIn?.occurred_at ?? null;
-    if (inAt && new Date(inAt).getTime() >= new Date(outAt).getTime()) continue;
-    const quietDays = Math.floor((now - new Date(outAt).getTime()) / 86400000);
-    if (quietDays < opts.quietDays) continue;
+    if (inAt && outAt && new Date(inAt).getTime() >= new Date(outAt).getTime()) continue;
+    if (inAt && !outAt) continue;
+    let quietDays: number;
+    if (outAt) {
+      quietDays = Math.floor((now - new Date(outAt).getTime()) / 86400000);
+      if (quietDays < opts.quietDays) continue;
+    } else if (approached) {
+      // Tracker said we wrote; the dated send did not import. Still a chase.
+      quietDays = 999;
+    } else {
+      continue;
+    }
     rows.push({
       participationId: p.id,
       personId: person.id,
       firmId: p.firm_id,
-      personName: person.full_name ?? "—",
+      personName: displayName(person.full_name, person.email),
       firmName: firm?.canonical_name ?? "—",
       email: person.email,
       emailState: person.email_state,
@@ -242,7 +258,7 @@ export async function listNeverWrittenOn(mandateCode: MandateCode): Promise<Chas
       participationId: p.id,
       personId: person.id,
       firmId: p.firm_id,
-      personName: person.full_name ?? "—",
+      personName: displayName(person.full_name, person.email),
       firmName: firm?.canonical_name ?? "—",
       email: person.email,
       emailState: person.email_state,
@@ -260,5 +276,5 @@ export async function listNeverWrittenOn(mandateCode: MandateCode): Promise<Chas
 }
 
 export function mandateCaption(code: MandateCode): string {
-  return `${code} · ${MANDATE_LABEL[code]}${code === "YU" ? " · customers" : ""}${code === "HO" ? " · paused" : ""}`;
+  return `${MANDATE_LABEL[code]}${code === "YU" ? " · customers" : ""}${code === "HO" ? " · paused" : ""}`;
 }

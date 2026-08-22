@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { MANDATE_CODES, type MandateCode } from "@/lib/capital/mandates";
+import { MANDATE_CODES, MANDATE_LABEL, type MandateCode } from "@/lib/capital/mandates";
 import { mandateCaption, type ChaserRow } from "@/lib/capital/chasers";
 import { createBookDraft } from "../send/book-actions";
 import { createChaserDraft, createChaserDraftsBatch } from "./actions";
@@ -14,11 +14,15 @@ export function ChaserClient({
   rows,
   view,
   code,
+  allQuiet,
+  counts,
 }: {
   days: number;
   rows: ChaserRow[];
   view: "quiet" | "never" | "unverified";
   code: MandateCode | "ALL";
+  allQuiet: number;
+  counts: Record<string, number>;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
@@ -98,7 +102,7 @@ export function ChaserClient({
     <div>
       <div className="btn-row" style={{ marginBottom: 12, flexWrap: "wrap" }}>
         <a className={view === "quiet" && code === "ALL" ? "btn btn-primary" : "btn"} href={href({ view: "quiet", code: "ALL" })}>
-          Quiet ≥ {days} days
+          All programmes ({allQuiet})
         </a>
         <a className={view === "never" ? "btn btn-primary" : "btn"} href={href({ view: "never", code: "ALL" })}>
           Never written
@@ -112,7 +116,8 @@ export function ChaserClient({
             className={code === c ? "btn btn-primary" : "btn"}
             href={href({ code: c })}
           >
-            {c}
+            {MANDATE_LABEL[c]}
+            {typeof counts[c] === "number" ? ` (${counts[c]})` : ""}
           </a>
         ))}
       </div>
@@ -149,7 +154,9 @@ export function ChaserClient({
               ? "Nobody on the book is approved or in research with no outbound yet."
               : view === "unverified"
                 ? "Nobody on this list is unverified."
-                : `0 people quiet ≥${days} days across ${code === "ALL" ? "all programmes" : mandateCaption(code)}.`}
+                : code === "ALL"
+                  ? `0 people quiet ≥${days} days across all programmes.`
+                  : `0 quiet on ${mandateCaption(code)}. All programmes has ${allQuiet.toLocaleString("en-GB")} — open All programmes.`}
           </p>
         ) : (
           <table>
@@ -177,7 +184,13 @@ export function ChaserClient({
                       <div className="faint">never written</div>
                     ) : null}
                   </td>
-                  <td>{r.kind === "quiet" ? `${r.quietDays} days` : "—"}</td>
+                  <td>
+                    {r.kind !== "quiet"
+                      ? "—"
+                      : r.quietDays >= 900
+                        ? "no dated send"
+                        : `${r.quietDays} days`}
+                  </td>
                   <td className="faint">
                     {r.lastOutboundSubject ?? r.lastOutboundAt?.slice(0, 10) ?? "—"}
                   </td>
