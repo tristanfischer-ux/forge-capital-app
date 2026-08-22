@@ -60,7 +60,9 @@ export function RaiseDeskChrome({
           })}
           <MoreMenu />
         </nav>
-        <ProgrammeChip initial={programme} />
+        <Suspense fallback={<span className="programme-chip">Programme</span>}>
+          <ProgrammeChip initial={programme} />
+        </Suspense>
         <DeskSearch />
       </header>
       <OpusChatBar docked />

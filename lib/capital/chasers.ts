@@ -1,5 +1,12 @@
 import type { MandateCode } from "@/lib/capital/mandates";
 import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
+import { inChunks } from "@/lib/supabase/in-chunks";
+
+function isAutoReply(subject: string | null): boolean {
+  return /^(auto[- ]?reply|automatic reply|out of office|abwesen|ooo\b|vacation|undeliverable|delivery status)/i.test(
+    subject ?? "",
+  );
+}
 
 export type ChaserRow = {
   participationId: string;
@@ -40,30 +47,50 @@ export async function listChasers(opts: {
 
   const personIds = [...new Set(parts.map((p) => p.person_id).filter(Boolean))] as string[];
   const firmIds = [...new Set(parts.map((p) => p.firm_id).filter(Boolean))] as string[];
-  const [{ data: people }, { data: firms }] = await Promise.all([
-    core.from("people").select("id, full_name, email, email_state, dnc").in("id", personIds),
+  const [people, firms] = await Promise.all([
+    inChunks(personIds, async (chunk) => {
+      const { data, error } = await core
+        .from("people")
+        .select("id, full_name, email, email_state, dnc")
+        .in("id", chunk);
+      if (error) console.error("chasers people", error.message);
+      return data ?? [];
+    }),
     firmIds.length
-      ? core.from("firms").select("id, canonical_name, dnc").in("id", firmIds)
-      : Promise.resolve({ data: [] }),
+      ? inChunks(firmIds, async (chunk) => {
+          const { data, error } = await core
+            .from("firms")
+            .select("id, canonical_name, dnc")
+            .in("id", chunk);
+          if (error) console.error("chasers firms", error.message);
+          return data ?? [];
+        })
+      : Promise.resolve([]),
   ]);
-  const personBy = Object.fromEntries((people ?? []).map((p) => [p.id, p]));
-  const firmBy = Object.fromEntries((firms ?? []).map((f) => [f.id, f]));
+  const personBy = Object.fromEntries(people.map((p) => [p.id, p]));
+  const firmBy = Object.fromEntries(firms.map((f) => [f.id, f]));
 
-  const { data: links } = await engage
-    .from("activity_links")
-    .select("activity_id, entity_id")
-    .eq("entity_type", "person")
-    .in("entity_id", personIds);
-  const actIds = [...new Set((links ?? []).map((l) => l.activity_id))];
-  const { data: acts } = actIds.length
-    ? await engage
-        .from("activities")
-        .select("id, occurred_at, channel, subject")
-        .in("id", actIds)
-        .in("channel", ["email_out", "email_in", "draft"])
-        .order("occurred_at", { ascending: false })
-        .limit(800)
-    : { data: [] };
+  const links = await inChunks(personIds, async (chunk) => {
+    const { data, error } = await engage
+      .from("activity_links")
+      .select("activity_id, entity_id")
+      .eq("entity_type", "person")
+      .in("entity_id", chunk);
+    if (error) console.error("chasers links", error.message);
+    return data ?? [];
+  });
+  const actIds = [...new Set(links.map((l) => l.activity_id))];
+  const acts = actIds.length
+    ? await inChunks(actIds, async (chunk) => {
+        const { data, error } = await engage
+          .from("activities")
+          .select("id, occurred_at, channel, subject")
+          .in("id", chunk)
+          .in("channel", ["email_out", "email_in", "draft"]);
+        if (error) console.error("chasers acts", error.message);
+        return data ?? [];
+      })
+    : [];
   const actsByPerson = new Map<string, { occurred_at: string; channel: string; subject: string | null }[]>();
   const peopleByAct = new Map<string, string[]>();
   for (const l of links ?? []) {
@@ -86,10 +113,13 @@ export async function listChasers(opts: {
     if (!person || person.dnc) continue;
     const firm = p.firm_id ? firmBy[p.firm_id] : null;
     if (firm?.dnc) continue;
-    const history = actsByPerson.get(p.person_id as string) ?? [];
+    const history = (actsByPerson.get(p.person_id as string) ?? [])
+      .slice()
+      .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
     const lastOut =
       history.find((h) => h.channel === "email_out" || h.channel === "draft") ?? null;
-    const lastIn = history.find((h) => h.channel === "email_in") ?? null;
+    const lastIn =
+      history.find((h) => h.channel === "email_in" && !isAutoReply(h.subject)) ?? null;
     const outAt =
       lastOut?.occurred_at ?? p.latest_touch ?? p.first_sent ?? null;
     if (!outAt) continue;

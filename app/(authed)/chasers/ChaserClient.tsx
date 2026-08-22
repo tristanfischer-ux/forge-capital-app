@@ -41,8 +41,10 @@ export function ChaserClient({
       {msg ? <p className="note">{msg}</p> : null}
       {rows.length === 0 ? (
         <p className="sub">
-          Nobody on this raise has been quiet for {days} days. Quiet means you
-          wrote and they have not replied.
+          Nobody on {code} has been quiet for {days} days. Quiet means there is
+          an outbound date (mail or first sent) and no later real reply. Out-of-office
+          mail does not count as a reply. Switch programme with the chip in the
+          header.
         </p>
       ) : (
         <table>

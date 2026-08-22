@@ -4,6 +4,7 @@ import { evaluateDraftGate, lastThreadsForPeople } from "@/lib/capital/draft-gat
 import type { MandateCode } from "@/lib/capital/mandates";
 import { badgeClassForEmailState, badgeForEmailState } from "@/lib/capital/neverbounce";
 import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
+import { inChunks } from "@/lib/supabase/in-chunks";
 import { SendBookClient, type SendRow } from "./SendBookClient";
 
 export async function RaiseSend({ code }: { code: string }) {
@@ -31,16 +32,28 @@ export async function RaiseSend({ code }: { code: string }) {
 
   const personIds = [...new Set((parts ?? []).map((p) => p.person_id).filter(Boolean))] as string[];
   const firmIds = [...new Set((parts ?? []).map((p) => p.firm_id).filter(Boolean))] as string[];
-  const [{ data: people }, { data: firms }] = await Promise.all([
+  const [people, firms] = await Promise.all([
     personIds.length
-      ? core.from("people").select("id, full_name, email, email_state, dnc").in("id", personIds)
-      : Promise.resolve({ data: [] }),
+      ? inChunks(personIds, async (chunk) => {
+          const { data } = await core
+            .from("people")
+            .select("id, full_name, email, email_state, dnc")
+            .in("id", chunk);
+          return data ?? [];
+        })
+      : [],
     firmIds.length
-      ? core.from("firms").select("id, canonical_name, dnc").in("id", firmIds)
-      : Promise.resolve({ data: [] }),
+      ? inChunks(firmIds, async (chunk) => {
+          const { data } = await core
+            .from("firms")
+            .select("id, canonical_name, dnc")
+            .in("id", chunk);
+          return data ?? [];
+        })
+      : [],
   ]);
-  const personById = Object.fromEntries((people ?? []).map((p) => [p.id, p]));
-  const firmById = Object.fromEntries((firms ?? []).map((f) => [f.id, f]));
+  const personById = Object.fromEntries(people.map((p) => [p.id, p]));
+  const firmById = Object.fromEntries(firms.map((f) => [f.id, f]));
   const [allCollisions, threads] = await Promise.all([
     listCollisions(),
     lastThreadsForPeople(personIds),

@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { listChasers } from "@/lib/capital/chasers";
-import { MANDATE_OPTIONS, type MandateCode } from "@/lib/capital/mandates";
+import { MANDATE_LABEL } from "@/lib/capital/mandates";
 import { parseProgramme } from "@/lib/desk/programme";
 import { ChaserClient } from "./ChaserClient";
 
@@ -23,24 +22,13 @@ export default async function ChasersPage({
         <div>
           <h1>Chasers</h1>
           <p>
-            People you wrote to who have not replied in {days} days. A chaser
-            is a Gmail draft with a calendar link. Nothing sends. The list stays
-            empty until an address is verified and an outbound touch exists.
+            {MANDATE_LABEL[code]} — {rows.length} quiet for {days} days. A chaser
+            is a Gmail draft. Nothing sends. Use the programme chip in the header
+            to switch. Drafts still need a verified address.
           </p>
         </div>
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="btn-row">
-          {MANDATE_OPTIONS.map((m) => (
-            <Link
-              key={m.code}
-              className={m.code === code ? "btn btn-primary" : "btn"}
-              href={`/chasers?code=${m.code}&days=${days}`}
-            >
-              {m.label}
-            </Link>
-          ))}
-        </div>
         <form method="get" className="btn-row">
           <input type="hidden" name="code" value={code} />
           <label className="faint">
