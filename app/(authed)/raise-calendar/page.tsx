@@ -1,22 +1,29 @@
 import { CalendarBoard } from "../CalendarBoard";
-import { getDeskToday } from "@/lib/queries/desk-today";
+import { listWeekAheadCalendar } from "@/lib/capital/live-calendar";
 
 export const dynamic = "force-dynamic";
 
 export default async function RaiseCalendarPage() {
-  const data = await getDeskToday();
+  const week = await listWeekAheadCalendar();
   return (
     <div className="wrap">
       <div className="page-head">
         <div>
           <h1>Calendar — the week ahead</h1>
           <p>
-            The shape of the week from Google Calendar. Click a block for the
-            briefing — who it is, the mail, and which programme it belongs to.
+            Everything on your Google Calendar for the next seven days,
+            including weekends. Blocks are coloured by programme when the
+            title or guests make that obvious.
           </p>
         </div>
       </div>
-      <CalendarBoard initial={data.meetings} />
+      <CalendarBoard
+        initial={week.events}
+        initialDays={week.days}
+        googleOk={week.googleOk}
+        needsCalendarScope={week.needsCalendarScope}
+        error={week.error}
+      />
     </div>
   );
 }
