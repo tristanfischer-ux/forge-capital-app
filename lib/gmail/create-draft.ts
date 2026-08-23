@@ -109,6 +109,11 @@ export interface CreateDraftInput {
    *  email body. Must be the UUID of the campaign_partner row so open/click
    *  events are attributed to the right partner. */
   campaignPartnerId?: string;
+  /** Existing Gmail thread — chases MUST set this so the draft is a reply. */
+  threadId?: string;
+  /** RFC 2822 Message-ID of the message being replied to. */
+  inReplyTo?: string;
+  references?: string;
 }
 
 export interface CreateDraftResult {
@@ -158,6 +163,12 @@ async function getAccessTokenForCurrentUser(): Promise<string> {
 }
 
 /** Base64-URL-encode an RFC 2822 message. */
+function asMsgId(id: string): string {
+  const t = id.trim();
+  if (!t) return "";
+  return t.startsWith("<") ? t : `<${t}>`;
+}
+
 function encodeRfc2822Message(
   to: string,
   subject: string,
@@ -165,15 +176,22 @@ function encodeRfc2822Message(
   attachments?: EmailAttachment[],
   campaignPartnerId?: string,
   cc?: string[],
+  inReplyTo?: string,
+  references?: string,
 ): string {
   const subjectHeader = /[^\x20-\x7e]/.test(subject)
     ? `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`
     : subject;
 
+  const replyTo = inReplyTo ? asMsgId(inReplyTo) : "";
+  const refs = references ? references.trim() : replyTo;
+
   const headers = [
     `To: ${to}`,
     ...(cc?.length ? [`Cc: ${cc.join(", ")}`] : []),
     `Subject: ${subjectHeader}`,
+    ...(replyTo ? [`In-Reply-To: ${replyTo}`] : []),
+    ...(refs ? [`References: ${refs}`] : []),
     `MIME-Version: 1.0`,
   ];
 
@@ -239,6 +257,8 @@ export async function createGmailDraft(input: CreateDraftInput): Promise<CreateD
     input.attachments,
     input.campaignPartnerId,
     input.cc,
+    input.inReplyTo,
+    input.references,
   );
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
@@ -246,7 +266,12 @@ export async function createGmailDraft(input: CreateDraftInput): Promise<CreateD
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ message: { raw } }),
+    body: JSON.stringify({
+      message: {
+        raw,
+        ...(input.threadId ? { threadId: input.threadId } : {}),
+      },
+    }),
   });
   if (!res.ok) {
     throw new Error(`Gmail draft create failed: HTTP ${res.status} ${await res.text()}`);

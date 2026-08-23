@@ -1,12 +1,29 @@
-import { MANDATE_CODES, MANDATE_LABEL, type MandateCode } from "@/lib/capital/mandates";
+import {
+  isChaseDraftable,
+  MANDATE_CODES,
+  MANDATE_LABEL,
+  type MandateCode,
+} from "@/lib/capital/mandates";
 import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
 import { inChunks } from "@/lib/supabase/in-chunks";
 
-function displayName(fullName: string | null | undefined, email?: string | null): string {
-  let n = (fullName ?? "").replace(/\s+/g, " ").trim();
-  if (email) n = n.replace(email, "").replace(/\s+/g, " ").trim();
+function displayName(person: {
+  salutation_name?: string | null;
+  given_name?: string | null;
+  family_name?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+}): string {
+  const sal = (person.salutation_name ?? "").trim();
+  const fam = (person.family_name ?? "").trim();
+  if (sal && fam) return `${sal} ${fam}`;
+  if (sal) return sal;
+  const given = (person.given_name ?? "").trim();
+  if (given && fam) return `${given} ${fam}`;
+  let n = (person.full_name ?? "").replace(/\s+/g, " ").trim();
+  if (person.email) n = n.replace(person.email, "").replace(/\s+/g, " ").trim();
   n = n.replace(/[\w.+-]+@[\w.-]+/g, "").replace(/\s+/g, " ").trim();
-  return n || (fullName ?? "").trim() || "—";
+  return n || (person.full_name ?? "").trim() || "—";
 }
 
 function isAutoReply(subject: string | null): boolean {
@@ -20,6 +37,7 @@ export type ChaserRow = {
   personId: string;
   firmId: string | null;
   personName: string;
+  salutationName: string | null;
   firmName: string;
   email: string | null;
   emailState: string | null;
@@ -31,6 +49,8 @@ export type ChaserRow = {
   mandateCode: MandateCode;
   kind: "quiet" | "never";
   paused: boolean;
+  chaseCount: number;
+  mismatch: boolean;
 };
 
 export async function listChasers(opts: {
@@ -48,7 +68,7 @@ export async function listChasers(opts: {
 
   const { data: parts } = await engage
     .from("participations")
-    .select("id, person_id, firm_id, stage, first_sent, latest_touch, updated_at")
+    .select("id, person_id, firm_id, stage, first_sent, latest_touch, updated_at, chase_count")
     .eq("mandate_id", mandate.id)
     .not("person_id", "is", null)
     .in("stage", ["research", "approved", "approached", "responded", "meeting"])
@@ -61,7 +81,9 @@ export async function listChasers(opts: {
     inChunks(personIds, async (chunk) => {
       const { data, error } = await core
         .from("people")
-        .select("id, full_name, email, email_state, dnc")
+        .select(
+          "id, full_name, given_name, family_name, salutation_name, email, email_state, dnc, email_name_mismatch",
+        )
         .in("id", chunk);
       if (error) console.error("chasers people", error.message);
       return data ?? [];
@@ -130,6 +152,7 @@ export async function listChasers(opts: {
       history.find((h) => h.channel === "email_out" || h.channel === "draft") ?? null;
     const lastIn =
       history.find((h) => h.channel === "email_in" && !isAutoReply(h.subject)) ?? null;
+    if ((p.chase_count ?? 0) >= 2) continue;
     const approached = ["approached", "responded", "meeting"].includes(p.stage ?? "");
     const outAt =
       lastOut?.occurred_at ?? p.latest_touch ?? p.first_sent ?? null;
@@ -150,7 +173,8 @@ export async function listChasers(opts: {
       participationId: p.id,
       personId: person.id,
       firmId: p.firm_id,
-      personName: displayName(person.full_name, person.email),
+      personName: displayName(person),
+      salutationName: (person.salutation_name ?? "").trim() || null,
       firmName: firm?.canonical_name ?? "—",
       email: person.email,
       emailState: person.email_state,
@@ -161,7 +185,9 @@ export async function listChasers(opts: {
       quietDays,
       mandateCode: opts.mandateCode,
       kind: "quiet",
-      paused: opts.mandateCode === "HO",
+      paused: !isChaseDraftable(opts.mandateCode),
+      chaseCount: p.chase_count ?? 0,
+      mismatch: Boolean(person.email_name_mismatch),
     });
   }
   rows.sort((a, b) => b.quietDays - a.quietDays);
@@ -201,7 +227,9 @@ export async function listNeverWrittenOn(mandateCode: MandateCode): Promise<Chas
     inChunks(personIds, async (chunk) => {
       const { data } = await core
         .from("people")
-        .select("id, full_name, email, email_state, dnc")
+        .select(
+          "id, full_name, given_name, family_name, salutation_name, email, email_state, dnc, email_name_mismatch",
+        )
         .in("id", chunk);
       return data ?? [];
     }),
@@ -258,7 +286,8 @@ export async function listNeverWrittenOn(mandateCode: MandateCode): Promise<Chas
       participationId: p.id,
       personId: person.id,
       firmId: p.firm_id,
-      personName: displayName(person.full_name, person.email),
+      personName: displayName(person),
+      salutationName: (person.salutation_name ?? "").trim() || null,
       firmName: firm?.canonical_name ?? "—",
       email: person.email,
       emailState: person.email_state,
@@ -269,7 +298,9 @@ export async function listNeverWrittenOn(mandateCode: MandateCode): Promise<Chas
       quietDays: 0,
       mandateCode: mandateCode,
       kind: "never",
-      paused: mandateCode === "HO",
+      paused: !isChaseDraftable(mandateCode),
+      chaseCount: 0,
+      mismatch: Boolean(person.email_name_mismatch),
     });
   }
   return rows;

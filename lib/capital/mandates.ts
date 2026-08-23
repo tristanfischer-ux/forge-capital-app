@@ -47,6 +47,33 @@ export function isCustomerMandate(code: MandateCode): boolean {
   return MANDATE_KIND[code] === "customer";
 }
 
+/** Phrases that identify a mandate in Gmail subjects. Used to reply in the right thread. */
+export const MANDATE_SUBJECT_HINTS: Record<MandateCode, string[]> = {
+  SS: ["Space Solar"],
+  SK: ["SkySails", "Sky Sails"],
+  FF: ["FishFrom", "Fish From"],
+  PA: ["Panatere"],
+  OD: ["Odysseus"],
+  CA: ["Casper"],
+  US: ["US Arbitrage"],
+  HO: ["PHANTM", "Hooley"],
+  YU: ["Yuri", "RPM"],
+};
+
+/** SkySails broad outreach is suspended; Hooley is paused; Yuri is not a raise. */
+export function isChaseDraftable(code: MandateCode): boolean {
+  if (code === "HO" || code === "SK") return false;
+  if (isCustomerMandate(code)) return false;
+  return true;
+}
+
+export function mandateGmailQuery(code: MandateCode, email: string): string {
+  const hints = MANDATE_SUBJECT_HINTS[code]
+    .map((h) => `"${h.replace(/"/g, "")}"`)
+    .join(" OR ");
+  return `in:sent to:"${email.trim().toLowerCase()}" subject:(${hints})`;
+}
+
 export const CALENDLY_URL = "https://calendly.com/tristan-fischer-wjlf/30min";
 export const TRISTAN_MOBILE = "+44 7776191944";
 export const TRISTAN_EMAIL = "tristan.fischer@gmail.com";

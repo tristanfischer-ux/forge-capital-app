@@ -85,7 +85,18 @@ export function composeOutreachDraft(opts: {
   return { subject, body };
 }
 
-function signOffBlock(kind: "raise" | "yuri" = "raise"): string {
+function holidaySoftener(at = new Date()): string | null {
+  const month = at.getMonth() + 1;
+  if (month === 8) {
+    return "I know August can be a tricky time and you may be away, so no rush at all.";
+  }
+  if (month === 12) {
+    return "I know late December can be a tricky time and you may be away, so no rush at all.";
+  }
+  return null;
+}
+
+function signOffBlock(kind: "raise" | "yuri" | "chase" = "raise"): string {
   if (kind === "yuri") {
     return [
       "Best wishes,",
@@ -95,6 +106,16 @@ function signOffBlock(kind: "raise" | "yuri" = "raise"): string {
       TRISTAN_EMAIL,
       TRISTAN_MOBILE,
       TRISTAN_LINKEDIN,
+    ].join("\n");
+  }
+  if (kind === "chase") {
+    return [
+      "Best wishes,",
+      "Tristan",
+      `Email: ${TRISTAN_EMAIL}`,
+      `Mobile: ${TRISTAN_MOBILE}`,
+      `Calendar Access: ${CALENDLY_URL}`,
+      `LinkedIn: ${TRISTAN_LINKEDIN}`,
     ].join("\n");
   }
   return [
@@ -145,13 +166,22 @@ function composeYuriOutreach(opts: OutreachOpts, first: string): { subject: stri
   return { subject, body };
 }
 
-/** Short, polite chase of an earlier email. Never a second cold bio. */
+const RELEASE_VALVE =
+  "No need for a long reply: if there is any interest I would be glad to send the deck or set up a short call, and if it is not one for you, just say the word and I will happily leave it there.";
+
+function replySubject(lastSubject: string | null | undefined, fallback: string): string {
+  const stripped = (lastSubject ?? "").replace(/^(re:\s*)+/i, "").trim();
+  return `Re: ${stripped || fallback}`;
+}
+
+/** Short, polite chase of an earlier email. Never a second cold bio. Always in-thread. */
 export function composeChaserDraft(opts: {
   personName: string;
   firmName: string;
   mandateCode: MandateCode;
   lastSubject?: string | null;
   lastOccurredAt?: string | null;
+  askSummary?: string | null;
 }): { subject: string; body: string } {
   const first = firstName(opts.personName) || opts.personName;
   const company = MANDATE_LABEL[opts.mandateCode];
@@ -162,7 +192,7 @@ export function composeChaserDraft(opts: {
           month: "long",
         })
       : "recently";
-    const subject = `Re: ${opts.lastSubject?.replace(/^re:\s*/i, "") || "Yuri & the RPM"}`;
+    const subject = replySubject(opts.lastSubject, "Yuri & the RPM");
     const body = [
       `Dear ${first},`,
       "",
@@ -178,25 +208,18 @@ export function composeChaserDraft(opts: {
     ].join("\n");
     return { subject, body };
   }
-  const when = opts.lastOccurredAt
-    ? new Date(opts.lastOccurredAt).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "long",
-      })
-    : "recently";
-  const about = opts.lastSubject
-    ? `about ${opts.lastSubject.replace(/^re:\s*/i, "")}`
-    : `about ${company}`;
-  const subject = `Re: ${opts.lastSubject?.replace(/^re:\s*/i, "") || company}`;
+  const subject = replySubject(opts.lastSubject, company);
+  const ask = (opts.askSummary ?? "").trim();
+  const about = ask ? `${company} — ${ask}` : company;
+  const august = holidaySoftener();
   const body = [
     `Dear ${first},`,
     "",
-    `I wrote on ${when} ${about}. I know inboxes are busy — I wanted to reconnect briefly.`,
+    `I wanted to gently follow up on my note below about ${about}.`,
     "",
-    `Would you have 20 minutes in the next few days?`,
-    CALENDLY_URL,
+    august ? `${august} ${RELEASE_VALVE}` : RELEASE_VALVE,
     "",
-    signOffBlock(),
+    signOffBlock("chase"),
     "",
   ].join("\n");
   return { subject, body };

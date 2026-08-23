@@ -3,6 +3,7 @@ import { MANDATE_CODES, type MandateCode } from "@/lib/capital/mandates";
 import { ChaserClient } from "./ChaserClient";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function parseView(raw: string | undefined): "quiet" | "never" | "unverified" {
   if (raw === "never" || raw === "unverified") return raw;
@@ -55,7 +56,8 @@ export default async function ChasersPage({
           <h1>Chasers</h1>
           <p>
             Everyone you have written to and not heard back from. {caption}.
-            A chaser is a Gmail draft. Nothing sends. Verified addresses only.
+            A chaser is a Gmail draft on the original thread. Nothing sends.
+            Verified addresses only.
           </p>
         </div>
       </div>

@@ -35,7 +35,10 @@ export function ChaserClient({
           r.kind === "quiet" &&
           r.emailState === "verified" &&
           !r.paused &&
-          Boolean(r.email),
+          !r.mismatch &&
+          Boolean(r.email) &&
+          Boolean(r.salutationName) &&
+          r.chaseCount < 2,
       ),
     [rows],
   );
@@ -129,7 +132,8 @@ export function ChaserClient({
             {draftable.length > BULK_CAP
               ? ` · this click creates ${batch.length}, then you can do the next ${BULK_CAP}`
               : ""}
-            . HO is paused. Nothing sends.
+            . Each draft is a reply on the original Gmail thread. SkySails is
+            suspended, Hooley is paused. Nothing sends.
           </p>
           <div className="btn-row" style={{ padding: "0 16px 16px" }}>
             <button
@@ -200,18 +204,24 @@ export function ChaserClient({
                       className="btn btn-primary"
                       disabled={
                         busy === r.participationId ||
+                        r.paused ||
+                        r.mismatch ||
                         r.emailState !== "verified" ||
-                        r.paused
+                        (r.kind === "quiet" && (!r.salutationName || r.chaseCount >= 2))
                       }
                       onClick={() => chase(r)}
                     >
                       {r.paused
                         ? "Paused"
-                        : r.emailState !== "verified"
-                          ? "Verify first"
-                          : r.kind === "never"
-                            ? "Create opener draft"
-                            : "Create chaser draft"}
+                        : r.mismatch
+                          ? "Name/email mismatch"
+                          : r.chaseCount >= 2
+                            ? "Sequence done"
+                            : r.emailState !== "verified"
+                              ? "Verify first"
+                              : r.kind === "never"
+                                ? "Create opener draft"
+                                : "Create chaser draft"}
                     </button>
                   </td>
                 </tr>
