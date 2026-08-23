@@ -191,9 +191,11 @@ export function ChaserClient({
                   <td>
                     {r.kind !== "quiet"
                       ? "—"
-                      : r.quietDays >= 900
-                        ? "no dated send"
-                        : `${r.quietDays} days`}
+                      : !r.email
+                        ? "no email"
+                        : r.quietDays >= 900
+                          ? "sent — date missing"
+                          : `${r.quietDays} days`}
                   </td>
                   <td className="faint">
                     {r.lastOutboundSubject ?? r.lastOutboundAt?.slice(0, 10) ?? "—"}

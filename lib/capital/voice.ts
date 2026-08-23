@@ -169,6 +169,12 @@ function composeYuriOutreach(opts: OutreachOpts, first: string): { subject: stri
 const RELEASE_VALVE =
   "No need for a long reply: if there is any interest I would be glad to send the deck or set up a short call, and if it is not one for you, just say the word and I will happily leave it there.";
 
+/** Always a body prompt, never only a signature line. Gmail hides footers. */
+export const CALENDLY_PROMPT = [
+  "If twenty minutes is easier than writing back, grab a slot here:",
+  CALENDLY_URL,
+].join("\n");
+
 function replySubject(lastSubject: string | null | undefined, fallback: string): string {
   const stripped = (lastSubject ?? "").replace(/^(re:\s*)+/i, "").trim();
   return `Re: ${stripped || fallback}`;
@@ -216,6 +222,8 @@ export function composeChaserDraft(opts: {
     `Dear ${first},`,
     "",
     `I wanted to gently follow up on my note below about ${about}.`,
+    "",
+    CALENDLY_PROMPT,
     "",
     august ? `${august} ${RELEASE_VALVE}` : RELEASE_VALVE,
     "",

@@ -26,6 +26,13 @@ assert.match(voiceSrc, /Yuri & the RPM — a short call\?/);
 assert.match(voiceSrc, /I've copied Maria, Christian and Daniel at Yuri/);
 assert.match(voiceSrc, /if it is not one for you, just say the word and I will happily leave it there/);
 assert.match(voiceSrc, /I know August can be a tricky time/);
+assert.match(voiceSrc, /If twenty minutes is easier than writing back, grab a slot here/);
+assert.match(
+  voiceSrc.slice(voiceSrc.indexOf("export function composeChaserDraft"), voiceSrc.indexOf("export function composeThankYouDraft")),
+  /CALENDLY_PROMPT/,
+);
+assert.match(load("lib/capital/send-date.ts"), /inferLastOutboundAt/);
+assert.match(load("lib/capital/send-date.ts"), /sendDatesFromNote/);
 assert.doesNotMatch(voiceSrc.slice(voiceSrc.indexOf("export function composeChaserDraft"), voiceSrc.indexOf("export function composeThankYouDraft")), /COLD_BIO/);
 assert.match(load("lib/gmail/create-draft.ts"), /threadId\?: string/);
 assert.match(load("lib/gmail/create-draft.ts"), /In-Reply-To/);
@@ -83,5 +90,28 @@ assert.equal(parsed[0].verdict, "fine");
 assert.equal(parsed[1].verdict, "cautious");
 assert.match(parsed[1].reason, /Bordeaux/);
 assert.equal(parsed[2].verdict, "leave");
+
+import { spawnSync } from "node:child_process";
+const dateChk = spawnSync(
+  process.execPath,
+  [
+    "--experimental-strip-types",
+    "--input-type=module",
+    "-e",
+    `import { sendDatesFromNote, inferLastOutboundAt } from ${JSON.stringify(resolve(root, "lib/capital/send-date.ts"))};
+     const aaron = "[2026-05-04] Added. | [2026-05-15] Email sent to andy.gregory@bgf.co.uk. | 2026-05-28 — Follow-up sent";
+     // 2026-05-04 is an "added" date, not a send.
+     if (sendDatesFromNote(aaron).join(",") !== "2026-05-15,2026-05-28") throw new Error("aaron dates");
+     if (inferLastOutboundAt({ statusNote: aaron }) !== "2026-05-28") throw new Error("aaron last");
+     if (inferLastOutboundAt({ firstSent: "2026-03-11", statusNote: "2026-06-21: Re-engagement follow-up SENT" }) !== "2026-06-21") throw new Error("gareth last");
+     console.log("PASS  send-date");`,
+  ],
+  { encoding: "utf8" },
+);
+if (dateChk.status !== 0) {
+  process.stderr.write(dateChk.stderr || dateChk.stdout || "send-date test failed\n");
+  process.exit(dateChk.status || 1);
+}
+process.stdout.write(dateChk.stdout);
 
 console.log("PASS  parsers");

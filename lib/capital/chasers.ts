@@ -4,6 +4,7 @@ import {
   MANDATE_LABEL,
   type MandateCode,
 } from "@/lib/capital/mandates";
+import { inferLastOutboundAt } from "@/lib/capital/send-date";
 import { createCoreClient, createEngageClient } from "@/lib/supabase/capital";
 import { inChunks } from "@/lib/supabase/in-chunks";
 
@@ -68,7 +69,7 @@ export async function listChasers(opts: {
 
   const { data: parts } = await engage
     .from("participations")
-    .select("id, person_id, firm_id, stage, first_sent, latest_touch, updated_at, chase_count")
+    .select("id, person_id, firm_id, stage, first_sent, latest_touch, updated_at, chase_count, status_note")
     .eq("mandate_id", mandate.id)
     .not("person_id", "is", null)
     .in("stage", ["research", "approved", "approached", "responded", "meeting"])
@@ -154,8 +155,13 @@ export async function listChasers(opts: {
       history.find((h) => h.channel === "email_in" && !isAutoReply(h.subject)) ?? null;
     if ((p.chase_count ?? 0) >= 2) continue;
     const approached = ["approached", "responded", "meeting"].includes(p.stage ?? "");
-    const outAt =
-      lastOut?.occurred_at ?? p.latest_touch ?? p.first_sent ?? null;
+    const inferredDay = inferLastOutboundAt({
+      activityAt: lastOut?.occurred_at ?? null,
+      firstSent: p.first_sent,
+      latestTouch: p.latest_touch,
+      statusNote: p.status_note,
+    });
+    const outAt = lastOut?.occurred_at ?? (inferredDay ? `${inferredDay}T12:00:00.000Z` : null);
     const inAt = lastIn?.occurred_at ?? null;
     if (inAt && outAt && new Date(inAt).getTime() >= new Date(outAt).getTime()) continue;
     if (inAt && !outAt) continue;
@@ -164,7 +170,7 @@ export async function listChasers(opts: {
       quietDays = Math.floor((now - new Date(outAt).getTime()) / 86400000);
       if (quietDays < opts.quietDays) continue;
     } else if (approached) {
-      // Tracker said we wrote; the dated send did not import. Still a chase.
+      // Tracker said we wrote; even the note has no send date.
       quietDays = 999;
     } else {
       continue;
