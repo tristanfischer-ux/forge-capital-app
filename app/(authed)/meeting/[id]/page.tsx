@@ -2,18 +2,25 @@ import Link from "next/link";
 import { RememberCall } from "../../call/RememberCall";
 import { findDeskMeeting } from "@/lib/queries/find-meeting";
 import { loadLiveCorrespondence } from "@/lib/queries/live-correspondence";
-import { mailStory } from "@/lib/queries/mail-story";
 import {
   decodeMailText,
   loadMeetingNotes,
 } from "@/lib/queries/meeting-brief";
 import {
   displayPersonName,
-  firmBlurb,
-  personBlurb,
   resolveMeetingBook,
 } from "@/lib/queries/resolve-meeting";
-import { linkedInBlurb, linkedInBriefForPerson } from "@/lib/capital/person-linkedin";
+import {
+  linkedInBlurb,
+  linkedInBriefForPerson,
+  orgBlurbFromSearch,
+} from "@/lib/capital/person-linkedin";
+import {
+  discussThisCall,
+  firmSummary,
+  mailNarrative,
+  personSummary,
+} from "@/lib/desk/call-cheat";
 import { inferMandatesForMeeting } from "@/lib/desk/mandate-state";
 import { CallDrafts } from "../CallDrafts";
 import { MeetingNotes } from "../../MeetingNotes";
@@ -21,6 +28,7 @@ import { PasteNotes } from "../../PasteNotes";
 import { WhereWeAre } from "../../WhereWeAre";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function when(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -67,16 +75,19 @@ export default async function MeetingPage({
   }
 
   const book = await resolveMeetingBook(meeting);
-  const linkedIn = await linkedInBriefForPerson({
-    personId: book.personId,
-    name: displayPersonName(book.personName, book.personEmail) || book.personName,
-    email: book.personEmail,
-    firmName: book.firmName,
-    firmDomain: book.firmDomain,
-    roleTitle: book.personRole,
-    notes: book.personNotes,
-    linkedinUrl: book.linkedinUrl,
-  });
+  const [linkedIn, org] = await Promise.all([
+    linkedInBriefForPerson({
+      personId: book.personId,
+      name: displayPersonName(book.personName, book.personEmail) || book.personName,
+      email: book.personEmail,
+      firmName: book.firmName,
+      firmDomain: book.firmDomain,
+      roleTitle: book.personRole,
+      notes: book.personNotes,
+      linkedinUrl: book.linkedinUrl,
+    }),
+    orgBlurbFromSearch(book.firmName ?? meeting.firm_name),
+  ]);
   const correspondence = await loadLiveCorrespondence({
     emails: [
       ...book.searchedEmails,
@@ -90,7 +101,14 @@ export default async function MeetingPage({
     meeting.title;
   const firmName = book.firmName ?? meeting.firm_name;
   const where = inferMandatesForMeeting(meeting, null);
-  const story = mailStory(correspondence.mail, correspondence.searched);
+  const story = mailNarrative(correspondence.mail);
+  const discuss = discussThisCall(meeting, where);
+  const whoSummary = personSummary({ book, linkedIn, mandates: where });
+  const orgSummary = firmSummary({
+    book,
+    orgSnippet: org.snippet,
+    mandates: where,
+  });
   const canDraft =
     Boolean(book.personId) &&
     Boolean(book.personEmail) &&
@@ -148,7 +166,7 @@ export default async function MeetingPage({
         <div className="card">
           <div className="blurb">
             <h2>{who ?? "The person"}</h2>
-            <p>{personBlurb(book)}</p>
+            <p>{whoSummary}</p>
             {book.candidates.length > 0 ? (
               <ul className="sub" style={{ paddingLeft: 18, marginTop: 8 }}>
                 {book.candidates.map((c) => (
@@ -159,24 +177,31 @@ export default async function MeetingPage({
                 ))}
               </ul>
             ) : null}
+            {linkedIn.url ? (
+              <p className="sub" style={{ paddingLeft: 0, marginTop: 8 }}>
+                <a href={linkedIn.url} target="_blank" rel="noreferrer">
+                  LinkedIn profile
+                </a>
+              </p>
+            ) : (
+              <p className="faint" style={{ marginTop: 8 }}>
+                {linkedInBlurb(linkedIn)}
+              </p>
+            )}
           </div>
           <div className="blurb">
             <h2>
               {book.firmId ? (
-                <Link href={`/firm/${book.firmId}`}>{firmName ?? "The firm"}</Link>
+                <Link href={`/firm/${book.firmId}`}>{firmName ?? "The organisation"}</Link>
               ) : (
-                firmName ?? "The firm"
+                firmName ?? "The organisation"
               )}
             </h2>
-            <p>{firmBlurb(book)}</p>
-          </div>
-          <div className="blurb">
-            <h2>LinkedIn</h2>
-            <p>{linkedInBlurb(linkedIn)}</p>
-            {linkedIn.url ? (
+            <p>{orgSummary}</p>
+            {org.url ? (
               <p className="sub" style={{ paddingLeft: 0, marginTop: 8 }}>
-                <a href={linkedIn.url} target="_blank" rel="noreferrer">
-                  Open profile
+                <a href={org.url} target="_blank" rel="noreferrer">
+                  Open organisation page
                 </a>
               </p>
             ) : null}
@@ -196,6 +221,17 @@ export default async function MeetingPage({
         </div>
 
         <div className="card">
+          <div className="discuss">
+            <h2>Discuss this call</h2>
+            <p className="sub" style={{ paddingLeft: 0 }}>
+              Cheat sheet. Dated facts only — do not invent a thesis or a raise.
+            </p>
+            <ol>
+              {discuss.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
+          </div>
           <h2>Your notes</h2>
           <p className="sub">
             One box for this call. Save here. Thank-you and follow-up create

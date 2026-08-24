@@ -1,28 +1,24 @@
 import Link from "next/link";
 import { getCapitalBookCounts } from "@/lib/queries/capital-book";
 import { getCapitalHeartbeat } from "@/lib/queries/capital-heartbeat";
-import { getDeskToday, type DeskMeeting, type DeskReply } from "@/lib/queries/desk-today";
+import { getDeskToday } from "@/lib/queries/desk-today";
 import {
   briefForMeetingId,
   correspondenceLooksCanceled,
   decodeMailText,
   loadMeetingBriefs,
-  mailDirection,
-  pickCorrespondence,
-  formatMailSnippet,
-  type MeetingCorrespondence,
 } from "@/lib/queries/meeting-brief";
+import { loadTodayCheats } from "@/lib/desk/call-cheat";
 import {
-  inferMandatesForMeeting,
   proposeTodayJob,
   todayDigest,
 } from "@/lib/desk/mandate-state";
 import { openLoops } from "@/lib/desk/notes-to-action";
 import { getCorpusTodayStats } from "@/lib/queries/corpus-today";
 import { ReplyBox } from "../ReplyBox";
-import { WhereWeAre } from "../WhereWeAre";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function when(iso: string | null): string {
   if (!iso) return "—";
@@ -41,47 +37,6 @@ function meetingHref(id: string): string {
   return `/meeting/${encodeURIComponent(id)}`;
 }
 
-function invitePurpose(notes: string | null | undefined): string | null {
-  if (!notes) return null;
-  const cleaned = notes
-    .replace(/_{8,}[\s\S]*$/m, "")
-    .replace(/Microsoft Teams meeting[\s\S]*/i, "")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (cleaned.length < 24) return null;
-  return formatMailSnippet(cleaned, 280);
-}
-
-function replyAsMail(r: DeskReply): MeetingCorrespondence {
-  return {
-    id: r.id,
-    threadId: r.gmail_thread_id ?? undefined,
-    from: r.from ?? r.partner_name ?? "Unknown",
-    to: "Tristan Fischer",
-    subject: r.summary ?? "",
-    date: r.event_at,
-    snippet: r.preview ?? "",
-  };
-}
-
-function repliesForMeeting(meeting: DeskMeeting, replies: DeskReply[]): MeetingCorrespondence[] {
-  const keys: string[] = [];
-  if (meeting.partner_name) keys.push(meeting.partner_name.toLowerCase());
-  if (meeting.firm_name) keys.push(meeting.firm_name.toLowerCase());
-  const title = (meeting.title ?? "").toLowerCase();
-  for (const phrase of ["medina", "gareth stockman", "raul henriquez"]) {
-    if (title.includes(phrase)) keys.push(phrase);
-  }
-  if (keys.length === 0) return [];
-  return replies
-    .filter((r) => {
-      const blob = `${r.partner_name ?? ""} ${r.from ?? ""} ${r.summary ?? ""}`.toLowerCase();
-      return keys.some((k) => blob.includes(k));
-    })
-    .map(replyAsMail);
-}
-
 export default async function TodayPage({
   searchParams,
 }: {
@@ -95,6 +50,7 @@ export default async function TodayPage({
     getCorpusTodayStats(),
   ]);
   const briefs = loadMeetingBriefs();
+  const cheats = await loadTodayCheats(data.meetings);
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -216,8 +172,8 @@ export default async function TodayPage({
       <div className="card" id="meetings" style={{ marginBottom: 16 }}>
         <h2>Next meetings</h2>
         <p className="sub">
-          What the slot is, then a little of the correspondence. Click a
-          card for the full cheat sheet and the rest of the thread.
+          Four lines: who they are, and what this call is for. Click the
+          card for the full cheat sheet.
         </p>
         {data.meetings.length === 0 ? (
           <p className="sub">No meetings in the next 7 days.</p>
@@ -226,23 +182,11 @@ export default async function TodayPage({
             {data.meetings.map((m) => {
               const filed = briefForMeetingId(briefs, m.id);
               const filedMail = filed?.correspondence ?? [];
-              const mail = pickCorrespondence(
-                filedMail.length > 0 ? filedMail : repliesForMeeting(m, data.replies),
-                2,
-              );
               const canceled =
                 Boolean(m.canceled) ||
                 /canceled|cancelled/i.test(`${m.title ?? ""} ${m.summary ?? ""}`) ||
-                correspondenceLooksCanceled(filedMail) ||
-                correspondenceLooksCanceled(mail);
-              const where = inferMandatesForMeeting(m, filed);
-              const about =
-                filed?.brief.why_this_call ??
-                filed?.brief.how_they_arrived ??
-                invitePurpose(m.notes) ??
-                (m.title && m.title !== (m.partner_name ?? "")
-                  ? m.title.trim()
-                  : null);
+                correspondenceLooksCanceled(filedMail);
+              const about = cheats[m.id] ?? null;
               const who = (m.partner_name ?? m.title ?? "Meeting").trim();
               const firm = m.firm_name ?? filed?.firm_name;
               const showFirm =
@@ -267,7 +211,7 @@ export default async function TodayPage({
                     {showFirm ? ` · ${firm}` : ""}
                   </h3>
                   {about && about.trim() !== who ? (
-                    <p className="about">{about}</p>
+                    <p className="cheat">{about}</p>
                   ) : null}
                   {canceled ? (
                     <p className="about">
@@ -275,24 +219,6 @@ export default async function TodayPage({
                       reschedule from the thread.
                     </p>
                   ) : null}
-                  <WhereWeAre items={where} compact />
-                  {mail.length > 0 ? (
-                    <ul className="meet-mail">
-                      {mail.map((c) => (
-                        <li key={c.id}>
-                          <div className="dir">{mailDirection(c)}</div>
-                          {c.subject ? <div className="subj">{c.subject}</div> : null}
-                          {c.snippet ? (
-                            <div className="snip">{formatMailSnippet(c.snippet)}</div>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="about faint" style={{ marginTop: 8 }}>
-                      No correspondence on file for this slot.
-                    </p>
-                  )}
                   <div className="meet-more">
                     Open the briefing
                     {m.unmatched ? " · file onto the book" : ""}

@@ -31,6 +31,10 @@ assert.match(
   voiceSrc.slice(voiceSrc.indexOf("export function composeChaserDraft"), voiceSrc.indexOf("export function composeThankYouDraft")),
   /CALENDLY_PROMPT/,
 );
+assert.match(load("lib/desk/call-cheat.ts"), /fourLineCheat/);
+assert.match(load("lib/desk/call-cheat.ts"), /discussThisCall/);
+assert.match(load("lib/desk/call-cheat.ts"), /Yuri RPM customer call/);
+assert.match(load("lib/capital/person-linkedin.ts"), /orgBlurbFromSearch/);
 assert.match(load("lib/capital/send-date.ts"), /inferLastOutboundAt/);
 assert.match(load("lib/capital/send-date.ts"), /sendDatesFromNote/);
 assert.doesNotMatch(voiceSrc.slice(voiceSrc.indexOf("export function composeChaserDraft"), voiceSrc.indexOf("export function composeThankYouDraft")), /COLD_BIO/);

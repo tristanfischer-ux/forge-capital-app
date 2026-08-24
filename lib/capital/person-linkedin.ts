@@ -78,6 +78,7 @@ async function apolloMatch(opts: {
 async function braveSnippet(
   q: string,
   prefer: string | null,
+  urlRe?: RegExp | null,
 ): Promise<{ snippet: string; url: string | null } | null> {
   const key = process.env.BRAVE_API_KEY?.trim();
   if (!key || q.trim().length < 6) return null;
@@ -93,9 +94,8 @@ async function braveSnippet(
     const body = (await res.json()) as {
       web?: { results?: { title?: string; description?: string; url?: string }[] };
     };
-    const hits = (body.web?.results ?? []).filter((r) =>
-      /linkedin\.com\/in\//i.test(r.url ?? ""),
-    );
+    let hits = body.web?.results ?? [];
+    if (urlRe) hits = hits.filter((r) => urlRe.test(r.url ?? ""));
     const bits = (prefer ?? "")
       .toLowerCase()
       .split(/\s+/)
@@ -158,7 +158,7 @@ export async function linkedInBriefForPerson(opts: {
   }
 
   const q = `site:linkedin.com/in "${opts.name ?? ""}" ${opts.firmName ?? ""}`.trim();
-  const brave = await braveSnippet(q, opts.firmName);
+  const brave = await braveSnippet(q, opts.firmName, /linkedin\.com\/in\//i);
   if (brave) {
     const brief: LinkedInBrief = {
       headline: brave.snippet,
@@ -203,6 +203,24 @@ async function persistLinkedIn(personId: string, brief: LinkedInBrief) {
       notes: next || null,
     })
     .eq("id", personId);
+}
+
+export async function orgBlurbFromSearch(
+  firmName: string | null,
+): Promise<{ snippet: string | null; url: string | null }> {
+  const name = (firmName ?? "").trim();
+  if (name.length < 3) return { snippet: null, url: null };
+  const company = await braveSnippet(
+    `site:linkedin.com/company "${name}"`,
+    name,
+    /linkedin\.com\/(company|school)\//i,
+  );
+  if (company) {
+    return { snippet: clip(company.snippet, 280), url: company.url };
+  }
+  const web = await braveSnippet(`"${name}"`, name, null);
+  if (web) return { snippet: clip(web.snippet, 280), url: web.url };
+  return { snippet: null, url: null };
 }
 
 export function linkedInBlurb(brief: LinkedInBrief): string {

@@ -389,6 +389,24 @@
   line-height: 1.45;
   margin: 8px 0 0;
 }
+.raise-desk .meet-item .cheat {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  color: var(--text);
+}
+.raise-desk .discuss {
+  padding: 0 16px 16px;
+}
+.raise-desk .discuss ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.raise-desk .discuss li {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.45;
+}
 .raise-desk .meet-mail {
   margin: 10px 0 0;
   padding: 0;
