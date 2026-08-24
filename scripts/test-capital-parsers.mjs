@@ -33,7 +33,9 @@ assert.match(
 );
 assert.match(load("lib/desk/call-cheat.ts"), /fourLineCheat/);
 assert.match(load("lib/desk/call-cheat.ts"), /discussThisCall/);
-assert.match(load("lib/desk/call-cheat.ts"), /Yuri RPM customer call/);
+assert.match(load("lib/desk/call-cheat.ts"), /Always four lines/);
+assert.match(load("lib/desk/call-cheat.ts"), /isAttendeeTitle/);
+assert.match(load("app/raise-desk.css"), /white-space: pre-line/);
 assert.match(load("lib/capital/person-linkedin.ts"), /orgBlurbFromSearch/);
 assert.match(load("lib/capital/send-date.ts"), /inferLastOutboundAt/);
 assert.match(load("lib/capital/send-date.ts"), /sendDatesFromNote/);

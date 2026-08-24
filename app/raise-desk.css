@@ -394,6 +394,7 @@
   line-height: 1.5;
   margin: 8px 0 0;
   color: var(--text);
+  white-space: pre-line;
 }
 .raise-desk .discuss {
   padding: 0 16px 16px;

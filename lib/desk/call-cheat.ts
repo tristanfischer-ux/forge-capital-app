@@ -31,30 +31,35 @@ function cleanInvite(notes: string | null | undefined): string | null {
   return clip(t, 220);
 }
 
+function isAttendeeTitle(title: string): boolean {
+  return /\band\b.+\btristan\b|\btristan\b.+\band\b/i.test(title);
+}
+
 export function purposeOfCall(
   meeting: Pick<DeskMeeting, "title" | "notes" | "summary" | "campaign_name">,
   mandates: MandateBrief[],
+  extraBlob = "",
 ): string {
-  const blob = `${meeting.title ?? ""} ${meeting.summary ?? ""} ${meeting.notes ?? ""} ${meeting.campaign_name ?? ""}`;
+  const blob = `${meeting.title ?? ""} ${meeting.summary ?? ""} ${meeting.notes ?? ""} ${meeting.campaign_name ?? ""} ${extraBlob}`;
   const yuri = mandates.some((m) => m.key === "yuri") || /yuri|\brpm\b|bioprint/i.test(blob);
   if (yuri) {
     if (/visit|tour|lab/i.test(blob)) {
-      return "Yuri RPM — a working conversation on the machine and any visit, not a raise.";
+      return "Purpose: Yuri RPM — the machine and any lab visit. Not a raise.";
     }
-    return "Yuri RPM customer call — how they use the machine. Not a raise.";
+    return "Purpose: Yuri RPM customer call — how they use the machine. Not a raise.";
   }
   const named = mandates.filter((m) => m.namedByThem);
   if (named[0]) {
-    return `${named[0].name} call. ${named[0].liveQuestion}`;
+    return `Purpose: ${named[0].name}. ${named[0].liveQuestion}`;
   }
   if (mandates[0]) {
-    return `Likely ${mandates[0].name}. ${mandates[0].liveQuestion}`;
+    return `Purpose: likely ${mandates[0].name}. ${mandates[0].liveQuestion}`;
   }
   const invite = cleanInvite(meeting.notes);
-  if (invite) return invite;
+  if (invite) return `Purpose: ${invite}`;
   const title = (meeting.title ?? "").trim();
-  if (title.length > 8) return clip(title, 180);
-  return "Purpose is not on the invite — open the briefing before you dial.";
+  if (title.length > 8 && !isAttendeeTitle(title)) return `Purpose: ${clip(title, 160)}`;
+  return "Purpose: not written on the invite — open the briefing before you dial.";
 }
 
 export function lastMailBeat(mail: MeetingCorrespondence[]): string | null {
@@ -65,8 +70,16 @@ export function lastMailBeat(mail: MeetingCorrespondence[]): string | null {
   const outbound = mail.filter((m) => isYouAddress(m.from));
   const lastIn = inbound[0];
   const lastOut = outbound[0];
-  const snip = (m: MeetingCorrespondence) =>
-    clip(decodeMailText(m.snippet || m.subject || ""), 140);
+  const snip = (m: MeetingCorrespondence) => {
+    let t = decodeMailText(m.snippet || m.subject || "");
+    t = t
+      .replace(/\b(from|to|cc|sent|date|subject)\s*:\s*[^\n]+/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const cut = t.split(/(?<=[.!?])\s+/)[0] ?? t;
+    return clip(cut, 90);
+  };
   const when = (m: MeetingCorrespondence) => {
     const d = m.date ? new Date(m.date) : null;
     if (!d || !Number.isFinite(d.getTime())) return "";
@@ -84,35 +97,79 @@ export function lastMailBeat(mail: MeetingCorrespondence[]): string | null {
   return null;
 }
 
-/** Four sentences: who, where, purpose, last beat. */
+function focusFromNotes(notes: string | null | undefined): string | null {
+  const t = (notes ?? "").replace(/\s+/g, " ");
+  if (/women'?s-health-in-space|women'?s health in space/i.test(t)) {
+    return "women's-health-in-space / hormone-driven cancer models";
+  }
+  if (/bioprint/i.test(t)) return "bioprinting";
+  if (/future energy fund/i.test(t)) return "Future Energy Fund";
+  if (/\brpm\b/i.test(t)) return "RPM user";
+  return null;
+}
+
+function sectorLabel(sectors: string | null | undefined, firm: string): string | null {
+  const s = (Array.isArray(sectors) ? sectors.join(" ") : String(sectors ?? "")).toLowerCase();
+  const f = firm.toLowerCase();
+  if (/hospital|clinical/.test(s) || /hospital/.test(f)) return "a hospital / academic health system";
+  if (/academic/.test(s) || /university|dresden|usf/.test(f)) return "a university";
+  if (/government|agency/.test(s) || /sck-cen|sckcen/.test(f)) {
+    return "the Belgian nuclear research centre";
+  }
+  if (/ventures|chevron/.test(f) || /carbon capture|hydrogen|renewable/.test(s)) {
+    return "a corporate venture arm";
+  }
+  if (s.trim()) return s.replace(/_/g, " ");
+  return null;
+}
+
+/** Council template: who / organisation / purpose / last beat. Always four lines. */
 export function fourLineCheat(opts: {
   who: string;
   firm: string | null;
   role: string | null;
-  headline: string | null;
+  notes: string | null;
+  sectors: string | null;
+  firmNotes: string | null;
   purpose: string;
   lastBeat: string | null;
 }): string {
   const name = opts.who.trim() || "This counterpart";
-  const role = (opts.role ?? "").trim();
   const firm = (opts.firm ?? "").trim();
-  const line1 = [
-    name,
-    role ? `is ${role}` : null,
-    firm ? `at ${firm}` : null,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim() + ".";
-  const head = (opts.headline ?? "").replace(/\s+/g, " ").trim();
-  const line2 =
-    head && !line1.toLowerCase().includes(head.slice(0, 24).toLowerCase())
-      ? clip(head, 180)
-      : null;
-  const line3 = opts.purpose.replace(/\s+/g, " ").trim();
-  const line4 = opts.lastBeat ?? "No correspondence on file for this slot.";
-  return [line1, line2, line3, line4].filter(Boolean).join(" ");
+  const role = (opts.role ?? "").trim();
+  const notes = `${opts.notes ?? ""} ${opts.firmNotes ?? ""}`;
+  const focus = focusFromNotes(notes);
+  const blob = `${notes} ${name}`;
+  let whoLine: string;
+  if (role) {
+    whoLine = `${name} is ${role}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+  } else if (/\bprofessor\b|\bprof\./i.test(blob)) {
+    whoLine = `Professor ${name}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+  } else if (/\bdr\.?\b/i.test(blob)) {
+    whoLine = `Dr ${name.replace(/^dr\.?\s+/i, "")}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+  } else {
+    whoLine = `${name}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+  }
+
+  const orgKind = sectorLabel(opts.sectors, firm);
+  const firmNote = (opts.firmNotes ?? "")
+    .split(/\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 30 && !/CALL BOOKED|paternity|chased via/i.test(l));
+  let orgLine: string;
+  if (firmNote && /hospital|university|research|ventures|centre|center/i.test(firmNote)) {
+    orgLine = clip(firmNote.replace(/\|.*/, ""), 140);
+  } else if (firm && orgKind) {
+    orgLine = `${firm} is ${orgKind}.`;
+  } else if (firm) {
+    orgLine = `${firm}.`;
+  } else {
+    orgLine = "Organisation is not named on the invite.";
+  }
+
+  const purpose = opts.purpose.replace(/\s+/g, " ").trim();
+  const beat = opts.lastBeat ?? "No correspondence on file for this slot.";
+  return [whoLine, orgLine, purpose, beat].join("\n");
 }
 
 export function personSummary(opts: {
@@ -244,7 +301,11 @@ export async function loadTodayCheats(
   const rows = await Promise.all(
     slice.map(async (m) => {
       const book = await resolveMeetingBook(m);
-      const mandates = inferMandatesForMeeting(m, null);
+      const extra = `${book.personNotes ?? ""} ${book.firmNotes ?? ""}`;
+      const mandates = inferMandatesForMeeting(
+        { ...m, notes: `${m.notes ?? ""} ${extra}` },
+        null,
+      );
       const correspondence = await loadLiveCorrespondence({
         emails: [
           ...book.searchedEmails,
@@ -256,12 +317,15 @@ export async function loadTodayCheats(
       const who =
         displayPersonName(book.personName ?? m.partner_name, book.personEmail) ||
         (m.partner_name ?? m.title ?? "Meeting").trim();
+      const mailBlob = correspondence.mail.map((x) => `${x.subject} ${x.snippet}`).join(" ");
       const text = fourLineCheat({
         who,
         firm: book.firmName ?? m.firm_name,
         role: book.personRole,
-        headline: null,
-        purpose: purposeOfCall(m, mandates),
+        notes: `${book.personNotes ?? ""} ${m.title ?? ""} ${mailBlob}`,
+        sectors: book.firmSectors,
+        firmNotes: book.firmNotes,
+        purpose: purposeOfCall(m, mandates, extra),
         lastBeat: lastMailBeat(correspondence.mail),
       });
       return [m.id, text] as const;
