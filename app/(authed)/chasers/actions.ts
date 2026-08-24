@@ -42,6 +42,9 @@ export async function createChaserDraft(input: {
   if ((part.chase_count ?? 0) >= 2) {
     return { ok: false, error: "Chase sequence already finished (two chasers). Leave it." };
   }
+  if (part.stage === "responded" || part.stage === "meeting") {
+    return { ok: false, error: "They already replied — this is not a silent chase." };
+  }
   const [{ data: person }, { data: firm }, { data: mandate }] = await Promise.all([
     core
       .from("people")

@@ -99,12 +99,15 @@ export async function findMandateOutboundThread(
   let replyKind: OutboundThread["replyKind"] = "none";
   for (const m of thread.messages ?? []) {
     const from = header(m.payload?.headers, "From").toLowerCase();
-    if (!from.includes(addr)) continue;
     const sub = header(m.payload?.headers, "Subject");
+    if (/tristan\.fischer@gmail\.com/.test(from)) continue;
+    if (!from.includes("@")) continue;
     if (/mailer-daemon|postmaster|mail delivery subsystem/.test(from) || isAutoReply(sub)) {
       if (replyKind === "none") replyKind = isAutoReply(sub) ? "ooo" : "bounce";
       continue;
     }
+    // Any inbound from someone other than Tristan is a reply — including a
+    // colleague or a different mailbox at the same firm.
     replyKind = "reply";
     break;
   }
