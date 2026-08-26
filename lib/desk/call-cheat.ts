@@ -228,11 +228,12 @@ export function personSummary(opts: {
     displayPersonName(opts.book.personName, opts.book.personEmail) ||
     opts.book.personName ||
     "This person";
-  if (!opts.book.personId && opts.book.candidates.length > 0) {
-    return `${name} is on the calendar, but more than one book row matches. Pick the right person before you treat this as filed.`;
+  if (!opts.book.personId && opts.book.candidates.length > 1) {
+    const names = opts.book.candidates.map((c) => c.personName).join(", ");
+    return `${names} — from the calendar invite. Not yet filed to a single book row.`;
   }
   if (!opts.book.personId) {
-    return `${name} is on your calendar. The book did not return a unique person, so treat the LinkedIn and mail search as the briefing until they are filed.`;
+    return `${name} is on the calendar but not yet matched to a book row.`;
   }
   const bits: string[] = [];
   const role = (opts.book.personRole ?? "").trim();
@@ -292,12 +293,14 @@ export function firmSummary(opts: {
 
 export function mailNarrative(mail: MeetingCorrespondence[]): string {
   if (!mail.length) {
-    return "No correspondence on file. Do not invent a prior thread.";
+    return "Gmail search returned nothing for these attendees. The thread may be under a different email or not yet synced.";
   }
   const subjects = mail
     .map((m) => (m.subject ?? "").replace(/^(re|fw|fwd):\s*/i, "").trim())
     .filter(Boolean);
   const topic = subjects[0] ? clip(subjects[0], 90) : null;
+  const narrative = correspondenceNarrative(mail);
+  if (narrative) return narrative;
   const beat = lastMailBeat(mail);
   const n = mail.length;
   const head = `${n} message${n === 1 ? "" : "s"} on file${topic ? `, mainly "${topic}"` : ""}.`;

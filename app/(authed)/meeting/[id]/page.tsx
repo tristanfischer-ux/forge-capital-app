@@ -93,6 +93,7 @@ export default async function MeetingPage({
     emails: [
       ...book.searchedEmails,
       ...(book.personEmail ? [book.personEmail] : []),
+      ...(meeting.attendee_emails ?? []),
     ],
     personId: book.personId,
   });
@@ -166,28 +167,67 @@ export default async function MeetingPage({
       <div className="grid-2">
         <div className="card">
           <div className="blurb">
-            <h2>{who ?? "The person"}</h2>
-            <p>{whoSummary}</p>
-            {book.candidates.length > 0 ? (
-              <ul className="sub" style={{ paddingLeft: 18, marginTop: 8 }}>
-                {book.candidates.map((c) => (
-                  <li key={c.personId}>
-                    <Link href={`/person/${c.personId}`}>{c.personName}</Link>
-                    {c.firmName ? ` · ${c.firmName}` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {linkedIn.url ? (
-              <p className="sub" style={{ paddingLeft: 0, marginTop: 8 }}>
-                <a href={linkedIn.url} target="_blank" rel="noreferrer">
-                  LinkedIn profile
-                </a>
-              </p>
+            <h2>{book.personId ? (who ?? "The person") : (meeting.attendee_emails?.length ?? 0) > 0 ? "On this call" : (who ?? "The person")}</h2>
+            {book.personId ? (
+              <>
+                <p>{whoSummary}</p>
+                {linkedIn.url ? (
+                  <p className="sub" style={{ paddingLeft: 0, marginTop: 8 }}>
+                    <a href={linkedIn.url} target="_blank" rel="noreferrer">
+                      LinkedIn profile
+                    </a>
+                  </p>
+                ) : (
+                  <p className="faint" style={{ marginTop: 8 }}>
+                    {linkedInBlurb(linkedIn)}
+                  </p>
+                )}
+              </>
+            ) : (meeting.attendee_emails?.length ?? 0) > 0 ? (
+              <>
+                {book.candidates.length > 0 ? (
+                  <ul className="sub" style={{ paddingLeft: 18, marginTop: 8 }}>
+                    {book.candidates.map((c) => (
+                      <li key={c.personId}>
+                        <Link href={`/person/${c.personId}`}>{c.personName}</Link>
+                        {c.firmName ? ` · ${c.firmName}` : ""}
+                        {c.email ? ` · ${c.email}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <ul className="sub" style={{ paddingLeft: 18, marginTop: 8 }}>
+                    {(meeting.attendee_emails ?? []).filter((e) => !/(tristan|fischer)/i.test(e)).map((email) => (
+                      <li key={email}>{email}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
             ) : (
-              <p className="faint" style={{ marginTop: 8 }}>
-                {linkedInBlurb(linkedIn)}
-              </p>
+              <>
+                <p>{whoSummary}</p>
+                {book.candidates.length > 0 ? (
+                  <ul className="sub" style={{ paddingLeft: 18, marginTop: 8 }}>
+                    {book.candidates.map((c) => (
+                      <li key={c.personId}>
+                        <Link href={`/person/${c.personId}`}>{c.personName}</Link>
+                        {c.firmName ? ` · ${c.firmName}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {linkedIn.url ? (
+                  <p className="sub" style={{ paddingLeft: 0, marginTop: 8 }}>
+                    <a href={linkedIn.url} target="_blank" rel="noreferrer">
+                      LinkedIn profile
+                    </a>
+                  </p>
+                ) : (
+                  <p className="faint" style={{ marginTop: 8 }}>
+                    {linkedInBlurb(linkedIn)}
+                  </p>
+                )}
+              </>
             )}
           </div>
           <div className="blurb">
