@@ -108,7 +108,7 @@ export async function listWeekAheadCalendar(): Promise<{
     const endRaw = item.end?.dateTime ?? item.end?.date ?? null;
     const canceled = item.status === "cancelled" || /^(canceled|cancelled):/i.test(item.summary ?? "");
     const emails = [
-      ...(item.attendees ?? []).map((a) => (a.email ?? "").toLowerCase()).filter(Boolean),
+      ...(item.attendees ?? []).filter((a) => !a.self).map((a) => (a.email ?? "").toLowerCase()).filter(Boolean),
       ...emailsFromBlob(item.summary, item.description, item.location),
     ];
     const blob = [

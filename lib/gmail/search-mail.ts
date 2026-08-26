@@ -30,7 +30,8 @@ export async function searchGmailForEmails(
   gmailOk: boolean;
   error?: string;
 }> {
-  const unique = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))].slice(
+  const selfAddresses = new Set(["tristan.fischer@gmail.com", "tristan.fischer@mac.com", "tristan@fractionalforge.app"]);
+  const unique = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@") && !selfAddresses.has(e)))].slice(
     0,
     6,
   );
