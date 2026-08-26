@@ -19,11 +19,13 @@ function formatEventDate(iso: string): string {
       day: "2-digit",
       month: "short",
       year: "numeric",
+      timeZone: "Europe/London",
     }) +
     " " +
     d.toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Europe/London",
     })
   );
 }

@@ -40,6 +40,7 @@ function when(iso: string | null | undefined): string {
     month: "long",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/London",
   });
 }
 

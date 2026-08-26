@@ -30,6 +30,7 @@ function when(iso: string | null): string {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/London",
   });
 }
 
@@ -56,8 +57,13 @@ export default async function TodayPage({
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "Europe/London",
   });
   const firstBlock = data.blocks[0];
+  const todayStart = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" }) + "T00:00:00Z");
+  const upcoming = data.meetings.filter(
+    (m) => m.event_at && new Date(m.event_at).getTime() >= todayStart.getTime()
+  );
   const unmatched = data.meetings.filter((m) => m.unmatched && !m.canceled).length;
   const canceledMeetings = data.meetings.filter((m) => m.canceled);
   const job = proposeTodayJob({
@@ -175,11 +181,11 @@ export default async function TodayPage({
           Four lines: who they are, and what this call is for. Click the
           card for the full cheat sheet.
         </p>
-        {data.meetings.length === 0 ? (
+        {upcoming.length === 0 ? (
           <p className="sub">No meetings in the next 7 days.</p>
         ) : (
           <div className="meet-list">
-            {data.meetings.map((m) => {
+            {upcoming.map((m) => {
               const filed = briefForMeetingId(briefs, m.id);
               const filedMail = filed?.correspondence ?? [];
               const canceled =
@@ -260,6 +266,7 @@ export default async function TodayPage({
                             month: "short",
                             hour: "2-digit",
                             minute: "2-digit",
+                            timeZone: "Europe/London",
                           })
                         : "—"}
                     </td>

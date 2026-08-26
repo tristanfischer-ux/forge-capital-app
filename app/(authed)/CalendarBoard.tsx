@@ -12,22 +12,25 @@ function timeLocal(iso: string, allDay: boolean): string {
   if (allDay) return "All day";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 }
 
 function localYmd(offset = 0): string {
   const now = new Date();
-  now.setDate(now.getDate() + offset);
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const londonDate = now.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  const [y, m, d] = londonDate.split("-").map(Number);
+  const dt = new Date(y!, m! - 1, d!);
+  dt.setDate(dt.getDate() + offset);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 function heading(dayKey: string): string {
   const [y, m, d] = dayKey.split("-").map(Number);
   const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  const label = dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
+  const label = dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", timeZone: "Europe/London" });
   if (dayKey === localYmd()) return `Today · ${label}`;
   if (dayKey === localYmd(-1)) return `Yesterday · ${label}`;
   return label;
@@ -107,7 +110,7 @@ export function CalendarBoard({
       <p className="faint" style={{ marginBottom: 12 }}>
         Yesterday, today, and seven days ahead from Google Calendar
         {stamp
-          ? ` · last pull ${new Date(stamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
+          ? ` · last pull ${new Date(stamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })}`
           : ""}
         . Colours are the programme the title and guests look like.
       </p>

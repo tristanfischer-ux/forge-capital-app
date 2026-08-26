@@ -137,6 +137,7 @@ export default async function DeskPersonPage({
                       ? new Date(e.event_at).toLocaleDateString("en-GB", {
                           day: "2-digit",
                           month: "short",
+                          timeZone: "Europe/London",
                         })
                       : "—"}
                   </div>
