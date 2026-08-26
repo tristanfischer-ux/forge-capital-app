@@ -297,9 +297,8 @@ export function discussThisCall(
 export async function loadTodayCheats(
   meetings: DeskMeeting[],
 ): Promise<Record<string, string>> {
-  const slice = meetings.slice(0, 8);
   const rows = await Promise.all(
-    slice.map(async (m) => {
+    meetings.map(async (m) => {
       const book = await resolveMeetingBook(m);
       const extra = `${book.personNotes ?? ""} ${book.firmNotes ?? ""}`;
       const mandates = inferMandatesForMeeting(

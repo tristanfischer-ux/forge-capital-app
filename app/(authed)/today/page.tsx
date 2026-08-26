@@ -51,7 +51,11 @@ export default async function TodayPage({
     getCorpusTodayStats(),
   ]);
   const briefs = loadMeetingBriefs();
-  const cheats = await loadTodayCheats(data.meetings);
+  const todayStart = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" }) + "T00:00:00Z");
+  const upcoming = data.meetings.filter(
+    (m) => m.event_at && new Date(m.event_at).getTime() >= todayStart.getTime()
+  );
+  const cheats = await loadTodayCheats(upcoming);
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -60,10 +64,6 @@ export default async function TodayPage({
     timeZone: "Europe/London",
   });
   const firstBlock = data.blocks[0];
-  const todayStart = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" }) + "T00:00:00Z");
-  const upcoming = data.meetings.filter(
-    (m) => m.event_at && new Date(m.event_at).getTime() >= todayStart.getTime()
-  );
   const unmatched = upcoming.filter((m) => m.unmatched && !m.canceled).length;
   const canceledMeetings = upcoming.filter((m) => m.canceled);
   const job = proposeTodayJob({
