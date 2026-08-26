@@ -8,6 +8,7 @@ import type { DeskMeeting } from "@/lib/queries/desk-today";
 import { inferMandatesForMeeting, type MandateBrief } from "@/lib/desk/mandate-state";
 import type { LinkedInBrief } from "@/lib/capital/person-linkedin";
 import { loadLiveCorrespondence } from "@/lib/queries/live-correspondence";
+import { listWeekAheadCalendar } from "@/lib/capital/live-calendar";
 
 function clip(s: string, max: number): string {
   const t = s.replace(/\s+/g, " ").trim();
@@ -83,18 +84,66 @@ export function lastMailBeat(mail: MeetingCorrespondence[]): string | null {
   const when = (m: MeetingCorrespondence) => {
     const d = m.date ? new Date(m.date) : null;
     if (!d || !Number.isFinite(d.getTime())) return "";
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
   };
   if (lastIn && lastOut) {
     const inLater = Date.parse(lastIn.date || "0") >= Date.parse(lastOut.date || "0");
     if (inLater) {
-      return `They last wrote ${when(lastIn)}: “${snip(lastIn)}”`;
+      return `They last wrote ${when(lastIn)}: "${snip(lastIn)}"`;
     }
-    return `You last wrote ${when(lastOut)}: “${snip(lastOut)}”. No reply on file after that.`;
+    return `You last wrote ${when(lastOut)}: "${snip(lastOut)}". No reply on file after that.`;
   }
-  if (lastIn) return `They last wrote ${when(lastIn)}: “${snip(lastIn)}”`;
-  if (lastOut) return `You last wrote ${when(lastOut)}: “${snip(lastOut)}”. No reply on file.`;
+  if (lastIn) return `They last wrote ${when(lastIn)}: "${snip(lastIn)}"`;
+  if (lastOut) return `You last wrote ${when(lastOut)}: "${snip(lastOut)}". No reply on file.`;
   return null;
+}
+
+/** Walk back through correspondence to build a narrative of how the meeting came about. */
+export function correspondenceNarrative(mail: MeetingCorrespondence[]): string | null {
+  if (!mail.length) return null;
+
+  const relevant = mail
+    .filter((m) => !/calendly@|notifications@calendly|calendar-notification@/i.test(m.from ?? ""))
+    .slice(0, 10);
+  if (!relevant.length) return null;
+
+  const snip = (m: MeetingCorrespondence) => {
+    let t = decodeMailText(m.snippet || m.subject || "");
+    t = t
+      .replace(/\b(from|to|cc|sent|date|subject)\s*:\s*[^\n]+/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return clip(t, 120);
+  };
+  const when = (m: MeetingCorrespondence) => {
+    const d = m.date ? new Date(m.date) : null;
+    if (!d || !Number.isFinite(d.getTime())) return "";
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+  };
+  const who = (m: MeetingCorrespondence) =>
+    isYouAddress(m.from) ? "You" : (m.from ?? "").replace(/<[^>]+>/, "").replace(/"/g, "").trim().split(/\s/)[0] || "They";
+
+  const oldest = relevant[relevant.length - 1]!;
+  const newest = relevant[0]!;
+  const n = relevant.length;
+
+  if (n === 1) {
+    return `${who(oldest)} wrote ${when(oldest)}: "${snip(oldest)}"`;
+  }
+
+  const intro = isYouAddress(oldest.from)
+    ? `You opened the thread ${when(oldest)}`
+    : `${who(oldest)} reached out ${when(oldest)}`;
+
+  const subjectLine = (oldest.subject ?? "").replace(/^(re|fw|fwd):\s*/i, "").trim();
+  const topicBit = subjectLine ? ` re "${clip(subjectLine, 60)}"` : "";
+
+  const lastBit = isYouAddress(newest.from)
+    ? `You last wrote ${when(newest)}: "${snip(newest)}"`
+    : `They last wrote ${when(newest)}: "${snip(newest)}"`;
+
+  return `${intro}${topicBit}. ${n} messages on file. ${lastBit}`;
 }
 
 function focusFromNotes(notes: string | null | undefined): string | null {
@@ -123,7 +172,7 @@ function sectorLabel(sectors: string | null | undefined, firm: string): string |
   return null;
 }
 
-/** Council template: who / organisation / purpose / last beat. Always four lines. */
+/** Council template: who / organisation / purpose / last beat. Flowing prose. */
 export function fourLineCheat(opts: {
   who: string;
   firm: string | null;
@@ -140,15 +189,17 @@ export function fourLineCheat(opts: {
   const notes = `${opts.notes ?? ""} ${opts.firmNotes ?? ""}`;
   const focus = focusFromNotes(notes);
   const blob = `${notes} ${name}`;
-  let whoLine: string;
+
+  const parts: string[] = [];
+
   if (role) {
-    whoLine = `${name} is ${role}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+    parts.push(`${name} is ${role}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`);
   } else if (/\bprofessor\b|\bprof\./i.test(blob)) {
-    whoLine = `Professor ${name}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+    parts.push(`Professor ${name}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`);
   } else if (/\bdr\.?\b/i.test(blob)) {
-    whoLine = `Dr ${name.replace(/^dr\.?\s+/i, "")}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+    parts.push(`Dr ${name.replace(/^dr\.?\s+/i, "")}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`);
   } else {
-    whoLine = `${name}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`;
+    parts.push(`${name}${firm ? ` at ${firm}` : ""}${focus ? ` — ${focus}` : ""}.`);
   }
 
   const orgKind = sectorLabel(opts.sectors, firm);
@@ -156,20 +207,16 @@ export function fourLineCheat(opts: {
     .split(/\n/)
     .map((l) => l.trim())
     .find((l) => l.length > 30 && !/CALL BOOKED|paternity|chased via/i.test(l));
-  let orgLine: string;
   if (firmNote && /hospital|university|research|ventures|centre|center/i.test(firmNote)) {
-    orgLine = clip(firmNote.replace(/\|.*/, ""), 140);
+    parts.push(clip(firmNote.replace(/\|.*/, ""), 140));
   } else if (firm && orgKind) {
-    orgLine = `${firm} is ${orgKind}.`;
-  } else if (firm) {
-    orgLine = `${firm}.`;
-  } else {
-    orgLine = "Organisation is not named on the invite.";
+    parts.push(`${firm} is ${orgKind}.`);
   }
 
-  const purpose = opts.purpose.replace(/\s+/g, " ").trim();
-  const beat = opts.lastBeat ?? "No correspondence on file for this slot.";
-  return [whoLine, orgLine, purpose, beat].join("\n");
+  parts.push(opts.purpose.replace(/\s+/g, " ").trim());
+  if (opts.lastBeat) parts.push(opts.lastBeat);
+
+  return parts.join("\n");
 }
 
 export function personSummary(opts: {
@@ -253,7 +300,7 @@ export function mailNarrative(mail: MeetingCorrespondence[]): string {
   const topic = subjects[0] ? clip(subjects[0], 90) : null;
   const beat = lastMailBeat(mail);
   const n = mail.length;
-  const head = `${n} message${n === 1 ? "" : "s"} on file${topic ? `, mainly “${topic}”` : ""}.`;
+  const head = `${n} message${n === 1 ? "" : "s"} on file${topic ? `, mainly "${topic}"` : ""}.`;
   return beat ? `${head} ${beat}` : head;
 }
 
@@ -293,24 +340,42 @@ export function discussThisCall(
   }).slice(0, 6);
 }
 
-/** Today cards: book + last mail, no LinkedIn (that lives on Current Call). */
+/** Today cards: book + last mail + live calendar attendees. */
 export async function loadTodayCheats(
   meetings: DeskMeeting[],
 ): Promise<Record<string, string>> {
+  const cal = await listWeekAheadCalendar();
+  const calByTime = new Map<string, string[]>();
+  for (const ev of cal.events) {
+    const key = ev.event_at.slice(0, 16);
+    const existing = calByTime.get(key) ?? [];
+    existing.push(...ev.attendee_emails);
+    calByTime.set(key, existing);
+  }
+
   const rows = await Promise.all(
     meetings.map(async (m) => {
-      const book = await resolveMeetingBook(m);
+      const calEmails = (m.event_at ? calByTime.get(m.event_at.slice(0, 16)) : null) ?? [];
+      const enriched: DeskMeeting = {
+        ...m,
+        attendee_emails: [
+          ...(m.attendee_emails ?? []),
+          ...calEmails,
+        ],
+      };
+      const book = await resolveMeetingBook(enriched);
       const extra = `${book.personNotes ?? ""} ${book.firmNotes ?? ""}`;
       const mandates = inferMandatesForMeeting(
-        { ...m, notes: `${m.notes ?? ""} ${extra}` },
+        { ...enriched, notes: `${enriched.notes ?? ""} ${extra}` },
         null,
       );
+      const allEmails = [
+        ...book.searchedEmails,
+        ...(book.personEmail ? [book.personEmail] : []),
+        ...(enriched.attendee_emails ?? []),
+      ];
       const correspondence = await loadLiveCorrespondence({
-        emails: [
-          ...book.searchedEmails,
-          ...(book.personEmail ? [book.personEmail] : []),
-          ...(m.attendee_emails ?? []),
-        ],
+        emails: allEmails,
         personId: book.personId,
       });
       const who =
@@ -324,8 +389,8 @@ export async function loadTodayCheats(
         notes: `${book.personNotes ?? ""} ${m.title ?? ""} ${mailBlob}`,
         sectors: book.firmSectors,
         firmNotes: book.firmNotes,
-        purpose: purposeOfCall(m, mandates, extra),
-        lastBeat: lastMailBeat(correspondence.mail),
+        purpose: purposeOfCall(enriched, mandates, extra),
+        lastBeat: correspondenceNarrative(correspondence.mail) ?? lastMailBeat(correspondence.mail),
       });
       return [m.id, text] as const;
     }),

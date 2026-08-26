@@ -217,7 +217,11 @@ export default async function TodayPage({
                     {showFirm ? ` · ${firm}` : ""}
                   </h3>
                   {about && about.trim() !== who ? (
-                    <p className="cheat">{about}</p>
+                    <div className="cheat">
+                      {about.split("\n").filter(Boolean).map((line, i) => (
+                        <p key={i}>{line}</p>
+                      ))}
+                    </div>
                   ) : null}
                   {canceled ? (
                     <p className="about">
