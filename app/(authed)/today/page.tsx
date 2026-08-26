@@ -64,17 +64,17 @@ export default async function TodayPage({
   const upcoming = data.meetings.filter(
     (m) => m.event_at && new Date(m.event_at).getTime() >= todayStart.getTime()
   );
-  const unmatched = data.meetings.filter((m) => m.unmatched && !m.canceled).length;
-  const canceledMeetings = data.meetings.filter((m) => m.canceled);
+  const unmatched = upcoming.filter((m) => m.unmatched && !m.canceled).length;
+  const canceledMeetings = upcoming.filter((m) => m.canceled);
   const job = proposeTodayJob({
-    meetings: data.meetings,
+    meetings: upcoming,
     replies: data.replies,
     stuckCount: corpus.quietCount,
     approvalCount: corpus.signOffCount,
     canceledMeetings,
   });
   const digest = todayDigest({
-    meetings: data.meetings,
+    meetings: upcoming,
     replies: data.replies,
     approvalCount: data.approvalCount,
   });
@@ -137,7 +137,7 @@ export default async function TodayPage({
       <div className="tiles">
         <a href="#meetings" className="tile">
           <div className="k">Meetings this week</div>
-          <div className="n">{data.meetings.length}</div>
+          <div className="n">{upcoming.length}</div>
           <div className="s">
             {unmatched > 0 ? `${unmatched} not yet on the book` : "on the calendar below"}
           </div>
