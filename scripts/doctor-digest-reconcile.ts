@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { resolveApexUrl } from "../lib/digest/apex-url";
+import { resolveApexUrl } from "./resolve-apex-url";
 import { buildWeeklyDigest } from "../lib/digest/build-weekly-digest";
 import {
   listCampaignMandateMappings,
@@ -302,6 +302,30 @@ async function main() {
   }
   checkAttention("SkySails", sk.after);
   checkAttention("Panatere", pa.after);
+
+  {
+    const savedUrl = process.env.FORGE_CAPITAL_DB_URL;
+    const savedRole = process.env.FORGE_CAPITAL_DB_SERVICE_ROLE;
+    delete process.env.FORGE_CAPITAL_DB_URL;
+    delete process.env.FORGE_CAPITAL_DB_SERVICE_ROLE;
+    try {
+      const refused = await loadWeeklyDigest({
+        campaignId: skRow.id,
+        now: NOW,
+        apex,
+      });
+      add(
+        "loader refuses when ForgeOS env is missing",
+        !refused.ok,
+        refused.ok
+          ? "rendered without ForgeOS"
+          : refused.error,
+      );
+    } finally {
+      if (savedUrl !== undefined) process.env.FORGE_CAPITAL_DB_URL = savedUrl;
+      if (savedRole !== undefined) process.env.FORGE_CAPITAL_DB_SERVICE_ROLE = savedRole;
+    }
+  }
 
   const report = {
     now: NOW.toISOString(),

@@ -225,155 +225,154 @@ export async function loadWeeklyDigest(opts: {
       }),
     );
 
+    if (!capitalConfigured()) {
+      return {
+        ok: false,
+        error:
+          "ForgeOS is unavailable: FORGE_CAPITAL_DB_URL and FORGE_CAPITAL_DB_SERVICE_ROLE are required. Digest refused so it cannot send without a mandate filter or do-not-contact check.",
+      };
+    }
+
     let mandate: MandateHint | null = null;
     let otherMandates: MandateHint[] = [];
-    let unmappedReason: string | null = "ForgeOS is not configured";
+    let unmappedReason: string | null = null;
     let firms: ForgeOsFirm[] = [];
     let people: ForgeOsPerson[] = [];
     let aliases: ForgeOsAlias[] = [];
     let participations: ForgeOsParticipation[] = [];
     let activities: ForgeOsActivity[] = [];
 
-    if (capitalConfigured()) {
-      const core = createCoreClient();
-      const engage = createEngageClient();
-      const mandateRows = await pageRange<{
-        id: string;
-        code: string;
-        company_name: string | null;
-      }>((from, to) =>
-        engage.from("mandates").select("id, code, company_name").range(from, to),
-      );
-      const resolved = resolveCampaignMandate(campaign, mandateRows);
-      mandate = resolved.mandate;
-      unmappedReason = resolved.unmappedReason;
-      otherMandates = mandateRows
-        .filter((m) => !mandate || m.id !== mandate.id)
-        .map((m) => ({
-          id: m.id,
-          code: m.code,
-          company_name: m.company_name,
-          hints: [
-            ...extraSubjectHints(m.code),
-            m.company_name ?? "",
-          ].filter(Boolean),
-        }));
+    const core = createCoreClient();
+    const engage = createEngageClient();
+    const mandateRows = await pageRange<{
+      id: string;
+      code: string;
+      company_name: string | null;
+    }>((from, to) =>
+      engage.from("mandates").select("id, code, company_name").range(from, to),
+    );
+    const resolved = resolveCampaignMandate(campaign, mandateRows);
+    mandate = resolved.mandate;
+    unmappedReason = resolved.unmappedReason;
+    otherMandates = mandateRows
+      .filter((m) => !mandate || m.id !== mandate.id)
+      .map((m) => ({
+        id: m.id,
+        code: m.code,
+        company_name: m.company_name,
+        hints: [...extraSubjectHints(m.code), m.company_name ?? ""].filter(Boolean),
+      }));
 
-      firms = await pageRange<ForgeOsFirm>((from, to) =>
-        core
-          .from("firms")
-          .select("id, canonical_name, website_domain, dnc, norm_name")
+    firms = await pageRange<ForgeOsFirm>((from, to) =>
+      core
+        .from("firms")
+        .select("id, canonical_name, website_domain, dnc, norm_name")
+        .range(from, to),
+    );
+    aliases = await pageRange<ForgeOsAlias>((from, to) =>
+      core.from("firm_aliases").select("firm_id, alias, norm_alias").range(from, to),
+    );
+    people = await pageRange<ForgeOsPerson>((from, to) =>
+      core.from("people").select("id, firm_id, email, dnc").range(from, to),
+    );
+
+    if (mandate) {
+      participations = await pageRange<ForgeOsParticipation>((from, to) =>
+        engage
+          .from("participations")
+          .select("firm_id, person_id, stage")
+          .eq("mandate_id", mandate!.id)
           .range(from, to),
       );
-      aliases = await pageRange<ForgeOsAlias>((from, to) =>
-        core.from("firm_aliases").select("firm_id, alias, norm_alias").range(from, to),
-      );
-      people = await pageRange<ForgeOsPerson>((from, to) =>
-        core.from("people").select("id, firm_id, email, dnc").range(from, to),
-      );
+    }
 
-      if (mandate) {
-        participations = await pageRange<ForgeOsParticipation>((from, to) =>
-          engage
-            .from("participations")
-            .select("firm_id, person_id, stage")
-            .eq("mandate_id", mandate!.id)
-            .range(from, to),
-        );
-      }
-
-      const activityById = new Map<string, ForgeOsActivity>();
-      const ensureActivity = (row: {
-        id: string;
-        occurred_at: string;
-        channel: string | null;
-        subject: string | null;
-        source_id: string | null;
-      }) => {
-        const existing = activityById.get(row.id);
-        if (existing) return existing;
-        const created: ForgeOsActivity = {
-          id: row.id,
-          occurred_at: row.occurred_at,
-          channel: row.channel,
-          subject: row.subject,
-          source_id: row.source_id,
-          mandate_ids: [],
-          firm_ids: [],
-        };
-        activityById.set(row.id, created);
-        return created;
+    const activityById = new Map<string, ForgeOsActivity>();
+    const ensureActivity = (row: {
+      id: string;
+      occurred_at: string;
+      channel: string | null;
+      subject: string | null;
+      source_id: string | null;
+    }) => {
+      const existing = activityById.get(row.id);
+      if (existing) return existing;
+      const created: ForgeOsActivity = {
+        id: row.id,
+        occurred_at: row.occurred_at,
+        channel: row.channel,
+        subject: row.subject,
+        source_id: row.source_id,
+        mandate_ids: [],
+        firm_ids: [],
       };
+      activityById.set(row.id, created);
+      return created;
+    };
 
-      if (mandate) {
-        const mandateLinks = await pageRange<{ activity_id: string }>((from, to) =>
-          engage
-            .from("activity_links")
-            .select("activity_id")
-            .eq("entity_type", "mandate")
-            .eq("entity_id", mandate!.id)
-            .range(from, to),
-        );
-        const mandateActIds = [...new Set(mandateLinks.map((l) => l.activity_id))];
-        if (mandateActIds.length) {
-          const rows = await inChunks(mandateActIds, 80, async (chunk) => {
-            const { data, error } = await engage
-              .from("activities")
-              .select("id, occurred_at, channel, subject, source_id")
-              .in("id", chunk);
-            if (error) throw new Error(`activities: ${error.message}`);
-            return data ?? [];
-          });
-          for (const row of rows) ensureActivity(row);
-        }
-      }
-
-      const gmailKeys = new Set<string>();
-      for (const e of [...events, ...apexOutbound]) {
-        for (const k of gmailSourceKeys(e.gmail_message_id)) gmailKeys.add(k);
-        for (const k of gmailSourceKeys(e.gmail_thread_id)) gmailKeys.add(k);
-      }
-      const gmailList = [...gmailKeys];
-      if (gmailList.length) {
-        const found = await inChunks(gmailList, 80, async (chunk) => {
+    if (mandate) {
+      const mandateLinks = await pageRange<{ activity_id: string }>((from, to) =>
+        engage
+          .from("activity_links")
+          .select("activity_id")
+          .eq("entity_type", "mandate")
+          .eq("entity_id", mandate!.id)
+          .range(from, to),
+      );
+      const mandateActIds = [...new Set(mandateLinks.map((l) => l.activity_id))];
+      if (mandateActIds.length) {
+        const rows = await inChunks(mandateActIds, 80, async (chunk) => {
           const { data, error } = await engage
             .from("activities")
             .select("id, occurred_at, channel, subject, source_id")
-            .in("source_id", chunk);
-          if (error) throw new Error(`activities by source: ${error.message}`);
+            .in("id", chunk);
+          if (error) throw new Error(`activities: ${error.message}`);
           return data ?? [];
         });
-        for (const row of found) ensureActivity(row);
+        for (const row of rows) ensureActivity(row);
       }
+    }
 
-      const allActIds = [...activityById.keys()];
-      if (allActIds.length) {
-        const links = await inChunks(
-          allActIds,
-          80,
-          async (chunk) => {
-            const { data, error } = await engage
-              .from("activity_links")
-              .select("activity_id, entity_type, entity_id")
-              .in("activity_id", chunk)
-              .in("entity_type", ["mandate", "firm"]);
-            if (error) throw new Error(`activity_links: ${error.message}`);
-            return data ?? [];
-          },
-        );
-        for (const link of links) {
-          const act = activityById.get(link.activity_id);
-          if (!act) continue;
-          if (link.entity_type === "mandate" && !act.mandate_ids.includes(link.entity_id)) {
-            act.mandate_ids.push(link.entity_id);
-          }
-          if (link.entity_type === "firm" && !act.firm_ids.includes(link.entity_id)) {
-            act.firm_ids.push(link.entity_id);
-          }
+    const gmailKeys = new Set<string>();
+    for (const e of [...events, ...apexOutbound]) {
+      for (const k of gmailSourceKeys(e.gmail_message_id)) gmailKeys.add(k);
+      for (const k of gmailSourceKeys(e.gmail_thread_id)) gmailKeys.add(k);
+    }
+    const gmailList = [...gmailKeys];
+    if (gmailList.length) {
+      const found = await inChunks(gmailList, 80, async (chunk) => {
+        const { data, error } = await engage
+          .from("activities")
+          .select("id, occurred_at, channel, subject, source_id")
+          .in("source_id", chunk);
+        if (error) throw new Error(`activities by source: ${error.message}`);
+        return data ?? [];
+      });
+      for (const row of found) ensureActivity(row);
+    }
+
+    const allActIds = [...activityById.keys()];
+    if (allActIds.length) {
+      const links = await inChunks(allActIds, 80, async (chunk) => {
+        const { data, error } = await engage
+          .from("activity_links")
+          .select("activity_id, entity_type, entity_id")
+          .in("activity_id", chunk)
+          .in("entity_type", ["mandate", "firm"]);
+        if (error) throw new Error(`activity_links: ${error.message}`);
+        return data ?? [];
+      });
+      for (const link of links) {
+        const act = activityById.get(link.activity_id);
+        if (!act) continue;
+        if (link.entity_type === "mandate" && !act.mandate_ids.includes(link.entity_id)) {
+          act.mandate_ids.push(link.entity_id);
+        }
+        if (link.entity_type === "firm" && !act.firm_ids.includes(link.entity_id)) {
+          act.firm_ids.push(link.entity_id);
         }
       }
-      activities = [...activityById.values()];
     }
+    activities = [...activityById.values()];
 
     return {
       ok: true,
@@ -414,14 +413,9 @@ export async function listCampaignMandateMappings(
   const mapped: { campaign_id: string; name: string; code: string; mandate_id: string }[] = [];
   const unmapped: { campaign_id: string; name: string; reason: string }[] = [];
   if (!capitalConfigured()) {
-    for (const c of campaigns ?? []) {
-      unmapped.push({
-        campaign_id: c.id,
-        name: c.name,
-        reason: "ForgeOS is not configured",
-      });
-    }
-    return { mapped, unmapped };
+    throw new Error(
+      "ForgeOS is unavailable: FORGE_CAPITAL_DB_URL and FORGE_CAPITAL_DB_SERVICE_ROLE are required",
+    );
   }
   const engage = createEngageClient();
   const mandates = await pageRange<{

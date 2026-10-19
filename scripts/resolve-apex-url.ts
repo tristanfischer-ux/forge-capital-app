@@ -1,8 +1,11 @@
 /**
- * Local `.env.local` has in the past pointed NEXT_PUBLIC_SUPABASE_URL at
- * a different Supabase project than SUPABASE_SERVICE_ROLE_KEY. Prefer the
- * URL when it matches the JWT `ref`; otherwise use the JWT project host.
- * Never log the key.
+ * Local doctor-only workaround. `.env.local` has in the past pointed
+ * NEXT_PUBLIC_SUPABASE_URL at a different Supabase project than
+ * SUPABASE_SERVICE_ROLE_KEY. Prefer the URL when it matches the JWT `ref`;
+ * otherwise use the JWT project host. Never log the key.
+ *
+ * App cron and preview must keep using createAdminClient / createServerClient
+ * and the configured env URL. Do not import this from lib/ or app/.
  */
 export function resolveApexUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
