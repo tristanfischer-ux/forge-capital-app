@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { resolveApexUrl } from "./resolve-apex-url";
 import { buildWeeklyDigest } from "../lib/digest/build-weekly-digest";
+import { canSendDigest } from "../lib/digest/can-send";
 import {
   listCampaignMandateMappings,
   loadWeeklyDigest,
@@ -325,6 +326,17 @@ async function main() {
       if (savedUrl !== undefined) process.env.FORGE_CAPITAL_DB_URL = savedUrl;
       if (savedRole !== undefined) process.env.FORGE_CAPITAL_DB_SERVICE_ROLE = savedRole;
     }
+  }
+
+  {
+    const previewGate = canSendDigest({ VERCEL_ENV: "preview" });
+    const expected =
+      "Sending is disabled outside production (VERCEL_ENV=preview).";
+    add(
+      "send digest refused on VERCEL_ENV=preview",
+      !previewGate.ok && previewGate.error === expected,
+      previewGate.ok ? "allowed send" : previewGate.error,
+    );
   }
 
   const report = {

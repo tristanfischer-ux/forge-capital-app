@@ -1,6 +1,7 @@
 "use server";
 
 import { buildWeeklyDigest } from "@/lib/digest/build-weekly-digest";
+import { canSendDigest } from "@/lib/digest/can-send";
 import { loadWeeklyDigest } from "@/lib/digest/load-weekly-digest";
 import { sendGmailMessage } from "@/lib/gmail/create-draft";
 import { createServerClient } from "@/lib/supabase/server";
@@ -62,6 +63,12 @@ export async function generateWeeklyDigest(input: {
 export async function sendWeeklyDigestToMe(input: {
   campaignId: string;
 }): Promise<SendWeeklyDigestResult> {
+  const gate = canSendDigest({
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    NODE_ENV: process.env.NODE_ENV,
+  });
+  if (!gate.ok) return { ok: false, error: gate.error };
+
   const digest = await generateWeeklyDigest(input);
   if (!digest.ok) return { ok: false, error: digest.error };
 
